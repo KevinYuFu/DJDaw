@@ -24,6 +24,12 @@ export interface DJDawApi {
    */
   importRekordboxXml(): Promise<RekordboxImportResult>
   /**
+   * Absolute path of a File from a drag and drop. Electron removed
+   * `File.path`, and its replacement lives only in the preload realm.
+   * Returns an empty string for a file that has no path on disk.
+   */
+  getPathForFile(file: File): string
+  /**
    * Pick the rekordbox XML export to mirror, remember it for next launch, and
    * sync it immediately. Cancelling leaves the current mirror as it was.
    */

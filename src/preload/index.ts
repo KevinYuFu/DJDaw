@@ -9,7 +9,7 @@
 // against the very interface the renderer codes against.
 /// <reference path="./index.d.ts" />
 
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type { RekordboxSyncResult } from '../shared/types'
 
@@ -19,6 +19,9 @@ const api: DJDawApi = {
   openAudioFiles: () => ipcRenderer.invoke('audio:openFiles'),
   importPaths: (paths) => ipcRenderer.invoke('library:importPaths', paths),
   importRekordboxXml: () => ipcRenderer.invoke('library:importRekordboxXml'),
+  // Electron 32 removed File.path. webUtils only exists in this realm, so the
+  // renderer cannot resolve a dropped file without going through here.
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   chooseRekordboxXml: () => ipcRenderer.invoke('rekordbox:choose'),
   syncRekordbox: () => ipcRenderer.invoke('rekordbox:syncNow'),
   clearRekordboxXml: () => ipcRenderer.invoke('rekordbox:clear'),

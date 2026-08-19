@@ -60,19 +60,24 @@ function isAudioPath(path: string): boolean {
 }
 
 /**
- * Absolute path of a dropped file, or null when this build cannot see one.
+ * Absolute path of a dropped file, or null when it has none.
  *
- * Electron 32 removed `File.path`, and its replacement `webUtils.getPathForFile`
- * exists only in the preload realm — the `window.api` bridge does not re-export
- * it, so on Electron 43 there is genuinely nothing here to read. The lookup
- * stays because it costs nothing and it is exactly what a preload-side
- * `pathForFile` would feed, but until the bridge grows one, a Finder drop
- * cannot be resolved and the user is told to use the Import button instead of
- * being left with a drop target that silently swallows files.
+ * Electron 32 removed `File.path`. Its replacement, `webUtils.getPathForFile`,
+ * exists only in the preload realm, so the bridge exposes it and this asks
+ * across. The legacy property is still checked first so the app keeps working
+ * if it is ever run on an older Electron.
  */
 function fileSystemPath(file: File): string | null {
   const legacy: unknown = (file as File & { path?: unknown }).path
-  return typeof legacy === 'string' && legacy.length > 0 ? legacy : null
+  if (typeof legacy === 'string' && legacy.length > 0) return legacy
+  try {
+    const resolved = window.api.getPathForFile(file)
+    return resolved.length > 0 ? resolved : null
+  } catch {
+    // A file with no filesystem backing (a drag from a web page, say) throws
+    // rather than returning empty. That is not an error worth surfacing.
+    return null
+  }
 }
 
 function hasFiles(transfer: DataTransfer | null): boolean {
@@ -240,10 +245,7 @@ export function Browser(): ReactElement {
 
       const paths = files.map(fileSystemPath).filter((p): p is string => p != null)
       if (paths.length === 0) {
-        notify(
-          'Dropped files cannot be resolved to paths in this Electron version. ' +
-            'Use + IMPORT TRACKS to add them.'
-        )
+        notify('Those do not look like files on disk. Try dragging from Finder.')
         return
       }
 
