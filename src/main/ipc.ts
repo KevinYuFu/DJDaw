@@ -1,0 +1,341 @@
+/**
+ * IPC surface behind `window.api`. One `ipcMain.handle` per method of the
+ * `DJDawApi` contract in docs/ARCHITECTURE.md; the channel names here and in
+ * `preload/index.ts` are the only place the two sides have to agree.
+ *
+ * `rekordbox:sync` is the exception: it goes the other way, pushed to the
+ * renderer whenever the watched XML export is rewritten.
+ */
+
+import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import type { IpcMainInvokeEvent } from 'electron'
+import type {
+  LibraryFile,
+  RekordboxImportResult,
+  RekordboxSyncResult,
+  Track
+} from '@shared/types'
+import { parseRekordboxXml } from '@shared/rekordboxXml'
+import { trackFromRekordbox } from '@shared/rekordboxImport'
+import {
+  getRekordboxXmlPath,
+  importPaths,
+  loadLibrary,
+  readWaveformCache,
+  saveLibrary,
+  setRekordboxXmlPath,
+  toArrayBuffer,
+  trackIdForPath,
+  writeWaveformCache
+} from './library'
+import {
+  defaultRekordboxXmlPath,
+  emptyMirror,
+  startWatching,
+  stopWatching,
+  syncFromXml
+} from './rekordboxSync'
+
+/** Extensions offered by the import dialog. */
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'aiff', 'aif', 'ogg', 'opus', 'wma']
+
+/** Formats Chromium cannot decode go through this, so it must exist on PATH. */
+const FFMPEG_BIN = 'ffmpeg'
+
+/** ffmpeg can be chatty; only the tail is worth putting in an error message. */
+const MAX_FFMPEG_STDERR = 4096
+
+async function openAudioFiles(event: IpcMainInvokeEvent): Promise<string[]> {
+  const owner = BrowserWindow.fromWebContents(event.sender)
+  const options: Electron.OpenDialogOptions = {
+    title: 'Import Tracks',
+    buttonLabel: 'Import',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Audio', extensions: AUDIO_EXTENSIONS },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  }
+
+  // Owning the dialog makes it a sheet on macOS instead of a floating window.
+  const result = owner
+    ? await dialog.showOpenDialog(owner, options)
+    : await dialog.showOpenDialog(options)
+
+  return result.canceled ? [] : result.filePaths
+}
+
+async function readAudioFile(path: string): Promise<ArrayBuffer> {
+  // A missing file or a directory would otherwise surface in the renderer as
+  // an opaque decode failure much later on.
+  const info = await stat(path).catch(() => null)
+  if (!info) throw new Error(`No such file: ${path}`)
+  if (!info.isFile()) throw new Error(`Not a file: ${path}`)
+
+  return toArrayBuffer(await readFile(path))
+}
+
+/**
+ * ffmpeg writes WAV to a pipe without knowing the final length, so it leaves
+ * the RIFF and data chunk sizes at a placeholder. Chromium refuses such a file.
+ * We have the whole thing in memory by then, so patch the real sizes in.
+ */
+function repairWavSizes(buf: Buffer): Buffer {
+  if (buf.byteLength < 44 || buf.toString('ascii', 0, 4) !== 'RIFF') return buf
+  buf.writeUInt32LE(buf.byteLength - 8, 4)
+
+  // Walk the chunk list; ffmpeg may emit LIST/fmt chunks before the audio.
+  let offset = 12
+  while (offset + 8 <= buf.byteLength) {
+    const id = buf.toString('ascii', offset, offset + 4)
+    const size = buf.readUInt32LE(offset + 4)
+    const body = offset + 8
+    if (id === 'data') {
+      const available = buf.byteLength - body
+      if (size === 0 || size > available) buf.writeUInt32LE(available, offset + 4)
+      break
+    }
+    if (size === 0 || size > buf.byteLength - body) break
+    offset = body + size + (size % 2) // chunks are word-aligned
+  }
+  return buf
+}
+
+function transcodeToWav(path: string): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const args = ['-v', 'error', '-i', path, '-f', 'wav', '-acodec', 'pcm_f32le', '-']
+    const child = spawn(FFMPEG_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+
+    const chunks: Buffer[] = []
+    let stderr = ''
+
+    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString('utf8')).slice(-MAX_FFMPEG_STDERR)
+    })
+
+    child.on('error', (err: NodeJS.ErrnoException) => {
+      reject(
+        err.code === 'ENOENT'
+          ? new Error(
+              `ffmpeg was not found on PATH, so "${path}" cannot be transcoded. ` +
+                'Install it (for example `brew install ffmpeg`) and restart DJDaw.'
+            )
+          : err
+      )
+    })
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        const detail = stderr.trim()
+        const why = detail ? `: ${detail}` : ''
+        reject(new Error(`ffmpeg failed on "${path}" (exit ${code ?? 'signal'})${why}`))
+        return
+      }
+      const out = Buffer.concat(chunks)
+      if (out.byteLength === 0) {
+        reject(new Error(`ffmpeg produced no audio for "${path}"`))
+        return
+      }
+      resolve(toArrayBuffer(repairWavSizes(out)))
+    })
+  })
+}
+
+/** The XML open dialog, shared by the one-shot import and by sync. */
+function xmlDialogOptions(buttonLabel: string): Electron.OpenDialogOptions {
+  return {
+    title: 'Choose rekordbox XML',
+    buttonLabel,
+    message: 'Choose the XML file exported from rekordbox',
+    properties: ['openFile'],
+    filters: [
+      { name: 'rekordbox XML', extensions: ['xml'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  }
+}
+
+async function pickXmlFile(
+  event: IpcMainInvokeEvent,
+  buttonLabel: string
+): Promise<string | null> {
+  const owner = BrowserWindow.fromWebContents(event.sender)
+  const options = xmlDialogOptions(buttonLabel)
+  // Owning the dialog makes it a sheet on macOS instead of a floating window.
+  const picked = owner
+    ? await dialog.showOpenDialog(owner, options)
+    : await dialog.showOpenDialog(options)
+
+  return picked.canceled || picked.filePaths.length === 0 ? null : picked.filePaths[0]
+}
+
+/**
+ * Push a mirror refresh to every window.
+ *
+ * Broadcast rather than sent to one window because the mirror is process-wide
+ * state: any window that exists is showing the same rekordbox collection.
+ */
+function broadcastSync(result: RekordboxSyncResult): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('rekordbox:sync', result)
+  }
+}
+
+/** Re-read the remembered export. Resolves empty when there is none. */
+function syncRekordbox(): Promise<RekordboxSyncResult> {
+  const xmlPath = getRekordboxXmlPath()
+  return xmlPath ? syncFromXml(xmlPath) : Promise.resolve(emptyMirror(null))
+}
+
+/**
+ * Choose the XML export to mirror, remember it, and sync it now.
+ *
+ * Cancelling re-syncs whatever was already remembered instead of resolving
+ * empty: the result replaces the renderer's mirror wholesale, so an empty one
+ * would look exactly like the user having thrown their collection away.
+ */
+async function chooseRekordboxXml(event: IpcMainInvokeEvent): Promise<RekordboxSyncResult> {
+  const xmlPath = await pickXmlFile(event, 'Sync')
+  if (!xmlPath) return syncRekordbox()
+
+  await setRekordboxXmlPath(xmlPath)
+  startWatching(xmlPath, broadcastSync)
+  return syncFromXml(xmlPath)
+}
+
+/** Forget the export, stop watching it, and clear the mirror everywhere. */
+async function clearRekordboxXml(): Promise<void> {
+  stopWatching()
+  await setRekordboxXmlPath(null)
+  broadcastSync(emptyMirror(null))
+}
+
+/**
+ * Start mirroring the remembered export, if there is one, and push the result.
+ *
+ * Called once the first window has loaded so the mirror is populated at launch
+ * without the user doing anything. The push can still land a moment before the
+ * renderer subscribes, which is why `syncRekordbox` stays callable: a renderer
+ * that missed it can simply ask.
+ */
+export async function startRekordboxSync(): Promise<void> {
+  // The path is read from disk rather than from `getRekordboxXmlPath`, since at
+  // launch nothing has loaded the library into main yet.
+  const lib = await loadLibrary()
+  const remembered = lib.rekordboxXmlPath
+
+  // An explicit null means the user disconnected; leave it alone. Only an
+  // absent value — never configured — falls back to rekordbox's own default
+  // export location, so the collection is there on a first run with no setup.
+  if (remembered === null) return
+  const xmlPath = remembered ?? defaultRekordboxXmlPath()
+  if (!xmlPath) return
+
+  // Watch before checking the file exists. rekordbox writes the export when it
+  // quits, so on a first run the file legitimately appears later, and the
+  // watcher is on the containing directory precisely so it catches that.
+  startWatching(xmlPath, async (result) => {
+    if (result.tracks.length > 0 && !getRekordboxXmlPath()) await setRekordboxXmlPath(result.xmlPath)
+    broadcastSync(result)
+  })
+
+  if (!existsSync(xmlPath)) {
+    // Not an error: the user may simply not have exported yet. Report the path
+    // being watched so the UI can say what it is waiting for.
+    broadcastSync(emptyMirror(xmlPath))
+    return
+  }
+
+  const result = await syncFromXml(xmlPath)
+  // Only remember a path once it has actually parsed into something.
+  if (!remembered && result.tracks.length > 0) await setRekordboxXmlPath(xmlPath)
+  broadcastSync(result)
+}
+
+/**
+ * Read a rekordbox XML collection export.
+ *
+ * rekordbox 6/7 keeps its live library in an SQLCipher-encrypted `master.db`;
+ * the XML export is the supported interchange format and the only one that is
+ * safe to read, since it is a copy rather than the database rekordbox is using.
+ * Parsing happens here rather than in the renderer so a large collection never
+ * has to cross IPC as one huge string.
+ */
+async function importRekordboxXml(event: IpcMainInvokeEvent): Promise<RekordboxImportResult> {
+  const xmlPath = await pickXmlFile(event, 'Import')
+  if (!xmlPath) {
+    return { xmlPath: null, producedBy: '', tracks: [], missingPaths: [], playlists: [], idMap: {} }
+  }
+
+  const text = await readFile(xmlPath, 'utf8')
+  const collection = parseRekordboxXml(text)
+
+  const tracks: Track[] = []
+  const missingPaths: string[] = []
+  const idMap: Record<string, string> = {}
+
+  for (const entry of collection.tracks) {
+    if (!entry.path) continue
+    const id = trackIdForPath(entry.path)
+    idMap[entry.trackId] = id
+    // A collection that lives on an external drive will reference files that
+    // are not mounted. Those stay in the library, the way rekordbox keeps them,
+    // and are reported so the count is never silently short.
+    if (!existsSync(entry.path)) missingPaths.push(entry.path)
+    tracks.push(trackFromRekordbox(entry, id))
+  }
+
+  const playlists = collection.playlists.map((p) => ({
+    name: p.name,
+    folders: p.folders,
+    trackIds: p.trackIds.map((rbId) => idMap[rbId]).filter((v): v is string => Boolean(v))
+  }))
+
+  return { xmlPath, producedBy: collection.producedBy, tracks, missingPaths, playlists, idMap }
+}
+
+export function registerIpcHandlers(): void {
+  ipcMain.handle('audio:openFiles', (event): Promise<string[]> => openAudioFiles(event))
+
+  ipcMain.handle('library:importPaths', (_event, paths: string[]): Promise<Track[]> =>
+    importPaths(Array.isArray(paths) ? paths : [])
+  )
+
+  ipcMain.handle('audio:readFile', (_event, path: string): Promise<ArrayBuffer> => readAudioFile(path))
+
+  ipcMain.handle('audio:transcodeToWav', (_event, path: string): Promise<ArrayBuffer> =>
+    transcodeToWav(path)
+  )
+
+  ipcMain.handle('library:load', (): Promise<LibraryFile> => loadLibrary())
+
+  ipcMain.handle('library:save', (_event, lib: LibraryFile): Promise<void> => saveLibrary(lib))
+
+  ipcMain.handle('waveform:read', (_event, audioKey: string): Promise<ArrayBuffer | null> =>
+    readWaveformCache(audioKey)
+  )
+
+  ipcMain.handle('waveform:write', (_event, audioKey: string, data: ArrayBuffer): Promise<void> =>
+    writeWaveformCache(audioKey, data)
+  )
+
+  ipcMain.handle('library:importRekordboxXml', (event): Promise<RekordboxImportResult> =>
+    importRekordboxXml(event)
+  )
+
+  ipcMain.handle('rekordbox:choose', (event): Promise<RekordboxSyncResult> =>
+    chooseRekordboxXml(event)
+  )
+
+  ipcMain.handle('rekordbox:syncNow', (): Promise<RekordboxSyncResult> => syncRekordbox())
+
+  ipcMain.handle('rekordbox:clear', (): Promise<void> => clearRekordboxXml())
+
+  ipcMain.handle('shell:reveal', (_event, path: string): void => {
+    shell.showItemInFolder(path)
+  })
+}

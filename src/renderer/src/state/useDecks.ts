@@ -1,0 +1,806 @@
+import { create } from 'zustand'
+import type { BeatGrid, DeckId, HotCue, Track, WaveformData } from '@shared/types'
+import { AudioEngine } from '@renderer/audio/AudioEngine'
+import type { Deck } from '@renderer/audio/Deck'
+import { decodeTrack } from '@renderer/audio/decode'
+import { analyzeWaveform, decodeWaveform, encodeWaveform } from '@renderer/analysis/waveform'
+import { detectTempo } from '@renderer/analysis/bpm'
+import {
+  beatAtTime,
+  beatJumpTime,
+  makeGrid,
+  nearestBeatTime,
+  nudgeGrid as nudgeGridBy,
+  scaleGridBpm,
+  setBpmAt,
+  setDownbeatAt,
+  timeAtBeat
+} from '@renderer/core/beatgrid'
+import {
+  BEAT_JUMP_SIZES,
+  DEFAULT_BEAT_JUMP,
+  DEFAULT_ZOOM_INDEX,
+  HOT_CUE_COLORS,
+  HOT_CUE_COUNT,
+  LOOP_SIZES,
+  TEMPO_RANGES,
+  WAVE_ZOOM_LEVELS
+} from '@renderer/core/constants'
+import { clamp } from '@renderer/core/format'
+import { useLibrary } from '@renderer/state/useLibrary'
+import { useSettings } from '@renderer/state/useSettings'
+
+/**
+ * The two decks and everything the transport does.
+ *
+ * The playhead is deliberately not in here: at 60 Hz it would re-render the
+ * whole app every frame. Actions that need the live position ask the engine
+ * for it with `Deck.positionSeconds()`, which is why almost none of them take
+ * a time argument, and why nothing in this file runs a rAF loop.
+ *
+ * Persisted per-track data — cues, grid, BPM — is not duplicated here either.
+ * It is read from and written back to `useLibrary`, the single source of truth.
+ */
+export interface DeckState {
+  trackId: string | null
+  status: 'empty' | 'loading' | 'ready'
+  playing: boolean
+  /** Tempo fader position in percent, -tempoRange..+tempoRange. */
+  pitchPercent: number
+  tempoRange: number
+  /** UI only until there is a time-stretcher; the engine ignores it. */
+  keyLock: boolean
+  quantize: boolean
+  beatJumpBeats: number
+  loopBeats: number
+  /** Kept with `active: false` after a loop exits, so the UI can re-loop it. */
+  loop: { active: boolean; startSec: number; endSec: number } | null
+  zoomIndex: number
+  /** Waveform data, kept out of the library store because it is large. */
+  waveform: WaveformData | null
+  /** The AudioBuffer stays here so analysis and export can reach it. */
+  buffer: AudioBuffer | null
+}
+
+export interface DecksState {
+  decks: Record<DeckId, DeckState>
+  loadTrack(deck: DeckId, trackId: string): Promise<void>
+  /**
+   * Eject: stop the deck, drop its audio and put it back to empty. Also how a
+   * deck recovers when its track leaves the library, because every other
+   * action needs that track to find anything to act on.
+   */
+  unloadDeck(deck: DeckId): void
+  togglePlay(deck: DeckId): void
+  /**
+   * CUE pressed, with CDJ semantics: playing goes back to the cue point and
+   * pauses; paused on the cue point previews until {@link cueRelease}; paused
+   * anywhere else sets the cue point here.
+   */
+  cuePress(deck: DeckId): void
+  cueRelease(deck: DeckId): void
+  seek(deck: DeckId, sec: number): void
+  beatJump(deck: DeckId, beats: number): void
+  setPitch(deck: DeckId, percent: number): void
+  setTempoRange(deck: DeckId, range: number): void
+  toggleQuantize(deck: DeckId): void
+  toggleKeyLock(deck: DeckId): void
+  setBeatJumpBeats(deck: DeckId, beats: number): void
+  setZoom(deck: DeckId, index: number): void
+  setHotCue(deck: DeckId, index: number): void
+  triggerHotCue(deck: DeckId, index: number): void
+  /** Pad released — ends a press-and-hold preview started from a paused deck. */
+  releaseHotCue(deck: DeckId, index: number): void
+  deleteHotCue(deck: DeckId, index: number): void
+  addMemoryCue(deck: DeckId): void
+  nudgeGrid(deck: DeckId, beatFraction: number): void
+  setDownbeatHere(deck: DeckId): void
+  setGridBpm(deck: DeckId, bpm: number): void
+  scaleGrid(deck: DeckId, factor: number): void
+  tapTempo(deck: DeckId): void
+  toggleLoop(deck: DeckId): void
+  setLoopBeats(deck: DeckId, beats: number): void
+}
+
+/**
+ * One beat at 120 BPM. Only used before a track has been gridded: there is no
+ * phase to preserve yet, so a nominal-tempo step is the best guess available
+ * and keeps beat jump and loops usable while analysis is still running.
+ */
+const UNGRIDDED_BEAT_SEC = 0.5
+
+/**
+ * How close to the cue point counts as "on the cue point" for CUE preview.
+ *
+ * Deliberately far wider than the playhead's own accuracy. The worklet reports
+ * its state every three render quanta — around 8 ms — so a position read
+ * between two reports can disagree with where the deck actually is by more
+ * than a couple of milliseconds. The two ways of being wrong are not
+ * symmetrical: reading "not on the cue point" by mistake destroys the saved
+ * cue point, while reading it the other way only previews a press the DJ can
+ * repeat. So the window is one that report jitter cannot cross, and still an
+ * order of magnitude shorter than a beat.
+ */
+const CUE_TOLERANCE_SEC = 0.02
+
+/** Taps further apart than this start a new tempo measurement. */
+const TAP_TIMEOUT_MS = 2000
+const TAP_HISTORY = 8
+
+/** Transport state that changes on every press but must not re-render the UI. */
+interface DeckRuntime {
+  /** Where a press-and-hold preview started, so the release can return there. */
+  previewReturnSec: number | null
+  /** Hot cue pad currently held as a preview, or null. */
+  previewCueIndex: number | null
+  /** True while CUE is held as a preview from the cue point. */
+  cuePreview: boolean
+  /** Tap timestamps, newest last. */
+  taps: number[]
+  /** Bumped on every load so a slow decode cannot land on a newer track. */
+  loadToken: number
+  /**
+   * Where the store last told the playhead to go, or null once the deck has
+   * moved on under its own power. CUE trusts this over the reported position;
+   * see {@link CUE_TOLERANCE_SEC}.
+   */
+  commandedSec: number | null
+  /** Whether this deck's engine listeners have been attached yet. */
+  watching: boolean
+}
+
+function newRuntime(): DeckRuntime {
+  return {
+    previewReturnSec: null,
+    previewCueIndex: null,
+    cuePreview: false,
+    taps: [],
+    loadToken: 0,
+    commandedSec: null,
+    watching: false
+  }
+}
+
+const runtime: Record<DeckId, DeckRuntime> = { A: newRuntime(), B: newRuntime() }
+
+const DECK_IDS: readonly DeckId[] = ['A', 'B']
+
+function emptyDeck(): DeckState {
+  return {
+    trackId: null,
+    status: 'empty',
+    playing: false,
+    pitchPercent: 0,
+    tempoRange: TEMPO_RANGES[0],
+    keyLock: false,
+    quantize: true,
+    beatJumpBeats: DEFAULT_BEAT_JUMP,
+    loopBeats: 4,
+    loop: null,
+    zoomIndex: DEFAULT_ZOOM_INDEX,
+    waveform: null,
+    buffer: null
+  }
+}
+
+function patchDeck(id: DeckId, patch: Partial<DeckState>): void {
+  useDecks.setState((s) => {
+    const decks: Record<DeckId, DeckState> = { A: s.decks.A, B: s.decks.B }
+    decks[id] = { ...decks[id], ...patch }
+    return { decks }
+  })
+}
+
+function clearPreview(id: DeckId): void {
+  const rt = runtime[id]
+  rt.previewReturnSec = null
+  rt.previewCueIndex = null
+  rt.cuePreview = false
+}
+
+/**
+ * Everything an action needs about a deck, or null when there is nothing
+ * loaded to act on. `position` is sampled once here so a single action always
+ * works from one consistent playhead reading.
+ */
+interface DeckContext {
+  id: DeckId
+  state: DeckState
+  track: Track
+  deck: Deck
+  grid: BeatGrid | null
+  position: number
+}
+
+function context(id: DeckId): DeckContext | null {
+  const state = useDecks.getState().decks[id]
+  if (state.status !== 'ready' || !state.trackId) return null
+  // Either collection: a deck can hold a mirrored track until the first edit
+  // forks it, and the fork has a different id.
+  const track = useLibrary.getState().trackById(state.trackId)
+  if (!track) return null
+  const deck = AudioEngine.shared().deck(id)
+  return { id, state, track, deck, grid: track.grid, position: deck.positionSeconds() }
+}
+
+/** Snap to the nearest beat when Quantize is on and the track has a grid. */
+function snapped(ctx: DeckContext, time: number): number {
+  return ctx.state.quantize && ctx.grid ? nearestBeatTime(ctx.grid, time) : time
+}
+
+function trackDuration(ctx: DeckContext): number {
+  return ctx.state.buffer?.duration ?? ctx.track.durationSec
+}
+
+/**
+ * Seeking never starts or stops the deck, but it can end a loop: a jump out of
+ * the looped region leaves the loop rather than being pulled back into it.
+ */
+function seekDeck(ctx: DeckContext, sec: number): void {
+  const target = clamp(sec, 0, trackDuration(ctx))
+  exitLoopIfOutside(ctx.id, ctx.deck, target)
+  ctx.deck.seekSeconds(target)
+  runtime[ctx.id].commandedSec = target
+}
+
+/**
+ * Leave an active loop when the playhead is sent outside it. The worklet wraps
+ * the position by the loop length, so without this a click past the loop end
+ * lands back inside the loop and the deck looks like it ignored the click.
+ */
+function exitLoopIfOutside(id: DeckId, deck: Deck, target: number): void {
+  // The live loop, not the one captured in the context: a loop hot cue arms
+  // its loop and then seeks into it within a single action.
+  const loop = useDecks.getState().decks[id].loop
+  if (!loop?.active) return
+  if (target >= loop.startSec && target < loop.endSec) return
+  deck.setLoop(false, 0, 0)
+  // The bounds survive so the UI can re-loop, exactly as toggleLoop leaves them.
+  patchDeck(id, { loop: { ...loop, active: false } })
+}
+
+/** Start playback, forgetting the commanded position the deck is leaving. */
+function playDeck(ctx: DeckContext): void {
+  runtime[ctx.id].commandedSec = null
+  ctx.deck.play()
+}
+
+/**
+ * Is a paused deck sitting on the cue point? Judged from where the deck was
+ * commanded to as well as from what it reported, because a report can be a
+ * whole interval out of date and the two answers are not equally costly: a
+ * false "no" makes a CUE press overwrite the saved cue point instead of
+ * previewing from it. The commanded position only counts while the reported
+ * one still agrees with it, so a jog scrub — which moves the playhead behind
+ * the store's back — cannot keep it alive.
+ */
+function atCuePoint(ctx: DeckContext, cue: number): boolean {
+  if (Math.abs(ctx.position - cue) <= CUE_TOLERANCE_SEC) return true
+  const commanded = runtime[ctx.id].commandedSec
+  if (commanded == null) return false
+  return (
+    Math.abs(commanded - cue) <= CUE_TOLERANCE_SEC &&
+    Math.abs(ctx.position - commanded) <= CUE_TOLERANCE_SEC
+  )
+}
+
+/** Time `beats` grid beats after `startSec`. */
+function beatsAfter(grid: BeatGrid | null, startSec: number, beats: number): number {
+  if (!grid) return startSec + beats * UNGRIDDED_BEAT_SEC
+  return timeAtBeat(grid, beatAtTime(grid, startSec) + beats)
+}
+
+/**
+ * Edit a deck's track, following the record the edit landed on.
+ *
+ * The first write to a mirrored track forks it into the local collection, so
+ * the id the deck is holding stops being the one that carries its cues and
+ * grid. Adopting the returned id here is what keeps the two in step: without
+ * it the next edit would fork from the mirror all over again and this one
+ * would be stranded on a record nothing points at.
+ *
+ * The re-point is conditional because the deck may have been ejected or loaded
+ * with something else while an async caller was away.
+ */
+function writeTrack(id: DeckId, trackId: string, patch: Partial<Track>): string | null {
+  const written = useLibrary.getState().updateTrack(trackId, patch)
+  if (written && written !== trackId && useDecks.getState().decks[id].trackId === trackId) {
+    patchDeck(id, { trackId: written })
+  }
+  return written
+}
+
+function writeGrid(ctx: DeckContext, grid: BeatGrid): void {
+  writeTrack(ctx.id, ctx.track.id, { grid, bpm: grid.anchors[0].bpm })
+}
+
+function writeHotCues(ctx: DeckContext, cues: HotCue[]): void {
+  writeTrack(ctx.id, ctx.track.id, { hotCues: [...cues].sort((a, b) => a.index - b.index) })
+}
+
+/**
+ * Mirror the engine's own view of playback into the store. The worklet is the
+ * authority — it is what actually stops at the end of the file — so the
+ * optimistic `playing` flags the actions set are corrected from here.
+ */
+function watchDeck(id: DeckId, deck: Deck): void {
+  if (runtime[id].watching) return
+  runtime[id].watching = true
+  deck.onState((s) => {
+    if (useDecks.getState().decks[id].playing !== s.playing) patchDeck(id, { playing: s.playing })
+  })
+  deck.onEnded(() => {
+    clearPreview(id)
+    patchDeck(id, { playing: false })
+  })
+}
+
+/**
+ * Does a cached waveform actually summarise this audio? The cache is keyed on
+ * the audio path alone, so a file swapped out at the same path — a re-encode,
+ * a different song, an edit — still finds the old entry and would be drawn
+ * over completely unrelated audio. The header is enough to catch it: the
+ * analyser emits one bucket per `bucketSize` frames of the buffer it was given.
+ */
+function cacheMatchesAudio(w: WaveformData, buffer: AudioBuffer): boolean {
+  if (w.sampleRate !== buffer.sampleRate) return false
+  if (!(w.bucketSize > 0)) return false
+  return w.bucketCount === Math.ceil(buffer.length / w.bucketSize)
+}
+
+/**
+ * Cached waveform if there is one, otherwise analyse and cache the result.
+ *
+ * Keyed on `audioKey`, not on the track id: a mirrored record and any local
+ * fork of it are the same file, so the fork inherits the analysis instead of
+ * spending seconds re-deriving an identical waveform.
+ */
+async function resolveWaveform(track: Track, buffer: AudioBuffer): Promise<WaveformData | null> {
+  try {
+    const cached = await window.api.readWaveformCache(track.audioKey)
+    if (cached) {
+      const decoded = decodeWaveform(cached)
+      if (decoded && cacheMatchesAudio(decoded, buffer)) return decoded
+      if (decoded) console.warn('[deck] waveform cache does not match the audio, re-analysing', track.path)
+    }
+  } catch (err) {
+    // A missing or corrupt cache file is not a reason to fail the load.
+    console.warn('[deck] waveform cache read failed', err)
+  }
+  try {
+    const waveform = await analyzeWaveform(buffer)
+    try {
+      await window.api.writeWaveformCache(track.audioKey, encodeWaveform(waveform))
+    } catch (err) {
+      console.warn('[deck] waveform cache write failed', err)
+    }
+    return waveform
+  } catch (err) {
+    console.error('[deck] waveform analysis failed', err)
+    return null
+  }
+}
+
+/**
+ * The track's grid, detecting and persisting one the first time it is loaded.
+ *
+ * Persisting is a write like any other, so detecting a grid for a mirrored
+ * track forks it. That is the right trade even though no pad was pressed: a
+ * detected grid is worth keeping, and rekordbox tracks nearly always arrive
+ * gridded, so the fork only happens for the ones rekordbox never analysed.
+ */
+async function resolveGrid(id: DeckId, track: Track, buffer: AudioBuffer): Promise<BeatGrid | null> {
+  if (track.grid) return track.grid
+  try {
+    const { bpm, firstBeatTime } = await detectTempo(buffer)
+    // Detection takes seconds, and the snapshot it started from is that old.
+    // In the meantime the DJ may have gridded the track by hand, or the other
+    // deck may have finished detecting the same file. Whatever grid exists now
+    // wins: a detection result must never clobber one it cannot see.
+    const current = useLibrary.getState().trackById(track.id)
+    if (!current) return null
+    if (current.grid) return current.grid
+    const grid = makeGrid(firstBeatTime, bpm)
+    writeTrack(id, current.id, { grid, bpm: grid.anchors[0].bpm })
+    return grid
+  } catch (err) {
+    console.error('[deck] tempo detection failed', err)
+    return null
+  }
+}
+
+export const useDecks = create<DecksState>()(() => ({
+  decks: { A: emptyDeck(), B: emptyDeck() },
+
+  async loadTrack(id, trackId) {
+    const track = useLibrary.getState().trackById(trackId)
+    if (!track) return
+
+    // Claim the deck before the first await: a second load started while this
+    // one is decoding must win, and every later step checks the token.
+    const token = ++runtime[id].loadToken
+    clearPreview(id)
+    runtime[id].commandedSec = null
+    patchDeck(id, { trackId, status: 'loading', playing: false, waveform: null, buffer: null, loop: null })
+
+    let deck: Deck | null = null
+    let audioLoaded = false
+    try {
+      const engine = AudioEngine.shared()
+      await engine.init()
+      // Loading is always driven by a user gesture, so this is the safe moment to
+      // take the context out of its suspended state and apply the stored level.
+      await engine.resume()
+      engine.setMasterVolume(useSettings.getState().masterVolume)
+      if (runtime[id].loadToken !== token) return
+
+      deck = engine.deck(id)
+      watchDeck(id, deck)
+
+      // A deck that is still running must stop before its audio is replaced.
+      if (deck.playing) deck.pause()
+      deck.setLoop(false, 0, 0)
+
+      const buffer = await decodeTrack(engine.ctx, track.path)
+      if (runtime[id].loadToken !== token) return
+
+      deck.load(buffer)
+      audioLoaded = true
+      deck.setRate(1 + useDecks.getState().decks[id].pitchPercent / 100)
+      const start = clamp(track.cuePoint ?? 0, 0, buffer.duration)
+      deck.seekSeconds(start)
+      // A freshly loaded deck parks on its cue point, so CUE must read as a
+      // preview rather than as "set the cue point here".
+      runtime[id].commandedSec = start
+      patchDeck(id, { buffer })
+
+      const [waveform, grid] = await Promise.all([resolveWaveform(track, buffer), resolveGrid(id, track, buffer)])
+      if (runtime[id].loadToken !== token) return
+
+      patchDeck(id, { waveform, status: 'ready' })
+
+      // Detecting a grid can have forked the track, so bookkeeping goes to
+      // whatever the deck is pointing at now rather than to the id it loaded.
+      const written = useDecks.getState().decks[id].trackId ?? trackId
+      const current = useLibrary.getState().trackById(written)
+      const patch: Partial<Track> = {}
+      if (waveform && grid && !current?.analyzed) patch.analyzed = true
+      // A grid restored from disk may predate the bpm column being filled in.
+      if (grid && current?.bpm == null) patch.bpm = grid.anchors[0].bpm
+      if (Object.keys(patch).length > 0) writeTrack(id, written, patch)
+    } catch (err) {
+      console.error('[deck] load failed', track.path, err)
+      // Every failure — decode, analysis, even the engine refusing to start —
+      // has to land on a terminal status, or the deck is stuck behind a
+      // spinner that no action can clear. A newer load owns the deck by now
+      // and will land its own status, so only the current one cleans up.
+      if (runtime[id].loadToken !== token) return
+      if (audioLoaded) {
+        // The audio did reach the worklet, so this is a playable deck that
+        // simply has no waveform to draw.
+        patchDeck(id, { waveform: null, status: 'ready' })
+      } else {
+        // Nothing to play here, and the worklet may still be holding the
+        // previous track: left loaded it would keep sounding behind a deck
+        // that shows as empty.
+        deck?.unload()
+        // Clear the track but leave the fader, quantize and zoom settings alone.
+        patchDeck(id, { trackId: null, status: 'empty', playing: false, waveform: null, buffer: null, loop: null })
+      }
+    }
+  },
+
+  unloadDeck(id) {
+    // Bump the token first: a decode still in flight must not drop its audio
+    // onto a deck that has just been ejected.
+    const rt = runtime[id]
+    rt.loadToken++
+    rt.commandedSec = null
+    rt.taps.length = 0
+    clearPreview(id)
+
+    // `watching` is only set once the engine has handed this deck out, so it
+    // doubles as "there is something to stop"; `deck()` throws before that.
+    if (rt.watching) {
+      const deck = AudioEngine.shared().deck(id)
+      if (deck.playing) deck.pause()
+      deck.setLoop(false, 0, 0)
+      deck.unload()
+    }
+    patchDeck(id, { trackId: null, status: 'empty', playing: false, waveform: null, buffer: null, loop: null })
+  },
+
+  togglePlay(id) {
+    const ctx = context(id)
+    if (!ctx) return
+    const rt = runtime[id]
+    // Either branch leaves the playhead somewhere the store did not put it.
+    rt.commandedSec = null
+    const previewing = rt.cuePreview || rt.previewCueIndex !== null
+    clearPreview(id)
+    if (previewing) {
+      // PLAY during a preview latches rather than toggles: the deck is already
+      // rolling from the cue point and simply keeps going, and there is now
+      // nowhere to return to when the button or pad comes back up.
+      if (!ctx.deck.playing) ctx.deck.play()
+      patchDeck(id, { playing: true })
+      return
+    }
+    ctx.deck.togglePlay()
+    patchDeck(id, { playing: ctx.deck.playing })
+  },
+
+  cuePress(id) {
+    const ctx = context(id)
+    if (!ctx) return
+    const cue = ctx.track.cuePoint ?? 0
+
+    if (ctx.deck.playing) {
+      // Back to cue.
+      ctx.deck.pause()
+      seekDeck(ctx, cue)
+      clearPreview(id)
+      patchDeck(id, { playing: false })
+      return
+    }
+
+    if (atCuePoint(ctx, cue)) {
+      // Sitting on the cue point: play for as long as the button is held.
+      runtime[id].cuePreview = true
+      runtime[id].previewReturnSec = cue
+      playDeck(ctx)
+      patchDeck(id, { playing: true })
+      return
+    }
+
+    // Paused somewhere else: this is the new cue point.
+    const time = snapped(ctx, ctx.position)
+    writeTrack(id, ctx.track.id, { cuePoint: time })
+    seekDeck(ctx, time)
+  },
+
+  cueRelease(id) {
+    const rt = runtime[id]
+    if (!rt.cuePreview) return
+    const ctx = context(id)
+    rt.cuePreview = false
+    const back = rt.previewReturnSec
+    rt.previewReturnSec = null
+    if (!ctx) return
+    ctx.deck.pause()
+    seekDeck(ctx, back ?? ctx.track.cuePoint ?? 0)
+    patchDeck(id, { playing: false })
+  },
+
+  seek(id, sec) {
+    const ctx = context(id)
+    if (!ctx) return
+    seekDeck(ctx, sec)
+  },
+
+  beatJump(id, beats) {
+    const ctx = context(id)
+    if (!ctx || beats === 0) return
+    const target = ctx.grid
+      ? beatJumpTime(ctx.grid, ctx.position, beats, ctx.state.quantize)
+      : ctx.position + beats * UNGRIDDED_BEAT_SEC
+    seekDeck(ctx, target)
+  },
+
+  setPitch(id, percent) {
+    const state = useDecks.getState().decks[id]
+    const clamped = clamp(percent, -state.tempoRange, state.tempoRange)
+    patchDeck(id, { pitchPercent: clamped })
+    if (state.status === 'ready') AudioEngine.shared().deck(id).setRate(1 + clamped / 100)
+  },
+
+  setTempoRange(id, range) {
+    if (!(range > 0)) return
+    const state = useDecks.getState().decks[id]
+    // A narrower range pulls the fader in with it, as the hardware does.
+    const pitchPercent = clamp(state.pitchPercent, -range, range)
+    patchDeck(id, { tempoRange: range, pitchPercent })
+    if (state.status === 'ready') AudioEngine.shared().deck(id).setRate(1 + pitchPercent / 100)
+  },
+
+  toggleQuantize(id) {
+    patchDeck(id, { quantize: !useDecks.getState().decks[id].quantize })
+  },
+
+  toggleKeyLock(id) {
+    patchDeck(id, { keyLock: !useDecks.getState().decks[id].keyLock })
+  },
+
+  setBeatJumpBeats(id, beats) {
+    if (!(beats > 0)) return
+    patchDeck(id, { beatJumpBeats: clamp(beats, BEAT_JUMP_SIZES[0], BEAT_JUMP_SIZES[BEAT_JUMP_SIZES.length - 1]) })
+  },
+
+  setZoom(id, index) {
+    patchDeck(id, { zoomIndex: Math.round(clamp(index, 0, WAVE_ZOOM_LEVELS.length - 1)) })
+  },
+
+  setHotCue(id, index) {
+    const ctx = context(id)
+    if (!ctx || index < 0 || index >= HOT_CUE_COUNT) return
+    const cue: HotCue = {
+      index,
+      time: snapped(ctx, ctx.position),
+      color: HOT_CUE_COLORS[index],
+      type: 'cue'
+    }
+    writeHotCues(ctx, [...ctx.track.hotCues.filter((c) => c.index !== index), cue])
+  },
+
+  triggerHotCue(id, index) {
+    const ctx = context(id)
+    if (!ctx || index < 0 || index >= HOT_CUE_COUNT) return
+    const cue = ctx.track.hotCues.find((c) => c.index === index)
+    if (!cue) {
+      // An empty pad sets a cue, the way the hardware pads do.
+      useDecks.getState().setHotCue(id, index)
+      return
+    }
+
+    if (cue.type === 'loop' && cue.loopBeats) {
+      const end = beatsAfter(ctx.grid, cue.time, cue.loopBeats)
+      ctx.deck.setLoop(true, cue.time, end)
+      patchDeck(id, { loopBeats: cue.loopBeats, loop: { active: true, startSec: cue.time, endSec: end } })
+    }
+
+    if (ctx.deck.playing) {
+      // Playing: jump and keep rolling.
+      seekDeck(ctx, cue.time)
+      return
+    }
+
+    // Paused: preview for as long as the pad is held, then come back. A second
+    // pad pressed mid-preview must not overwrite where the preview began.
+    const rt = runtime[id]
+    if (rt.previewReturnSec == null) rt.previewReturnSec = ctx.position
+    rt.previewCueIndex = index
+    seekDeck(ctx, cue.time)
+    playDeck(ctx)
+    patchDeck(id, { playing: true })
+  },
+
+  releaseHotCue(id, index) {
+    const rt = runtime[id]
+    if (rt.previewCueIndex !== index) return
+    const back = rt.previewReturnSec
+    rt.previewCueIndex = null
+    rt.previewReturnSec = null
+    const ctx = context(id)
+    if (!ctx) return
+    ctx.deck.pause()
+    if (back != null) seekDeck(ctx, back)
+    patchDeck(id, { playing: false })
+  },
+
+  deleteHotCue(id, index) {
+    const ctx = context(id)
+    if (!ctx) return
+    if (!ctx.track.hotCues.some((c) => c.index === index)) return
+    writeHotCues(ctx, ctx.track.hotCues.filter((c) => c.index !== index))
+  },
+
+  addMemoryCue(id) {
+    const ctx = context(id)
+    if (!ctx) return
+    const time = snapped(ctx, ctx.position)
+    // Two memory cues on the same beat would be indistinguishable in the overview.
+    if (ctx.track.memoryCues.some((m) => Math.abs(m.time - time) < 0.01)) return
+    const memoryCues = [...ctx.track.memoryCues, { time }].sort((a, b) => a.time - b.time)
+    writeTrack(id, ctx.track.id, { memoryCues })
+  },
+
+  nudgeGrid(id, beatFraction) {
+    const ctx = context(id)
+    if (!ctx || !ctx.grid) return
+    writeGrid(ctx, nudgeGridBy(ctx.grid, beatFraction))
+  },
+
+  setDownbeatHere(id) {
+    const ctx = context(id)
+    if (!ctx || !ctx.grid) return
+    writeGrid(ctx, setDownbeatAt(ctx.grid, ctx.position))
+  },
+
+  setGridBpm(id, bpm) {
+    const ctx = context(id)
+    if (!ctx || !(bpm > 0)) return
+    // With no grid yet, the playhead becomes the first downbeat.
+    const grid = ctx.grid ? setBpmAt(ctx.grid, ctx.position, bpm) : makeGrid(ctx.position, bpm)
+    writeGrid(ctx, grid)
+  },
+
+  scaleGrid(id, factor) {
+    const ctx = context(id)
+    if (!ctx || !ctx.grid || !(factor > 0)) return
+    writeGrid(ctx, scaleGridBpm(ctx.grid, factor))
+  },
+
+  tapTempo(id) {
+    const ctx = context(id)
+    if (!ctx) return
+    const rt = runtime[id]
+    const now = performance.now()
+    // A long gap means the DJ stopped and started again, not a 20-second beat.
+    if (rt.taps.length > 0 && now - rt.taps[rt.taps.length - 1] > TAP_TIMEOUT_MS) rt.taps.length = 0
+    rt.taps.push(now)
+    if (rt.taps.length > TAP_HISTORY) rt.taps.shift()
+    if (rt.taps.length < 2) return
+
+    const gaps: number[] = []
+    for (let i = 1; i < rt.taps.length; i++) gaps.push(rt.taps[i] - rt.taps[i - 1])
+    gaps.sort((a, b) => a - b)
+    // Median, not mean: one fumbled tap should not drag the whole reading.
+    const mid = gaps.length >> 1
+    const interval = gaps.length % 2 === 1 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2
+    const bpm = 60000 / interval
+    if (!(bpm >= 40 && bpm <= 250)) return
+
+    const grid = ctx.grid ? setBpmAt(ctx.grid, ctx.position, bpm) : makeGrid(ctx.position, bpm)
+    writeGrid(ctx, grid)
+  },
+
+  toggleLoop(id) {
+    const ctx = context(id)
+    if (!ctx) return
+    const current = ctx.state.loop
+
+    if (current?.active) {
+      ctx.deck.setLoop(false, 0, 0)
+      // The bounds survive so the UI can offer a re-loop.
+      patchDeck(id, { loop: { ...current, active: false } })
+      return
+    }
+
+    const startSec = snapped(ctx, ctx.position)
+    const endSec = beatsAfter(ctx.grid, startSec, ctx.state.loopBeats)
+    ctx.deck.setLoop(true, startSec, endSec)
+    patchDeck(id, { loop: { active: true, startSec, endSec } })
+  },
+
+  setLoopBeats(id, beats) {
+    if (!(beats > 0)) return
+    const loopBeats = clamp(beats, LOOP_SIZES[0], LOOP_SIZES[LOOP_SIZES.length - 1])
+    const ctx = context(id)
+    if (!ctx) {
+      patchDeck(id, { loopBeats })
+      return
+    }
+    const current = ctx.state.loop
+    if (!current) {
+      patchDeck(id, { loopBeats })
+      return
+    }
+    // Halving or doubling holds the loop in point and moves the out point,
+    // so the loop keeps its start the way the hardware's loop controls do.
+    const endSec = beatsAfter(ctx.grid, current.startSec, loopBeats)
+    if (current.active) ctx.deck.setLoop(true, current.startSec, endSec)
+    patchDeck(id, { loopBeats, loop: { ...current, endSec } })
+  }
+}))
+
+/**
+ * A deck whose track leaves the library has nothing left to act on: every
+ * action resolves the track first and then no-ops, so a playing deck would go
+ * on playing with no way to stop it. Eject it instead.
+ *
+ * The dependency runs this way only — `useDecks` reads `useLibrary` throughout
+ * — so `useLibrary` must never import this module back.
+ */
+useLibrary.subscribe((state, prev) => {
+  if (state.tracks === prev.tracks && state.mirror === prev.mirror) return
+  for (const id of DECK_IDS) {
+    const trackId = useDecks.getState().decks[id].trackId
+    if (trackId == null) continue
+    // Both collections count. A deck holding a mirrored track is fine, and it
+    // stays fine through the fork an edit creates: the mirrored record is
+    // still there at the moment the local collection changes, and the deck
+    // re-points to the fork immediately afterwards. Only a record that has
+    // left both — a deleted local track, or one dropped by a sync — ejects.
+    if (!state.tracks[trackId] && !state.mirror[trackId]) useDecks.getState().unloadDeck(id)
+  }
+})

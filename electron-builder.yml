@@ -1,0 +1,25 @@
+appId: com.kevinyufu.djdaw
+productName: DJDaw
+directories:
+  buildResources: resources
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc,.prettierrc,tsconfig.json,tsconfig.*.json}'
+  - '!docs/*'
+asarUnpack:
+  - resources/**
+mac:
+  category: public.app-category.music
+  target:
+    - dmg
+    - zip
+  darkModeSupport: true
+  extendInfo:
+    NSMicrophoneUsageDescription: DJDaw does not record audio.
+    NSDocumentsFolderUsageDescription: DJDaw reads the audio files you import.
+    NSDownloadsFolderUsageDescription: DJDaw reads the audio files you import.
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
+npmRebuild: false

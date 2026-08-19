@@ -1,0 +1,648 @@
+/*
+ * Browser panel: tree sidebar + track table + the header bar above them.
+ * Every colour comes from styles/theme.css.
+ */
+
+.browser {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+}
+
+/* Header bar -------------------------------------------------------------- */
+
+.browser-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  height: 34px;
+  padding: 0 8px;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.browser-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.browser-search input {
+  width: 230px;
+  height: 22px;
+  padding-left: 24px;
+  padding-right: 20px;
+}
+
+.browser-search-icon {
+  position: absolute;
+  left: 7px;
+  display: block;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.browser-search-clear {
+  position: absolute;
+  right: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+}
+.browser-search-clear:hover:not(:disabled) {
+  color: var(--text);
+  background: none;
+  border: none;
+}
+
+/* Which collection the table is showing. A pill rather than plain text: the
+   two collections behave differently, so the readout has to catch the eye. */
+.browser-scope {
+  flex: none;
+  height: 18px;
+  padding: 0 6px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.browser-count {
+  flex: none;
+  min-width: 92px;
+  color: var(--text-dim);
+}
+
+.browser-spacer {
+  flex: 1 1 auto;
+}
+
+.browser-sort {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.browser-select {
+  height: 22px;
+  padding: 0 4px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+}
+.browser-select:focus {
+  border-color: var(--accent);
+}
+
+.browser-sort-dir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-dim);
+}
+
+.browser-import {
+  flex: none;
+  height: 22px;
+  padding: 0 10px;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  color: #fff;
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.browser-import:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Body -------------------------------------------------------------------- */
+
+.browser-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Tree sidebar ------------------------------------------------------------ */
+
+.tree-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 190px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-sunken);
+  border-right: 1px solid var(--border);
+}
+
+.tree-sidebar-title {
+  flex: none;
+  padding: 7px 8px 5px;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--row-h);
+  padding-right: 8px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tree-node:hover:not(.tree-node--disabled) {
+  background: var(--bg-panel-2);
+}
+.tree-node--selected,
+.tree-node--selected:hover {
+  color: #fff;
+  background: var(--accent-dim);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.tree-node--disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.tree-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--text-dim);
+  transition: transform 90ms linear;
+}
+.tree-chevron--open {
+  transform: rotate(90deg);
+}
+.tree-node--disabled .tree-chevron {
+  color: var(--text-faint);
+}
+
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-count {
+  margin-left: auto;
+  padding-left: 6px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+.tree-node--selected .tree-count {
+  color: #fff;
+}
+
+/* State of the rekordbox mirror, hung under its node. */
+.tree-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 1px 8px 6px;
+}
+
+.tree-detail-line {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tree-detail-line--warn {
+  color: var(--cue);
+}
+.tree-detail-line--error {
+  color: var(--danger);
+}
+
+.tree-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.tree-action {
+  height: 18px;
+  padding: 0 6px;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 16px;
+  background: var(--bg-raised);
+  border-color: var(--border-soft);
+}
+.tree-action:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* Track table ------------------------------------------------------------- */
+
+.tt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+.tt-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  outline: none;
+}
+
+/*
+ * Column widths live here so the header and every row line up. The 24px header
+ * height and 22px row height are mirrored by HEADER_HEIGHT / ROW_HEIGHT in
+ * TrackTable.tsx, which needs them to window the list; change both together.
+ */
+.tt-head,
+.tt-row {
+  display: grid;
+  grid-template-columns:
+    26px 46px 24px minmax(140px, 2.4fr) minmax(110px, 1.7fr)
+    64px 48px 76px 58px minmax(80px, 1fr) 92px;
+  align-items: center;
+}
+
+.tt-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 24px;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.tt-head-cell {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 100%;
+  padding: 0 6px;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-right: 1px solid var(--border-soft);
+}
+.tt-head-cell:last-child {
+  border-right: none;
+}
+.tt-head-cell--sortable {
+  cursor: pointer;
+}
+.tt-head-cell--sortable:hover {
+  color: var(--text-dim);
+  background: var(--bg-raised);
+}
+.tt-head-cell--active {
+  color: var(--accent);
+}
+
+.tt-sort-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+}
+
+.tt-body {
+  position: relative;
+}
+
+.tt-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--row-h);
+  color: var(--text);
+  cursor: default;
+}
+.tt-row--odd {
+  background: var(--bg-panel-2);
+}
+/* Mirrored rows carry an edge so the eye can group them without reading the
+   badge. Declared before the selected rule so selection still wins the edge. */
+.tt-row--mirrored {
+  box-shadow: inset 2px 0 0 var(--border-strong);
+}
+.tt-row:hover {
+  background: var(--bg-raised);
+}
+.tt-row--selected,
+.tt-row--selected:hover {
+  color: #fff;
+  background: var(--accent-dim);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.tt-cell {
+  padding: 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tt-cell--num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.tt-cell--index {
+  color: var(--text-faint);
+}
+.tt-row--selected .tt-cell--index {
+  color: rgba(255, 255, 255, 0.7);
+}
+.tt-cell--title {
+  color: var(--text);
+}
+.tt-row--selected .tt-cell--title {
+  color: #fff;
+}
+.tt-cell--sub {
+  color: var(--text-dim);
+}
+.tt-row--selected .tt-cell--sub {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.tt-cell--source {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+}
+
+/* Quiet on purpose: it marks a row, it does not compete with the title. */
+.tt-rb {
+  padding: 0 3px;
+  color: var(--text-faint);
+  font-size: 8px;
+  line-height: 11px;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+}
+.tt-row--selected .tt-rb {
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Values that exist but were never verified by analysis read back one step. */
+.tt-unanalyzed {
+  color: var(--text-dim);
+}
+.tt-empty-value {
+  color: var(--text-faint);
+}
+.tt-row--selected .tt-unanalyzed,
+.tt-row--selected .tt-empty-value {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tt-analyzing {
+  color: var(--accent);
+  animation: tt-pulse 900ms ease-in-out infinite;
+}
+@keyframes tt-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.tt-art-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.tt-art {
+  width: 18px;
+  height: 18px;
+  border-radius: 1px;
+  object-fit: cover;
+  background: var(--bg-sunken);
+}
+.tt-art--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  border: 1px solid var(--border-soft);
+}
+
+.tt-stars {
+  display: flex;
+  gap: 1px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.tt-star {
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.tt-star--on {
+  color: var(--cue);
+}
+.tt-star:hover {
+  color: var(--text);
+}
+
+.tt-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+/* Context menu ------------------------------------------------------------ */
+
+.tt-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 186px;
+  padding: 3px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.tt-menu-item {
+  display: block;
+  width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  color: var(--text);
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+}
+.tt-menu-item:hover:not(:disabled) {
+  color: #fff;
+  background: var(--accent-dim);
+  border: none;
+}
+.tt-menu-item:active:not(:disabled) {
+  background: var(--accent-dim);
+}
+.tt-menu-item--danger:hover:not(:disabled) {
+  background: var(--danger);
+}
+
+/* A disabled button is never hovered, so its own title can never appear.
+   Taking it out of hit testing lets the wrapper's title say why it is off. */
+.tt-menu-item:disabled {
+  pointer-events: none;
+}
+
+.tt-menu-wrap {
+  display: block;
+}
+
+.tt-menu-sep {
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--border);
+}
+
+/* Drop target + notices --------------------------------------------------- */
+
+.browser-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-sunken);
+  border: 2px dashed var(--accent);
+  box-shadow: inset 0 0 40px var(--accent-glow);
+  opacity: 0.94;
+  pointer-events: none;
+}
+
+/* A sync failure stays on screen until it is fixed, unlike a notice: an empty
+   mirror with no reason on screen reads as "rekordbox has nothing in it". */
+.browser-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 4px 8px;
+  color: var(--text);
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+
+.browser-error-text {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.browser-error button {
+  flex: none;
+  height: 20px;
+  font-size: 10px;
+}
+
+.browser-notice {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 560px;
+  padding: 6px 8px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+}
+
+.browser-notice-close {
+  flex: none;
+  padding: 0 4px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+}
+.browser-notice-close:hover:not(:disabled) {
+  color: var(--text);
+  background: none;
+  border: none;
+}
+
+/* Secondary import route: the same shape as the primary button, one step back
+   in emphasis so the plain file import stays the obvious default. */
+.browser-import--rekordbox {
+  margin-right: 6px;
+  background: var(--bg-raised);
+  border-color: var(--border);
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.browser-import--rekordbox:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
