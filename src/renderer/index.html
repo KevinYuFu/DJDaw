@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>DJDaw</title>
+    <!--
+      The renderer never loads remote code, so everything is locked to 'self'.
+      blob: is required in script-src and worker-src because Vite serves the
+      analysis workers (waveform, bpm) as module workers and the AudioWorklet
+      module URL is resolved the same way. data: images cover Track.artwork,
+      which the library stores as a data: URL. 'unsafe-inline' is only in
+      script-src for Vite's dev-mode React Refresh preamble, which is injected
+      as an inline module script; nothing in a packaged build depends on it.
+      Style attributes are how the mixer positions its faders, so style-src
+      needs it too.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' blob: 'unsafe-inline';
+        worker-src 'self' blob:;
+        child-src 'self' blob:;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob:;
+        media-src 'self' blob: data:;
+        font-src 'self' data:;
+        connect-src 'self';
+        object-src 'none';
+        base-uri 'self';
+        form-action 'none';
+        frame-src 'none'
+      "
+    />
+    <style>
+      /* theme.css only arrives with the JS bundle; without this the window
+         paints white for a frame before React mounts. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0e0e10;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

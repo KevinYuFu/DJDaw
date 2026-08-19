@@ -1,0 +1,52 @@
+/*
+ * Layout for the two waveform views. Everything inside the canvases is drawn
+ * by waveformRender.ts, so this file only sizes and frames them; the canvases
+ * are transparent, which is what lets the panel colour show through where the
+ * envelope has not been drawn.
+ */
+
+.waveform-overview,
+.waveform-detail {
+  position: relative;
+  background: var(--bg-waveform);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.waveform-overview__canvas,
+.waveform-detail__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Pointer capture must own the gesture: without this a drag on a trackpad
+     or touchscreen turns into a browser pan and the seek stops mid-way. */
+  touch-action: none;
+}
+
+.waveform-overview {
+  /* Fixed height: the overview is a strip, and never competes for the space
+     the scrolling view wants. */
+  flex: 0 0 auto;
+  height: 38px;
+}
+
+.waveform-overview__canvas {
+  cursor: pointer;
+}
+
+.waveform-detail {
+  /* Takes whatever height the deck has left, down to a floor where the beat
+     grid and the cue flags stop being legible. */
+  flex: 1 1 auto;
+  height: 150px;
+  min-height: 96px;
+}
+
+.waveform-detail__canvas {
+  cursor: ew-resize;
+}
+
+.waveform-detail__canvas:active {
+  cursor: grabbing;
+}

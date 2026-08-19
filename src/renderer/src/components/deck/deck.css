@@ -1,0 +1,588 @@
+/*
+ * Deck chrome: header, platter, transport, tempo fader and the pad block.
+ * The waveform stack is styled by waveform.css and the window shell by
+ * app.css; every colour here comes from theme.css.
+ */
+
+.deck {
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  /* Tint for everything inside the deck. Set once, used by every child. */
+  --deck-color: var(--accent);
+}
+.deck[data-deck='A'] {
+  --deck-color: var(--deck-a);
+}
+.deck[data-deck='B'] {
+  --deck-color: var(--deck-b);
+}
+
+/* The focused deck is the one the unshifted keys act on. */
+.deck::before {
+  content: '';
+  flex: 0 0 auto;
+  height: 2px;
+  background: var(--border-soft);
+}
+.deck.is-focused::before {
+  background: var(--deck-color);
+}
+
+/* theme.css lets its hover rule outrank `.active`, which would un-light every
+   toggle in the deck the moment the pointer crossed it. */
+.deck button.active:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* ------------------------------------------------------------------- header */
+
+.deck-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.deck-badge {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--deck-color);
+  color: var(--text-inverse);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.deck-art {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  object-fit: cover;
+}
+.deck-art.is-empty {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    rgba(255, 255, 255, 0.035) 5px 10px
+  );
+}
+
+.deck-titles {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.deck-title,
+.deck-artist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deck-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.deck-artist {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.deck-stat {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+.deck-key {
+  font-size: 13px;
+}
+.deck-stat-bpm {
+  min-width: 82px;
+}
+.deck-bpm {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--deck-color);
+}
+.deck-bar {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.deck-times {
+  min-width: 64px;
+}
+.deck-elapsed {
+  font-size: 15px;
+}
+.deck-remaining {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ---------------------------------------------------------------- waveforms */
+
+/* The two waveform components size themselves; this only gives them a column
+   to divide up and a floor to sit on. */
+.deck-waves {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-waveform);
+}
+
+/* ------------------------------------------------------------ controls row */
+
+.deck-controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.deck-mid {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+  height: 150px;
+}
+
+/* --------------------------------------------------------------- jog wheel */
+
+.jog {
+  position: relative;
+  flex: 0 0 auto;
+  width: 150px;
+  height: 150px;
+}
+
+.jog-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.jog-ring-track {
+  fill: none;
+  stroke: var(--bg-raised);
+}
+.jog-ring-fill {
+  fill: none;
+  stroke: var(--deck-color);
+}
+
+.jog-platter {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  /* Disc and metal rim in one element: the radial gradient fills the content
+     box, the conic one shows through the transparent border. */
+  background-image: radial-gradient(circle at 50% 32%, #25252c 0%, #131317 60%, #0b0b0e 100%),
+    conic-gradient(#5c5c68, #26262d, #4e4e59, #1d1d23, #5c5c68);
+  background-origin: border-box;
+  background-clip: content-box, border-box;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6), inset 0 0 26px rgba(0, 0, 0, 0.75);
+  cursor: grab;
+  touch-action: none;
+}
+.jog-platter:active {
+  cursor: grabbing;
+}
+.jog-platter.is-empty {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.jog-rotor {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+.jog-marker {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: var(--deck-color);
+  box-shadow: 0 0 8px var(--deck-color);
+}
+
+.jog-cap {
+  position: absolute;
+  inset: 32%;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #25252c, #16161a);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* --------------------------------------------------------------- transport */
+
+.transport {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.transport-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 42px;
+  padding: 0 8px;
+  border-radius: 21px;
+  background: linear-gradient(180deg, var(--bg-raised), #1c1c21);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.transport-icon {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  fill: currentColor;
+}
+.transport-play:not(.is-lit) .transport-icon {
+  fill: var(--play);
+}
+.transport-cue:not(.is-lit) .transport-icon {
+  fill: var(--cue);
+}
+
+/* Lit states repeat themselves under :hover because theme.css's hover rule is
+   the more specific of the two. */
+.transport-play.is-lit,
+.transport-play.is-lit:hover:not(:disabled) {
+  background: linear-gradient(180deg, #4ddc70, #29a94b);
+  border-color: #86f3a6;
+  color: #06210e;
+  box-shadow: 0 0 14px var(--play-glow);
+}
+.transport-play.is-lit .transport-icon,
+.transport-cue.is-lit .transport-icon {
+  fill: currentColor;
+}
+.transport-cue.is-lit,
+.transport-cue.is-lit:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffbe55, #e08c0f);
+  border-color: #ffd48a;
+  color: #241402;
+  box-shadow: 0 0 14px var(--cue-glow);
+}
+
+/* ------------------------------------------------------------- tempo fader */
+
+.tempo {
+  flex: 0 0 auto;
+  width: 78px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.tempo-readout {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.tempo-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.tempo-scale {
+  position: relative;
+  width: 22px;
+}
+.tempo-scale-mark {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: 8px;
+  line-height: 1;
+  color: var(--text-faint);
+}
+
+.tempo-slot {
+  position: relative;
+  width: 32px;
+  touch-action: none;
+  cursor: pointer;
+}
+.tempo-tick {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 1px;
+  background: var(--border);
+}
+.tempo-tick.is-zero {
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border-strong);
+}
+.tempo-groove {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 5px;
+  margin-left: -2.5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.tempo-handle {
+  position: absolute;
+  left: 50%;
+  width: 28px;
+  height: 14px;
+  margin-left: -14px;
+  transform: translateY(-50%);
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: linear-gradient(180deg, #40404a, #1e1e24);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  cursor: grab;
+}
+.tempo-handle::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--deck-color);
+}
+.tempo-slot:active .tempo-handle {
+  cursor: grabbing;
+}
+
+.tempo-btn {
+  width: 100%;
+  padding: 2px 4px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+/* -------------------------------------------------------------------- pads */
+
+.pads {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* A narrow deck squeezes the rows rather than pushing the layout wider. */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.pad {
+  height: 32px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  touch-action: none;
+}
+.pad-letter {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.pad-time {
+  min-height: 9px;
+  font-size: 8px;
+  color: var(--text-dim);
+}
+.pad.is-set {
+  color: #fff;
+}
+.pad.is-set .pad-time {
+  color: rgba(255, 255, 255, 0.8);
+}
+/* The tint is an inline style, so hover has to show up as something else. */
+.pad.is-set:hover:not(:disabled) {
+  filter: brightness(1.3);
+}
+.pad:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* -------------------------------------------------------- pad control rows */
+
+.deck-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+}
+.deck-row-label {
+  flex: 0 0 auto;
+}
+.deck-row button {
+  padding: 2px 5px;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+.deck-row kbd {
+  padding: 2px 3px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-sunken);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.size-readout {
+  flex: 0 0 32px;
+  padding: 2px 0;
+  text-align: center;
+  font-size: 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.jump-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.jump-arrow {
+  font-size: 8px;
+  color: var(--deck-color);
+}
+
+.loop-btn {
+  flex: 1 1 0;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Seven buttons is more than a narrow deck can hold in one line. */
+.deck-row-grid {
+  flex-wrap: wrap;
+}
+
+/*
+ * The editable grid tempo. Sized to the buttons beside it rather than to the
+ * default input padding, so adding it does not make the row taller.
+ */
+.bpm-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 2px 0 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+.bpm-field:focus-within {
+  border-color: var(--accent);
+}
+.bpm-field.is-disabled {
+  opacity: 0.4;
+}
+
+.bpm-tag {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.bpm-input {
+  width: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  text-align: right;
+  /* `body` turns selection off app-wide; a field you type in needs it back. */
+  user-select: text;
+}
+.bpm-input:focus {
+  border: 0;
+}
+.bpm-input:disabled {
+  cursor: default;
+}
+
+/* Two arrows stacked inside one row's height. Anything larger wraps the row. */
+.bpm-steppers {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.deck-row .bpm-step {
+  width: 13px;
+  height: 8px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 6px;
+  line-height: 1;
+  border-color: var(--border-soft);
+  color: var(--text-dim);
+}

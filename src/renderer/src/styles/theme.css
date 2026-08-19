@@ -1,0 +1,148 @@
+/*
+ * rekordbox-flavoured dark theme. Every colour and metric in the app comes
+ * from here, so re-skinning is a one-file job.
+ */
+:root {
+  /* Surfaces, darkest to lightest */
+  --bg-app: #0e0e10;
+  --bg-panel: #1a1a1d;
+  --bg-panel-2: #202024;
+  --bg-raised: #2a2a30;
+  --bg-raised-hover: #34343b;
+  --bg-sunken: #121215;
+  --bg-waveform: #08080a;
+
+  --border: #35353c;
+  --border-soft: #26262c;
+  --border-strong: #4a4a54;
+
+  /* Text */
+  --text: #e6e6ea;
+  --text-dim: #9a9aa4;
+  --text-faint: #66666f;
+  --text-inverse: #0e0e10;
+
+  /* Pioneer blue, used for selection and active states */
+  --accent: #00a0e9;
+  --accent-dim: #0a6ea0;
+  --accent-glow: rgba(0, 160, 233, 0.35);
+
+  --deck-a: #00a0e9;
+  --deck-b: #f5a11c;
+
+  --play: #37c95a;
+  --play-glow: rgba(55, 201, 90, 0.45);
+  --cue: #f5a11c;
+  --cue-glow: rgba(245, 161, 28, 0.4);
+  --danger: #e8433a;
+  --loop: #f5a11c;
+
+  /* Waveform bands */
+  --wave-low: #1461d2;
+  --wave-mid: #ef8c1c;
+  --wave-high: #e8f2ff;
+
+  /* Metrics */
+  --row-h: 22px;
+  --radius: 3px;
+  --radius-lg: 5px;
+
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 8px;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background 90ms linear, border-color 90ms linear, color 90ms linear;
+}
+button:hover:not(:disabled) {
+  background: var(--bg-raised-hover);
+  border-color: var(--border-strong);
+}
+button:active:not(:disabled) {
+  background: #1c1c21;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+button.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+input {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 6px;
+  outline: none;
+}
+input:focus {
+  border-color: var(--accent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-sunken);
+}
+::-webkit-scrollbar-thumb {
+  background: #3a3a42;
+  border-radius: 5px;
+  border: 2px solid var(--bg-sunken);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4c4c56;
+}
+
+/* Small caps label used all over the rekordbox chrome */
+.label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
