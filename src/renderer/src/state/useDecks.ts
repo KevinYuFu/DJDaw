@@ -474,7 +474,20 @@ function setClips(ctx: DeckContext, clips: Clip[], patch: Partial<DeckState> = {
  */
 function setEq(id: DeckId, eq: ChannelEq): void {
   patchDeck(id, { eq })
-  if (runtime[id].watching) AudioEngine.shared().deck(id).setChannelEq(eq)
+  applyEq(id, eq)
+}
+
+/**
+ * Hand one channel's knobs to the engine at the current EQ mode.
+ *
+ * The mode is read here rather than stored per deck because it is a global
+ * preference: see {@link useSettings}'s `eqMode`. Nothing is written to the
+ * store, so this is also the way a mode change reaches a channel whose knobs
+ * have not moved.
+ */
+function applyEq(id: DeckId, eq: ChannelEq): void {
+  if (!runtime[id].watching) return
+  AudioEngine.shared().deck(id).setChannelEq(eq, useSettings.getState().eqMode)
 }
 
 /**
@@ -611,7 +624,7 @@ export const useDecks = create<DecksState>()(() => ({
       // The channel keeps whatever it was set to, so a new track drops into an
       // EQ'd channel rather than resetting it. This also lands knobs that were
       // moved before the engine existed.
-      deck.setChannelEq(useDecks.getState().decks[id].eq)
+      applyEq(id, useDecks.getState().decks[id].eq)
 
       // A deck that is still running must stop before its audio is replaced.
       if (deck.playing) deck.pause()
@@ -699,7 +712,7 @@ export const useDecks = create<DecksState>()(() => ({
       const deck = AudioEngine.shared().deck(id)
       if (deck.playing) deck.pause()
       deck.setLoop(false, 0, 0)
-      deck.setChannelEq(eq)
+      applyEq(id, eq)
       deck.unload()
     }
     patchDeck(id, {
@@ -1118,4 +1131,19 @@ useLibrary.subscribe((state, prev) => {
     // left both — a deleted local track, or one dropped by a sync — ejects.
     if (!state.tracks[trackId] && !state.mirror[trackId]) useDecks.getState().unloadDeck(id)
   }
+})
+
+/**
+ * The EQ floor is one global preference, so changing it has to reach every
+ * channel at once.
+ *
+ * Without this a channel already held at full cut would keep the old floor
+ * until its knob moved again — switching to ISOLATOR would leave the one
+ * channel it matters most on still leaking at -26 dB. Only the engine is
+ * touched: the knob positions themselves do not change, so there is nothing
+ * to write to the store.
+ */
+useSettings.subscribe((state, prev) => {
+  if (state.eqMode === prev.eqMode) return
+  for (const id of DECK_IDS) applyEq(id, useDecks.getState().decks[id].eq)
 })

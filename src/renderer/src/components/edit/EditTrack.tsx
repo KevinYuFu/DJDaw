@@ -5,7 +5,7 @@ import type {
   ReactElement
 } from 'react'
 import type { DeckId, HotCue } from '@shared/types'
-import type { ChannelEq } from '@shared/eq'
+import type { ChannelEq, EqMode } from '@shared/eq'
 import { CENTRE, eqGainDb, formatDb, formatFilter, isFlat, trimGainDb } from '@shared/eq'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { bpmAt } from '@renderer/core/beatgrid'
@@ -117,10 +117,15 @@ function arcPath(radius: number, fromDeg: number, toDeg: number): string {
   return `M ${x0} ${y0} A ${radius} ${radius} 0 ${large} ${sweep} ${x1} ${y1}`
 }
 
-/** What the knob is doing, in the units the knob is in. */
-function knobReadout(id: keyof ChannelEq, value: number): string {
+/**
+ * What the knob is doing, in the units the knob is in.
+ *
+ * The mode only reaches the three bands: it decides how deep a full cut goes,
+ * so in isolator mode the bottom of a band reads `KILL` rather than a number.
+ */
+function knobReadout(id: keyof ChannelEq, value: number, mode: EqMode): string {
   if (id === 'filter') return formatFilter(value)
-  return formatDb(id === 'trim' ? trimGainDb(value) : eqGainDb(value))
+  return formatDb(id === 'trim' ? trimGainDb(value) : eqGainDb(value, mode))
 }
 
 interface EqDrag extends EqKnobSpec {
@@ -148,6 +153,9 @@ interface ChannelEqProps {
  */
 function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
   const eq = useDecks((s) => s.decks[deckId].eq)
+  // Set in the mixer, but it changes what these knobs read, so the strip has
+  // to re-render when it flips.
+  const eqMode = useSettings((s) => s.eqMode)
   const [readout, setReadout] = useState<string | null>(null)
   const drag = useRef<EqDrag | null>(null)
 
@@ -158,7 +166,7 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
     e.currentTarget.setPointerCapture(e.pointerId)
     const startValue = eq[spec.id]
     drag.current = { ...spec, pointerId: e.pointerId, startY: e.clientY, startValue }
-    setReadout(`${spec.name} ${knobReadout(spec.id, startValue)}`)
+    setReadout(`${spec.name} ${knobReadout(spec.id, startValue, eqMode)}`)
   }
 
   const onKnobMove = (e: ReactPointerEvent<HTMLDivElement>): void => {
@@ -166,7 +174,7 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
     if (!d || e.pointerId !== d.pointerId) return
     const value = clamp(d.startValue + (d.startY - e.clientY) / KNOB_TRAVEL_PX, 0, 1)
     useDecks.getState().setChannelKnob(deckId, d.id, value)
-    setReadout(`${d.name} ${knobReadout(d.id, value)}`)
+    setReadout(`${d.name} ${knobReadout(d.id, value, eqMode)}`)
   }
 
   const onKnobUp = (): void => {
@@ -202,8 +210,8 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(value * 100)}
-            aria-valuetext={knobReadout(spec.id, value)}
-            title={`${spec.name} ${knobReadout(spec.id, value)} — drag to set, double-click for flat`}
+            aria-valuetext={knobReadout(spec.id, value, eqMode)}
+            title={`${spec.name} ${knobReadout(spec.id, value, eqMode)} — drag to set, double-click for flat`}
             onPointerDown={(e) => onKnobDown(e, spec)}
             onPointerMove={onKnobMove}
             onPointerUp={onKnobUp}

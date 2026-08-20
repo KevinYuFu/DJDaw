@@ -56,9 +56,15 @@ const failures = []
 
 globalThis.__t = {
   eq(name, actual, expected, tol = 1e-9) {
-    if (typeof actual === 'number' && typeof expected === 'number'
-      ? Math.abs(actual - expected) <= tol
-      : Object.is(actual, expected)) {
+    // Object.is first: it is the only thing that gets -Infinity, NaN and -0
+    // right. Subtracting two infinities gives NaN, which would fail a
+    // tolerance check on values that are in fact identical.
+    const numeric =
+      typeof actual === 'number' &&
+      typeof expected === 'number' &&
+      Number.isFinite(actual) &&
+      Number.isFinite(expected)
+    if (Object.is(actual, expected) || (numeric && Math.abs(actual - expected) <= tol)) {
       pass++
     } else {
       fail++
