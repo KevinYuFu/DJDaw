@@ -1,15 +1,8 @@
 import type { Clip } from '@shared/clips'
 import { timelineDuration, toRegions } from '@shared/clips'
-import {
-  dbToGain,
-  eqGainDb,
-  filterSetting,
-  flatChannel,
-  trimGainDb,
-  type ChannelEq,
-  EQ_FREQUENCIES,
-  EQ_MID_Q
-} from '@shared/eq'
+import { flatChannel } from '@shared/eq'
+import { applyChannelStrip, createChannelStrip } from '@renderer/audio/Deck'
+import type { ChannelEq, EqMode } from '@shared/eq'
 import {
   DECK_PROCESSOR_NAME,
   DECK_WORKLET_URL,
@@ -54,6 +47,12 @@ export interface RenderOptions {
   /** Every deck to mix in. One deck or four both work; they simply sum. */
   decks: readonly DeckRenderSpec[]
   /**
+   * EQ floor, matching the app's setting. A channel sitting at full cut sounds
+   * different in the two modes, so the export has to be told which one the user
+   * was hearing rather than assuming.
+   */
+  mode?: EqMode
+  /**
    * Render rate. Defaults to the first deck's file rate, because the deck
    * engine advances its playhead one source frame per context frame — the same
    * assumption live playback makes, where every buffer came from
@@ -80,8 +79,6 @@ const RENDER_TAIL_SEC = 0.05
 const NO_STATE_REPORTS = 1e9
 
 /** Butterworth, matching the live filter knob in `Deck`. */
-const FILTER_Q = Math.SQRT1_2
-
 /** Stereo out, like every deck output. */
 const RENDER_CHANNELS = 2
 
@@ -111,7 +108,7 @@ function regionFrames(spec: DeckRenderSpec): RegionFrames[] {
  * timeline. Same node order and same mappings as `Deck`; see the note at the
  * top of this file for the deliberate differences.
  */
-function buildDeck(ctx: OfflineAudioContext, spec: DeckRenderSpec): void {
+function buildDeck(ctx: OfflineAudioContext, spec: DeckRenderSpec, mode: EqMode): void {
   // Copies, always. `getChannelData` hands back a view onto the AudioBuffer's
   // own memory, and handing that over would risk the buffer the live decks and
   // the waveforms are still using.
@@ -139,47 +136,19 @@ function buildDeck(ctx: OfflineAudioContext, spec: DeckRenderSpec): void {
     }
   })
 
-  const eq = spec.eq ?? flatChannel()
-
-  const trim = ctx.createGain()
-  trim.gain.value = dbToGain(trimGainDb(eq.trim))
-
-  const lowShelf = ctx.createBiquadFilter()
-  lowShelf.type = 'lowshelf'
-  lowShelf.frequency.value = EQ_FREQUENCIES.low
-  // A biquad's `gain` is already in dB, so the mapped value goes straight in.
-  lowShelf.gain.value = eqGainDb(eq.low)
-
-  const midPeak = ctx.createBiquadFilter()
-  midPeak.type = 'peaking'
-  midPeak.frequency.value = EQ_FREQUENCIES.mid
-  midPeak.Q.value = EQ_MID_Q
-  midPeak.gain.value = eqGainDb(eq.mid)
-
-  const highShelf = ctx.createBiquadFilter()
-  highShelf.type = 'highshelf'
-  highShelf.frequency.value = EQ_FREQUENCIES.high
-  highShelf.gain.value = eqGainDb(eq.high)
-
-  // One node for both filter modes, exactly as the live deck wires it. A
-  // centred knob comes back from `filterSetting` as a low-pass parked above
-  // hearing, which is inaudible, so there is no bypass case to special-case.
-  const setting = filterSetting(eq.filter)
-  const filter = ctx.createBiquadFilter()
-  filter.type = setting.type
-  filter.frequency.value = setting.frequency
-  filter.Q.value = FILTER_Q
+  // The strip is built by the same function the live deck uses, taking a
+  // BaseAudioContext so this is literally the same graph rather than a second
+  // copy that can drift. Keeping these in sync by hand is exactly how an export
+  // ends up sounding unlike what was heard — it already drifted once.
+  const strip = createChannelStrip(ctx)
+  applyChannelStrip(strip, spec.eq ?? flatChannel(), mode, 0)
 
   const gain = spec.gain ?? 1
   const output = ctx.createGain()
   output.gain.value = Number.isFinite(gain) ? Math.max(0, gain) : 1
 
-  node.connect(trim)
-  trim.connect(lowShelf)
-  lowShelf.connect(midPeak)
-  midPeak.connect(highShelf)
-  highShelf.connect(filter)
-  filter.connect(output)
+  node.connect(strip.input)
+  strip.filter.connect(output)
   output.connect(ctx.destination)
 
 }
@@ -219,7 +188,7 @@ export async function renderTimeline(opts: RenderOptions): Promise<AudioBuffer> 
   // the same file the live engine does rather than inheriting anything.
   await ctx.audioWorklet.addModule(new URL(DECK_WORKLET_URL, window.location.href).href)
 
-  for (const spec of specs) buildDeck(ctx, spec)
+  for (const spec of specs) buildDeck(ctx, spec, opts.mode ?? 'eq')
 
   return ctx.startRendering()
 }

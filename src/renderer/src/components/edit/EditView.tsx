@@ -181,7 +181,9 @@ function ExportPanel({ loaded, onClose }: ExportPanelProps): ReactElement {
     try {
       setPhase({ kind: 'working', step: 'Rendering the audio' })
       await nextFrame()
-      const rendered = await renderTimeline({ decks: specs })
+      const rendered = await renderTimeline({
+        mode: useSettings.getState().eqMode,
+        decks: specs })
       if (!alive.current) return
 
       setPhase({ kind: 'working', step: 'Making the file' })
