@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
+import { ancestorPaths } from '@shared/playlistTree'
+import type { PlaylistNode } from '@shared/playlistTree'
 import { useLibrary } from '@renderer/state/useLibrary'
 
 /**
@@ -13,9 +15,13 @@ import { useLibrary } from '@renderer/state/useLibrary'
  * since that is the only place in the UI where the mirror can be reasoned
  * about as a whole.
  *
- * Playlists, history and related tracks are still to come. They are rendered as
- * disabled nodes rather than hidden so the tree keeps its final shape and the
- * gap is visible instead of looking like a feature nobody thought of.
+ * Under it hangs rekordbox's own folder structure: All, then the playlist
+ * tree. A 2,700 track export shown as one flat list is not a library, so the
+ * tree is the only way most of it can be reached.
+ *
+ * History and related tracks are still to come. They are rendered as disabled
+ * nodes rather than hidden so the tree keeps its final shape and the gap is
+ * visible instead of looking like a feature nobody thought of.
  */
 
 interface PendingNodeSpec {
@@ -26,7 +32,6 @@ interface PendingNodeSpec {
 }
 
 const PENDING_NODES: readonly PendingNodeSpec[] = [
-  { id: 'playlists', label: 'Playlists', pending: 'Playlists are not implemented yet' },
   { id: 'histories', label: 'Histories', pending: 'Histories are not implemented yet' },
   { id: 'related', label: 'Related Tracks', pending: 'Related Tracks is not implemented yet' }
 ]
@@ -46,9 +51,24 @@ const MISSING_TITLE =
   'Files the export points at that are not on this machine right now, usually an ' +
   'unmounted drive. They are listed but cannot be played.'
 
+const ALL_TITLE = 'Every track in the export'
+
 /** Indent per tree level, in pixels, plus the panel's own left padding. */
 const INDENT = 13
 const PADDING_LEFT = 6
+
+/** The level the playlist tree starts at: a child of the rekordbox node. */
+const PLAYLIST_DEPTH = 2
+
+/**
+ * Playlist folders indent more tightly than the fixed tree above them, and
+ * stop indenting past a point, because rekordbox folders nest several levels
+ * deep and the column is only 190px wide. Past that depth the parent row above
+ * still says where a node sits, but a name that has been squeezed to an
+ * ellipsis says nothing at all.
+ */
+const PLAYLIST_INDENT = 10
+const MAX_PLAYLIST_INDENT_DEPTH = 6
 
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
@@ -108,6 +128,8 @@ function Chevron({ open, hidden }: { open: boolean; hidden: boolean }): ReactEle
 interface TreeRowProps {
   label: string
   depth: number
+  /** Extra levels below `depth`, indented on the tighter playlist step. */
+  subDepth?: number
   selected: boolean
   disabled: boolean
   /** null when the node cannot have children, so no chevron is drawn. */
@@ -120,6 +142,7 @@ interface TreeRowProps {
 function TreeRow({
   label,
   depth,
+  subDepth = 0,
   selected,
   disabled,
   expanded,
@@ -131,10 +154,15 @@ function TreeRow({
   if (selected) classes.push('tree-node--selected')
   if (disabled) classes.push('tree-node--disabled')
 
+  const indent =
+    PADDING_LEFT +
+    depth * INDENT +
+    Math.min(subDepth, MAX_PLAYLIST_INDENT_DEPTH) * PLAYLIST_INDENT
+
   return (
     <div
       className={classes.join(' ')}
-      style={{ paddingLeft: PADDING_LEFT + depth * INDENT }}
+      style={{ paddingLeft: indent }}
       role="treeitem"
       aria-selected={selected}
       aria-disabled={disabled || undefined}
@@ -149,22 +177,115 @@ function TreeRow({
   )
 }
 
+interface PlaylistBranchProps {
+  nodes: readonly PlaylistNode[]
+  /** Levels below the top of the playlist tree. */
+  depth: number
+  openPaths: ReadonlySet<string>
+  selectedPath: string | null
+  onToggle: (path: string) => void
+  onSelect: (path: string) => void
+}
+
+/**
+ * One level of the playlist tree, recursing only into open folders.
+ *
+ * Skipping closed folders is what keeps hundreds of playlists cheap: a
+ * collapsed tree renders its roots and nothing else.
+ */
+function PlaylistBranch({
+  nodes,
+  depth,
+  openPaths,
+  selectedPath,
+  onToggle,
+  onSelect
+}: PlaylistBranchProps): ReactElement {
+  return (
+    <>
+      {nodes.map((node) => {
+        const isFolder = node.kind === 'folder'
+        const open = isFolder && openPaths.has(node.path)
+        return (
+          <Fragment key={node.path}>
+            <TreeRow
+              label={node.name}
+              depth={PLAYLIST_DEPTH}
+              subDepth={depth}
+              selected={!isFolder && node.path === selectedPath}
+              disabled={false}
+              // A folder is not a track view, so clicking it only opens it.
+              expanded={isFolder ? open : null}
+              count={node.count}
+              title={node.name}
+              onClick={() => (isFolder ? onToggle(node.path) : onSelect(node.path))}
+            />
+            {open && node.children.length > 0 && (
+              <PlaylistBranch
+                nodes={node.children}
+                depth={depth + 1}
+                openPaths={openPaths}
+                selectedPath={selectedPath}
+                onToggle={onToggle}
+                onSelect={onSelect}
+              />
+            )}
+          </Fragment>
+        )
+      })}
+    </>
+  )
+}
+
 export function TreeSidebar(): ReactElement {
   const localCount = useLibrary((s) => s.order.length)
   const mirrorCount = useLibrary((s) => s.mirrorOrder.length)
   const mirrorMeta = useLibrary((s) => s.mirrorMeta)
   const scope = useLibrary((s) => s.scope)
   const setScope = useLibrary((s) => s.setScope)
+  const playlistTree = useLibrary((s) => s.playlistTree)
+  const playlistPath = useLibrary((s) => s.playlistPath)
+  const selectPlaylist = useLibrary((s) => s.selectPlaylist)
   const chooseRekordboxXml = useLibrary((s) => s.chooseRekordboxXml)
   const syncRekordbox = useLibrary((s) => s.syncRekordbox)
   const clearRekordboxXml = useLibrary((s) => s.clearRekordboxXml)
 
   const [rootOpen, setRootOpen] = useState(true)
   const [busy, setBusy] = useState(false)
+  /**
+   * Which playlist folders are open, by `PlaylistNode.path`. Everything starts
+   * closed — opening the app onto hundreds of playlist names would be worse
+   * than the flat list this replaces. Held by path rather than by node so a
+   * re-sync rebuilds the tree without closing what the user opened.
+   */
+  const [openPaths, setOpenPaths] = useState<ReadonlySet<string>>(() => new Set())
 
   const { xmlPath, syncedAt, missing, producedBy } = mirrorMeta
   const error = mirrorMeta.error ?? null
   const now = useNow(rootOpen && syncedAt > 0)
+
+  const toggleFolder = useCallback((path: string) => {
+    setOpenPaths((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(path)) next.add(path)
+      return next
+    })
+  }, [])
+
+  // Keep the selected playlist reachable. Selecting one from the tree already
+  // has its folders open, but a selection restored from elsewhere would
+  // otherwise sit inside closed folders with nothing on screen to explain what
+  // the table is showing.
+  useEffect(() => {
+    if (!playlistPath) return
+    setOpenPaths((prev) => {
+      const missingPaths = ancestorPaths(playlistPath).filter((p) => !prev.has(p))
+      if (missingPaths.length === 0) return prev
+      const next = new Set(prev)
+      for (const p of missingPaths) next.add(p)
+      return next
+    })
+  }, [playlistPath])
 
   /** Actions run one at a time: two overlapping syncs would fight over the mirror. */
   const run = useCallback(async (what: string, action: () => Promise<unknown>): Promise<void> => {
@@ -179,6 +300,8 @@ export function TreeSidebar(): ReactElement {
       setBusy(false)
     }
   }, [])
+
+  const onRekordbox = scope === 'rekordbox'
 
   return (
     <div className="tree-sidebar" role="tree" aria-label="Browse">
@@ -209,7 +332,7 @@ export function TreeSidebar(): ReactElement {
           <TreeRow
             label="rekordbox"
             depth={1}
-            selected={scope === 'rekordbox'}
+            selected={onRekordbox}
             disabled={false}
             expanded={null}
             count={mirrorCount}
@@ -274,6 +397,39 @@ export function TreeSidebar(): ReactElement {
               </div>
             )}
           </div>
+
+          {mirrorCount > 0 && (
+            <>
+              <TreeRow
+                label="All"
+                depth={PLAYLIST_DEPTH}
+                selected={onRekordbox && playlistPath === null}
+                disabled={false}
+                expanded={null}
+                count={mirrorCount}
+                title={ALL_TITLE}
+                onClick={() => selectPlaylist(null)}
+              />
+
+              {playlistTree.length > 0 ? (
+                <PlaylistBranch
+                  nodes={playlistTree}
+                  depth={0}
+                  openPaths={openPaths}
+                  selectedPath={onRekordbox ? playlistPath : null}
+                  onToggle={toggleFolder}
+                  onSelect={selectPlaylist}
+                />
+              ) : (
+                <div
+                  className="tree-note"
+                  style={{ paddingLeft: PADDING_LEFT + PLAYLIST_DEPTH * INDENT }}
+                >
+                  No playlists
+                </div>
+              )}
+            </>
+          )}
 
           {PENDING_NODES.map((node) => (
             <TreeRow

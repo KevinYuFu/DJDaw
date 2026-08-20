@@ -310,6 +310,9 @@ export function TrackTable({ onNotice }: TrackTableProps): ReactElement {
   const mirror = useLibrary((s) => s.mirror)
   const mirrorOrder = useLibrary((s) => s.mirrorOrder)
   const scope = useLibrary((s) => s.scope)
+  const playlistPath = useLibrary((s) => s.playlistPath)
+  const playlistTree = useLibrary((s) => s.playlistTree)
+  const sortActive = useLibrary((s) => s.sortActive)
   const trackById = useLibrary((s) => s.trackById)
   const search = useLibrary((s) => s.search)
   const sortBy = useLibrary((s) => s.sortBy)
@@ -328,10 +331,26 @@ export function TrackTable({ onNotice }: TrackTableProps): ReactElement {
   // rebuild the rows even though nothing about the local records changed.
   const rows = useMemo(
     () => useLibrary.getState().visibleTracks(),
-    [tracks, order, mirror, mirrorOrder, scope, search, sortBy, sortDir]
+    [
+      tracks,
+      order,
+      mirror,
+      mirrorOrder,
+      scope,
+      search,
+      sortBy,
+      sortDir,
+      // Picking a playlist changes the rows without touching the mirror, and
+      // playlist order only applies until a column is chosen, so both belong
+      // here or the table would keep showing the previous selection.
+      playlistPath,
+      playlistTree,
+      sortActive
+    ]
   )
   /** Rows in the collection on screen before the search narrows them. */
-  const scopeCount = scope === 'rekordbox' ? mirrorOrder.length : order.length
+  const scopeCount =
+    scope === 'rekordbox' ? (playlistPath ? rows.length : mirrorOrder.length) : order.length
 
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)

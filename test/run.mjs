@@ -22,7 +22,8 @@ const MODULES = [
   'src/renderer/src/analysis/bpm.worker.ts',
   'src/shared/rekordboxXml.ts',
   'src/shared/rekordboxImport.ts',
-  'src/shared/collection.ts'
+  'src/shared/collection.ts',
+  'src/shared/playlistTree.ts'
 ]
 
 /** The renderer's path aliases, which Vite supplies in the app. */
