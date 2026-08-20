@@ -206,9 +206,21 @@
   color: var(--text-faint);
 }
 
+/* Playlist names run long and sit at any depth, so the name gives way first
+   and the count keeps its place at the right edge. */
 .tree-label {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Where a branch of the tree has nothing to list. */
+.tree-note {
+  padding: 2px 8px 4px;
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 14px;
 }
 
 .tree-count {

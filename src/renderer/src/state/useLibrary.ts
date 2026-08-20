@@ -1,5 +1,13 @@
 import { create } from 'zustand'
-import type { LibraryFile, RekordboxSyncResult, Track, TrackSource } from '@shared/types'
+import type {
+  LibraryFile,
+  RekordboxPlaylistRef,
+  RekordboxSyncResult,
+  Track,
+  TrackSource
+} from '@shared/types'
+import type { PlaylistNode } from '@shared/playlistTree'
+import { buildPlaylistTree, findPlaylistNode } from '@shared/playlistTree'
 import { mergeImported } from '@shared/rekordboxImport'
 import { isRekordboxId, resolveWrite } from '@shared/collection'
 import { LIBRARY_VERSION } from '@renderer/core/constants'
@@ -68,11 +76,27 @@ export interface LibraryState {
   mirror: Record<string, Track>
   /** Mirror display order, as the XML listed it. */
   mirrorOrder: string[]
+  /** Playlists from the last sync, flat, as the XML listed them. Never persisted. */
+  playlists: RekordboxPlaylistRef[]
+  /** `playlists` rebuilt into rekordbox's folder tree. Derived, never persisted. */
+  playlistTree: PlaylistNode[]
   mirrorMeta: RekordboxMirrorMeta
   scope: CollectionScope
+  /**
+   * The playlist on screen, by `PlaylistNode.path`, or null for All. Only the
+   * rekordbox scope reads it; the local collection has no playlists.
+   */
+  playlistPath: string | null
   search: string
   sortBy: keyof Track
   sortDir: 'asc' | 'desc'
+  /**
+   * True once the user has clicked a column. A playlist holds the order the
+   * user arranged in rekordbox, so it is shown in that order until then —
+   * without this flag the default sort would silently reorder every playlist,
+   * and `sortBy` alone cannot say whether it was chosen or inherited.
+   */
+  sortActive: boolean
   selectedId: string | null
   /** Replace the in-memory local collection with what is on disk. */
   loadFromDisk(): Promise<void>
@@ -101,10 +125,15 @@ export interface LibraryState {
   trackById(id: string): Track | undefined
   setSearch(q: string): void
   setScope(scope: CollectionScope): void
+  /** Show one playlist by path, or All when null. Switches scope to rekordbox. */
+  selectPlaylist(path: string | null): void
   /** Sort by a column, flipping direction when it is already the sort column. */
   setSort(by: keyof Track): void
   select(id: string | null): void
-  /** The tracks of the current scope, with search and sort applied. */
+  /**
+   * The tracks on screen: the current scope, or the selected playlist, with
+   * search and sort applied. A playlist keeps its own order until sorted.
+   */
   visibleTracks(): Track[]
 }
 
@@ -125,6 +154,22 @@ let hydrating = false
 let dirty = false
 /** The running write loop, or null when no write is in flight. */
 let saveRun: Promise<void> | null = null
+
+/**
+ * Last `visibleTracks()` result, with the inputs it was built from.
+ *
+ * The browser calls it more than once per render and the mirror runs to
+ * thousands of rows, so the same answer is handed back until one of its inputs
+ * actually changes. Collections are compared by identity, which is safe because
+ * every write in this store replaces them rather than mutating in place.
+ */
+let viewCache: { inputs: readonly unknown[]; rows: Track[] } | null = null
+
+function sameInputs(a: readonly unknown[], b: readonly unknown[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
 
 /**
  * The local collection exactly as it stands now, in the on-disk shape.
@@ -249,20 +294,22 @@ function compareValues(a: string | number, b: string | number): number {
   return String(a).localeCompare(String(b), undefined, { sensitivity: 'base', numeric: true })
 }
 
+/** Every search term must match somewhere in the track's text. */
+function applySearch(rows: Track[], search: string): Track[] {
+  const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return rows
+  return rows.filter((t) => {
+    const hay = `${t.title} ${t.artist} ${t.album} ${t.genre}`.toLowerCase()
+    return terms.every((term) => hay.includes(term))
+  })
+}
+
 /**
  * Search and sort, shared by both collections so the browser behaves the same
  * whichever scope it is showing.
  */
 function applyView(rows: Track[], search: string, sortBy: keyof Track, sortDir: 'asc' | 'desc'): Track[] {
-  const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  let out = rows
-  if (terms.length > 0) {
-    out = out.filter((t) => {
-      const hay = `${t.title} ${t.artist} ${t.album} ${t.genre}`.toLowerCase()
-      return terms.every((term) => hay.includes(term))
-    })
-  }
-
+  const out = applySearch(rows, search)
   const dir = sortDir === 'asc' ? 1 : -1
   return [...out].sort((a, b) => {
     const av = sortValue(a, sortBy)
@@ -279,11 +326,15 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
   order: [],
   mirror: {},
   mirrorOrder: [],
+  playlists: [],
+  playlistTree: [],
   mirrorMeta: EMPTY_MIRROR_META,
   scope: 'collection',
+  playlistPath: null,
   search: '',
   sortBy: 'dateAdded',
   sortDir: 'desc',
+  sortActive: false,
   selectedId: null,
 
   async loadFromDisk() {
@@ -377,6 +428,9 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
     set((s) => ({
       mirror: {},
       mirrorOrder: [],
+      playlists: [],
+      playlistTree: [],
+      playlistPath: null,
       mirrorMeta: EMPTY_MIRROR_META,
       // Nothing left to show in that scope, so do not strand the browser in it.
       scope: s.scope === 'rekordbox' ? 'collection' : s.scope
@@ -411,9 +465,18 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
       mirror[t.id] = normalizeTrack(t, 'rekordbox')
       mirrorOrder.push(t.id)
     }
+    // Built once here rather than per render: 2,700 tracks across hundreds of
+    // playlists is real work, and the tree only changes when the mirror does.
+    const playlists = result.playlists ?? []
+    const playlistTree = buildPlaylistTree(playlists)
+    // rekordbox may have renamed or deleted the playlist that is on screen.
+    // Falling back to All shows the whole mirror, which at least explains
+    // itself; keeping a dead path would show an empty list and no reason why.
+    const openPath = get().playlistPath
+    const playlistPath = openPath && findPlaylistNode(playlistTree, openPath) ? openPath : null
     // Wholesale replacement is the point: a track deleted in rekordbox has to
     // disappear here too, which merging could never achieve.
-    set({ mirror, mirrorOrder, mirrorMeta: meta })
+    set({ mirror, mirrorOrder, playlists, playlistTree, playlistPath, mirrorMeta: meta })
   },
 
   addTracks(incoming) {
@@ -484,11 +547,25 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
   },
 
   setScope(scope) {
-    set({ scope })
+    // Leaving rekordbox drops the playlist, so coming back lands on All rather
+    // than on whatever was open before, which by then may not even exist.
+    set(scope === 'collection' ? { scope, playlistPath: null } : { scope })
+  },
+
+  selectPlaylist(path) {
+    // A playlist only exists in the mirror, so picking one moves the browser
+    // there. Picking All (null) does the same: it is the top of the same tree.
+    // The sort resets because the playlist's own order is the point of picking
+    // it; one click on a column sorts it again.
+    set({ playlistPath: path, scope: 'rekordbox', sortActive: false })
   },
 
   setSort(by) {
-    set((s) => (s.sortBy === by ? { sortDir: s.sortDir === 'asc' ? 'desc' : 'asc' } : { sortBy: by, sortDir: 'asc' }))
+    set((s) =>
+      s.sortBy === by
+        ? { sortDir: s.sortDir === 'asc' ? 'desc' : 'asc', sortActive: true }
+        : { sortBy: by, sortDir: 'asc', sortActive: true }
+    )
   },
 
   select(id) {
@@ -496,11 +573,56 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
   },
 
   visibleTracks() {
-    const { tracks, order, mirror, mirrorOrder, scope, search, sortBy, sortDir } = get()
-    const records = scope === 'rekordbox' ? mirror : tracks
-    const ids = scope === 'rekordbox' ? mirrorOrder : order
-    const rows = ids.map((id) => records[id]).filter((t): t is Track => t != null)
-    return applyView(rows, search, sortBy, sortDir)
+    const s = get()
+    const inputs = [
+      s.tracks,
+      s.order,
+      s.mirror,
+      s.mirrorOrder,
+      s.playlistTree,
+      s.scope,
+      s.playlistPath,
+      s.search,
+      s.sortBy,
+      s.sortDir,
+      s.sortActive
+    ] as const
+    if (viewCache && sameInputs(viewCache.inputs, inputs)) return viewCache.rows
+
+    let rows: Track[]
+    // A playlist's own order is what the user arranged in rekordbox, so it is
+    // kept until a column is clicked. Every other view has no order of its own
+    // and is sorted as usual.
+    let playlistOrdered = false
+
+    // A folder is a container, not a track list. The tree UI is expected not to
+    // select one, but a folder path arriving here shows All rather than an
+    // empty table with nothing to explain it. Same for a path that has gone.
+    const node =
+      s.scope === 'rekordbox' && s.playlistPath != null
+        ? findPlaylistNode(s.playlistTree, s.playlistPath)
+        : null
+
+    if (node && node.kind === 'playlist') {
+      rows = []
+      for (const id of node.trackIds) {
+        const track = s.mirror[id]
+        // A playlist can name a track the mirror no longer has. Skip it: a hole
+        // in the table is worse than a shorter list.
+        if (track) rows.push(track)
+      }
+      playlistOrdered = !s.sortActive
+    } else {
+      const records = s.scope === 'rekordbox' ? s.mirror : s.tracks
+      const ids = s.scope === 'rekordbox' ? s.mirrorOrder : s.order
+      rows = ids.map((id) => records[id]).filter((t): t is Track => t != null)
+    }
+
+    const out = playlistOrdered
+      ? applySearch(rows, s.search)
+      : applyView(rows, s.search, s.sortBy, s.sortDir)
+    viewCache = { inputs, rows: out }
+    return out
   }
 }))
 
