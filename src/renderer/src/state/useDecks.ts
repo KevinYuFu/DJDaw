@@ -12,6 +12,7 @@ import {
 import type { Clip } from '@shared/clips'
 import { CENTRE, flatChannel, isFlat } from '@shared/eq'
 import type { ChannelEq } from '@shared/eq'
+import { nearestPoint, nextPoint, pointsOfInterest, prevPoint } from '@shared/pointsOfInterest'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
 import { decodeTrack } from '@renderer/audio/decode'
@@ -150,6 +151,18 @@ export interface DecksState {
   releaseHotCue(deck: DeckId, index: number): void
   deleteHotCue(deck: DeckId, index: number): void
   addMemoryCue(deck: DeckId): void
+  /**
+   * Delete the locator nearest the playhead, and only if one is genuinely
+   * close. Nothing near enough means nothing is deleted, which is the safe
+   * answer: a marker somewhere else in the track is not what the key meant.
+   */
+  deleteMemoryCueAt(deck: DeckId): void
+  /**
+   * Jump to the next point of interest — locator, hot cue or the CUE point —
+   * to the right (`1`) or the left (`-1`). Playing decks keep rolling from
+   * there; stopped decks park on it. Nothing to jump to is a no-op.
+   */
+  jumpToPoint(deck: DeckId, direction: 1 | -1): void
   nudgeGrid(deck: DeckId, beatFraction: number): void
   setDownbeatHere(deck: DeckId): void
   setGridBpm(deck: DeckId, bpm: number): void
@@ -390,6 +403,18 @@ function atCuePoint(ctx: DeckContext, cue: number): boolean {
 function beatsAfter(grid: BeatGrid | null, startSec: number, beats: number): number {
   if (!grid) return startSec + beats * UNGRIDDED_BEAT_SEC
   return timeAtBeat(grid, beatAtTime(grid, startSec) + beats)
+}
+
+/**
+ * How far from the playhead a marker still counts as the one the DJ means:
+ * one beat, or {@link UNGRIDDED_BEAT_SEC} on a track with no grid yet.
+ *
+ * A beat is the right unit because that is the resolution locators are dropped
+ * at — quantize snaps them to the grid — so anything further away is a
+ * different marker, not this one read imprecisely.
+ */
+function pointWindow(ctx: DeckContext): number {
+  return beatsAfter(ctx.grid, ctx.position, 1) - ctx.position
 }
 
 /**
@@ -879,6 +904,44 @@ export const useDecks = create<DecksState>()(() => ({
     if (ctx.track.memoryCues.some((m) => Math.abs(m.time - time) < 0.01)) return
     const memoryCues = [...ctx.track.memoryCues, { time }].sort((a, b) => a.time - b.time)
     writeTrack(id, ctx.track.id, { memoryCues })
+  },
+
+  deleteMemoryCueAt(id) {
+    const ctx = context(id)
+    if (!ctx) return
+    const target = nearestPoint(pointsOfInterest(ctx.track), ctx.position, pointWindow(ctx), 'memory')
+    // Nothing within a beat: delete nothing. Falling back to the nearest
+    // locator anywhere would silently remove a marker off screen.
+    if (!target) return
+    // The point carries a time, not an index, so find the record it came from
+    // and drop that one alone — filtering on time would take any other locator
+    // sharing the instant with it.
+    let victim = -1
+    let closest = Infinity
+    ctx.track.memoryCues.forEach((memory, i) => {
+      const distance = Math.abs(memory.time - target.time)
+      if (distance < closest) {
+        closest = distance
+        victim = i
+      }
+    })
+    if (victim < 0) return
+    writeTrack(id, ctx.track.id, { memoryCues: ctx.track.memoryCues.filter((_, i) => i !== victim) })
+  },
+
+  jumpToPoint(id, direction) {
+    const ctx = context(id)
+    if (!ctx) return
+    // Read as next / previous, not "the furthest marker in that direction":
+    // a jump to the furthest one would do nothing on a second press, which is
+    // no use for walking a track. Change these two calls if the other reading
+    // was meant.
+    const points = pointsOfInterest(ctx.track)
+    const target = direction > 0 ? nextPoint(points, ctx.position) : prevPoint(points, ctx.position)
+    if (!target) return
+    // `seekDeck` never starts or stops the deck, so a rolling deck carries on
+    // from the marker and a stopped one parks on it.
+    seekDeck(ctx, target.time)
   },
 
   nudgeGrid(id, beatFraction) {

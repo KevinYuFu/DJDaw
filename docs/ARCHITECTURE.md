@@ -304,8 +304,16 @@ deletes.
 - paused elsewhere -> set the cue point here (grid-snapped when Quantize is on)
 - pressing PLAY during a preview keeps playing from the cue point
 
-**Quantize** — on by default, 1 beat. Applies to hot cue set/trigger, loops and
-beat jump.
+**Quantize** — on by default, 1 beat. Applies to hot cue set/trigger, loops,
+beat jump and dropping a locator.
+
+**Locators** — memory cues are treated as locators, the way Ableton does:
+markers you drop while listening and then navigate between, rather than pads
+you trigger. `D` and `F` walk the *points of interest*, which means every
+locator, hot cue and the CUE point, in time order
+(`src/shared/pointsOfInterest.ts`). Jumping right from a marker you are sitting
+on reaches the next one rather than sitting still, which is what the epsilon in
+that module is for.
 
 **Tempo fader** — `rate = 1 + pitchPercent / 100`; displayed BPM is
 `grid bpm * rate`.
@@ -322,7 +330,10 @@ Deck A unshifted, deck B with the right-hand cluster. `Shift` modifies.
 | `Shift+Q` / `Shift+W` | Halve / double the beat-jump size |
 | `1`–`8` | Hot cue A–H (set if empty, trigger if set) |
 | `Shift+1`–`8` | Delete hot cue A–H |
-| `C` | CUE |
+| `Z` | CUE |
+| `X` | Drop a locator at the playhead |
+| `C` | Delete the locator at the playhead |
+| `D` / `F` | Jump to the next / previous point of interest |
 | `L` | Toggle loop |
 | `[` / `]` | Loop length halve / double |
 | `,` / `.` | Nudge the grid back / forward 1/32 beat |
