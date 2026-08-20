@@ -16,6 +16,7 @@ import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import { DetailWaveform } from '@renderer/components/waveform/DetailWaveform'
+import { OverviewWaveform } from '@renderer/components/waveform/OverviewWaveform'
 
 export interface EditTrackProps {
   deckId: DeckId
@@ -477,7 +478,14 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
 
       <div className="edit-track__wave">
         {status === 'ready' ? (
-          <DetailWaveform deckId={deckId} selectClips />
+          <>
+            {/* The MACRO view: the whole row at once, which is the only place
+                a piece can be dragged somewhere else in the track — the MICRO
+                view below shows a few seconds and cannot see where it is
+                going. */}
+            <OverviewWaveform deckId={deckId} draggableClips />
+            <DetailWaveform deckId={deckId} selectClips />
+          </>
         ) : (
           <div className="edit-track__empty">
             {status === 'loading' ? (

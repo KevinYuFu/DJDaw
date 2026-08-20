@@ -186,3 +186,27 @@ export interface ImportedFile {
   /** Raw bytes of the audio file, for `decodeAudioData` in the renderer. */
   data?: ArrayBuffer
 }
+
+/** What an export is written as. WAV is the render itself; MP3 is encoded from it. */
+export type ExportFormat = 'wav' | 'mp3'
+
+/** A finished render on its way to a file. */
+export interface ExportRequest {
+  /**
+   * The render, as WAV bytes. Always WAV, whatever `format` says: that is what
+   * an OfflineAudioContext render turns into directly, and every other format
+   * is an encode on top of it, done in main where ffmpeg lives.
+   */
+  wav: ArrayBuffer
+  format: ExportFormat
+  /** Wanted file name, without an extension. Main sanitises it before use. */
+  name: string
+}
+
+/** Where an export landed, or why it did not. */
+export interface ExportResult {
+  /** Absolute path of the file written, or null when nothing was. */
+  path: string | null
+  /** Set when the export failed. Plain text, ready to show the user. */
+  error?: string
+}

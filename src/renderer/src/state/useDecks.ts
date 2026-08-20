@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { DECK_IDS } from '@shared/types'
 import type { BeatGrid, DeckId, HotCue, Track, WaveformData } from '@shared/types'
 import {
+  placeClip,
   removeClip,
   rippleRemoveClip,
   splitAt,
@@ -168,6 +169,14 @@ export interface DecksState {
   selectClip(deck: DeckId, clipId: string | null): void
   /** Delete the selected clip, leaving a gap, or closing it when `ripple`. */
   deleteSelectedClip(deck: DeckId, ripple: boolean): void
+  /**
+   * Move a clip to a new place on the row, letting it overwrite whatever it
+   * lands on the way a DAW does. Snaps to the grid first when Quantize is on,
+   * exactly as cutting does.
+   *
+   * This is what a drag in the MACRO view commits on release.
+   */
+  moveClipTo(deck: DeckId, clipId: string, toStartSec: number): void
   /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
   setChannelKnob(deck: DeckId, knob: keyof ChannelEq, value: number): void
   /** Put one knob back to centre. What a double-click on a knob does. */
@@ -1023,6 +1032,32 @@ export const useDecks = create<DecksState>()(() => ({
     // plays nothing. The buffer, waveform and track stay put, so the row is a
     // silent piece of the edit rather than an empty slot.
     setClips(ctx, clips, { selectedClipId: null })
+  },
+
+  moveClipTo(id, clipId, toStartSec) {
+    const ctx = context(id)
+    if (!ctx) return
+    if (!Number.isFinite(toStartSec)) return
+    const moving = ctx.state.clips.find((c) => c.id === clipId)
+    if (!moving) return
+
+    // Snap first, as cutting does: a chunk dropped half a beat off the grid is
+    // out of phase with everything around it and no use to a DJ.
+    const at = Math.max(0, snapped(ctx, toStartSec))
+    // A drag that ends where it started still arrives here, and re-pushing the
+    // same regions would wake every subscriber for nothing.
+    if (at === moving.startSec) return
+
+    // `placeClip`, never `moveClip`: dropping on top of a neighbour has to trim
+    // or split it, or the row would carry an overlap, and an overlap has no
+    // honest answer for what plays there.
+    const clips = placeClip(ctx.state.clips, clipId, at)
+    // The drop can swallow the selected piece whole. A selection pointing at a
+    // piece that no longer exists gets past every guard in `selectClip`, so
+    // clear it here rather than leaving it dangling.
+    const selected = ctx.state.selectedClipId
+    const orphaned = selected !== null && !clips.some((c) => c.id === selected)
+    setClips(ctx, clips, orphaned ? { selectedClipId: null } : {})
   },
 
   setChannelKnob(id, knob, value) {

@@ -22,6 +22,32 @@
   background: var(--border-soft);
 }
 
+/*
+ * The view's own strip: everything here acts on the whole edit rather than on
+ * one row, which today is the export button and nothing else. It sits above
+ * the rows so no row has to give width to a control that is not its own.
+ */
+.edit-view__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg-panel);
+}
+
+.edit-btn--export {
+  /* The transport buttons share their row and stretch; this one is alone on
+     the strip and would otherwise take the whole width. */
+  flex: 0 0 auto;
+  padding: 0 16px;
+}
+.edit-btn--export:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .edit-track {
   /* `1 1 0` not `1 1 auto`: the rows split the height evenly whatever is in
      them, so a loaded row never squeezes an empty one. */
@@ -174,10 +200,20 @@
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* The MACRO strip: the whole row at a glance, and where clips are dragged. A
+   shade shorter than the deck's, because four of them cost four times the
+   height — but not much, because a piece has to be grabbable. */
+.edit-track__wave .waveform-overview {
+  flex: 0 0 30px;
+  height: 30px;
 }
 
 /* waveform.css sizes the detail view for a deck, where it sits under an
-   overview strip and can afford a floor. Here it takes the whole row height. */
+   overview strip and can afford a floor. Here it takes what is left. */
 .edit-track__wave .waveform-detail {
   flex: 1 1 auto;
   height: auto;
@@ -445,4 +481,132 @@
   background: var(--cue);
   border-color: var(--cue);
   color: var(--text-inverse);
+}
+
+/* ----------------------------------------------------------- export panel */
+
+/*
+ * Sits inside the app's `.modal` shell, so only the parts that are its own are
+ * here. The rows are label-then-control on one line: three short lines read
+ * faster than three stacked pairs, and there are only three of them.
+ */
+.edit-export__field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.edit-export__field > .label {
+  flex: 0 0 58px;
+}
+
+.edit-export__choice {
+  display: flex;
+  gap: 4px;
+}
+.edit-export__choice button {
+  min-width: 92px;
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+/* The chosen one, not merely hovered: a choice you cannot see is a choice you
+   have to test by pressing. */
+.edit-export__choice button.is-on,
+.edit-export__choice button.is-on:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+}
+
+.edit-export__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  font-size: 13px;
+}
+
+/* What the Export button is about to do, spelled out, because "all four" with
+   two empty rows does not mean four. */
+.edit-export__summary {
+  margin: -4px 0 12px 68px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.edit-export__status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--bg-panel-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.edit-export__status.is-done {
+  border-left-color: var(--play);
+}
+.edit-export__status.is-error {
+  border-left-color: var(--danger);
+}
+
+.edit-export__path {
+  font-size: 11px;
+  color: var(--text-dim);
+  /* A path is long and has no spaces to break at, so it wraps anywhere rather
+     than pushing the panel wider than the window. */
+  overflow-wrap: anywhere;
+}
+.edit-export__note {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Indeterminate on purpose: neither the render nor the encode reports how far
+   through it is, and a made-up percentage is worse than none. */
+.edit-export__bar {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg-raised);
+}
+.edit-export__bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  background: var(--accent);
+  animation: export-sweep 1.1s ease-in-out infinite;
+}
+@keyframes export-sweep {
+  from {
+    left: -38%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+.edit-export__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.edit-export__actions button {
+  height: 28px;
+  padding: 0 16px;
+  font-size: 12px;
+}
+.edit-export__go:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+}
+.edit-export__go:not(:disabled):hover {
+  filter: brightness(1.1);
 }

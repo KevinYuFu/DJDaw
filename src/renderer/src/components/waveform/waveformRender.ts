@@ -562,6 +562,22 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
 }
 
 /**
+ * The same chrome for the MACRO view, where the whole track is a few hundred
+ * pixels wide and 38 tall.
+ *
+ * Everything is a hairline here, and a selected piece is marked by its wash
+ * rather than by fatter edges: at this size a 2px division reads as a spike in
+ * the audio instead of as a cut.
+ */
+export const OVERVIEW_CLIP_STYLE: ClipStyle = {
+  edgeColor: 'rgba(255,255,255,0.4)',
+  edgeWidth: 1,
+  selectedEdgeColor: '#ffffff',
+  selectedEdgeWidth: 1,
+  selectedFill: 'rgba(255,255,255,0.13)'
+}
+
+/**
  * The selected piece as a background wash over `[from, to]`.
  *
  * Drawn before the waveform so the envelope stays the brightest thing in the
@@ -664,6 +680,71 @@ function edge(
   if (x < -w || x > width) return
   ctx.fillStyle = strong ? style.selectedEdgeColor : style.edgeColor
   ctx.fillRect(Math.round(x), 0, w, height)
+}
+
+/**
+ * How a piece being dragged is previewed at the place it would land.
+ *
+ * A filled block with a bright outline, not a copy of the waveform: the MACRO
+ * strip is short, and re-drawing the envelope at the destination would leave
+ * the eye comparing two sets of bars instead of reading one target.
+ */
+export interface ClipGhostStyle {
+  /** Wash inside the block. */
+  fill: string
+  edgeColor: string
+  edgeWidth: number
+  /** Narrowest the block may draw, so a short piece is still visible. */
+  minWidth: number
+}
+
+export const DEFAULT_CLIP_GHOST_STYLE: ClipGhostStyle = {
+  fill: 'rgba(255,255,255,0.18)',
+  edgeColor: '#ffffff',
+  edgeWidth: 2,
+  minWidth: 3
+}
+
+/**
+ * Where a dragged piece would land if it were dropped now, over `[from, to]`.
+ *
+ * Drawn last, over the waveform and the markers, because during a drag it is
+ * the thing being aimed: the answer to "where does this go" has to be the
+ * brightest mark on the strip.
+ */
+export function drawClipGhost(
+  ctx: CanvasRenderingContext2D,
+  startSec: number,
+  durationSec: number,
+  from: number,
+  to: number,
+  width: number,
+  height: number,
+  style: ClipGhostStyle = DEFAULT_CLIP_GHOST_STYLE
+): void {
+  const span = to - from
+  if (!(span > 0) || width <= 0 || !(durationSec > 0)) return
+  const scale = width / span
+
+  const x0 = (startSec - from) * scale
+  const x1 = Math.max((startSec + durationSec - from) * scale, x0 + style.minWidth)
+  if (x1 < 0 || x0 > width) return
+
+  ctx.save()
+  ctx.fillStyle = style.fill
+  ctx.fillRect(x0, 0, x1 - x0, height)
+  // Inset by half the line width: a stroke straddles its path, so an outline
+  // on the block's own edges would lose half of its top and bottom off-canvas.
+  const inset = style.edgeWidth / 2
+  ctx.strokeStyle = style.edgeColor
+  ctx.lineWidth = style.edgeWidth
+  ctx.strokeRect(
+    x0 + inset,
+    inset,
+    Math.max(x1 - x0 - style.edgeWidth, 0),
+    Math.max(height - style.edgeWidth, 0)
+  )
+  ctx.restore()
 }
 
 /** Backing-store size a canvas of this CSS box needs at this pixel ratio. */

@@ -161,6 +161,72 @@ export function rippleRemoveClip(clips: readonly Clip[], id: string): Clip[] {
   return sortClips(out)
 }
 
+/**
+ * Move a clip and let it overwrite whatever it lands on.
+ *
+ * This is what a DAW does when you drop a clip on top of another: the one
+ * underneath gives way. Without it, dragging would silently create overlaps,
+ * and an overlap has no honest answer for "what plays here".
+ *
+ * Four ways a neighbour can be hit, and all four have to be handled or a drag
+ * quietly corrupts the timeline:
+ *   - fully covered            -> it goes
+ *   - clipped on its right end -> shortened
+ *   - clipped on its left end  -> shortened, and its source offset moves with
+ *                                 it, or the audio inside would slide
+ *   - straddled in the middle  -> split into the surviving ends
+ */
+export function placeClip(clips: readonly Clip[], id: string, toStartSec: number): Clip[] {
+  const moving = clips.find((clip) => clip.id === id)
+  if (!moving) return [...clips]
+
+  const start = Math.max(0, toStartSec)
+  const moved: Clip = { ...moving, startSec: start }
+  const end = clipEnd(moved)
+
+  const out: Clip[] = [moved]
+  for (const clip of clips) {
+    if (clip.id === id) continue
+    const otherEnd = clipEnd(clip)
+
+    // Untouched: entirely before or entirely after.
+    if (otherEnd <= start || clip.startSec >= end) {
+      out.push(clip)
+      continue
+    }
+    // Fully covered.
+    if (clip.startSec >= start && otherEnd <= end) continue
+
+    // Straddled: the mover sits inside it, so it survives as two ends.
+    if (clip.startSec < start && otherEnd > end) {
+      out.push({ ...clip, durationSec: start - clip.startSec })
+      out.push({
+        id: makeClipId(),
+        startSec: end,
+        durationSec: otherEnd - end,
+        sourceOffsetSec: clip.sourceOffsetSec + (end - clip.startSec)
+      })
+      continue
+    }
+    // Clipped on the right.
+    if (clip.startSec < start) {
+      out.push({ ...clip, durationSec: start - clip.startSec })
+      continue
+    }
+    // Clipped on the left: the source offset has to move by the same amount,
+    // or the audio inside the clip slides relative to its new start.
+    const trimmed = end - clip.startSec
+    out.push({
+      ...clip,
+      startSec: end,
+      durationSec: otherEnd - end,
+      sourceOffsetSec: clip.sourceOffsetSec + trimmed
+    })
+  }
+
+  return sortClips(out.filter((clip) => clip.durationSec > MIN_CLIP_SEC / 2))
+}
+
 /** Move a clip along the timeline. Negative positions are clamped to zero. */
 export function moveClip(clips: readonly Clip[], id: string, toStartSec: number): Clip[] {
   return sortClips(
