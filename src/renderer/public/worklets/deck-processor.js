@@ -39,7 +39,7 @@ function hermite(y0, y1, y2, y3, t) {
 }
 
 class DeckProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super()
     /** @type {{ id: string, gain: number, channels: Float32Array[] }[]} */
     this.stems = []
@@ -104,6 +104,30 @@ class DeckProcessor extends AudioWorkletProcessor {
     this.quantaSinceReport = 0
 
     this.port.onmessage = (e) => this.onCommand(e.data)
+
+    // An OfflineAudioContext renders as fast as it can, and port messages are
+    // delivered on the audio thread's queue — so a load posted from the main
+    // thread can arrive after the render has already finished, and the export
+    // comes out silent. processorOptions are structured-cloned into the
+    // constructor, before any rendering, so an offline render sets itself up
+    // here instead. Live playback still uses the port, where messages land
+    // long before anyone presses play.
+    const init = options && options.processorOptions
+    if (init) {
+      if (init.stems) {
+        this.onCommand({
+          type: 'load',
+          stems: init.stems,
+          frames: init.frames,
+          sampleRate: init.sampleRate
+        })
+      }
+      if (init.regions) this.onCommand({ type: 'regions', regions: init.regions })
+      if (typeof init.reportInterval === 'number') {
+        this.onCommand({ type: 'reportInterval', quanta: init.reportInterval })
+      }
+      if (init.playing) this.onCommand({ type: 'play' })
+    }
   }
 
   onCommand(msg) {

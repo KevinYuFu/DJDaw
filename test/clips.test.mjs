@@ -129,3 +129,90 @@ eq('nothing is under the playhead', C.clipAt([], 5), null)
   eq('regions come out sorted regardless', C.toRegions(jumbled)[0].startSec, 0)
   eq('and lookups still work', C.clipAt(jumbled, 120).id, 'b')
 }
+
+// ---------------------------------------------------------------------------
+// placeClip: dragging one clip on top of another
+// ---------------------------------------------------------------------------
+
+// A three-piece timeline: 0-60, 60-120, 120-200.
+const three = () => C.splitAt(C.splitAt(whole(), 60).clips, 120).clips
+
+{
+  const t = three()
+  const moved = C.placeClip(t, t[2].id, 300)
+  eq('dropping a clip in empty space leaves the others alone', moved.length, 3)
+  eq('and it lands where asked', moved[2].startSec, 300)
+  eq('carrying its own audio with it', moved[2].sourceOffsetSec, 120)
+}
+
+{
+  // Drop the last piece exactly over the middle one.
+  const t = three()
+  const moved = C.placeClip(t, t[2].id, 60)
+  eq('a fully covered clip is removed', moved.length, 2)
+  eq('the first piece survives', moved[0].startSec, 0)
+  eq('the dropped one is where it was put', moved[1].startSec, 60)
+  eq('and still reads its own audio', moved[1].sourceOffsetSec, 120)
+}
+
+{
+  // Drop the last piece so its left edge lands inside a neighbour: that
+  // neighbour keeps its start and is shortened to meet it.
+  const t = C.splitAt(three(), 30).clips   // 0-30, 30-60, 60-120, 120-200
+  const moved = C.placeClip(t, t[t.length - 1].id, 40)
+  const abutting = moved.find((c) => c.startSec === 30)
+  eq('the clip it landed on keeps its start', abutting.startSec, 30)
+  eq('and is shortened to meet the dropped one', C.clipEnd(abutting), 40)
+  eq('a clip it fully covered is gone', moved.some((c) => c.startSec === 60), false)
+  eq('and one entirely clear of it is untouched', moved.find((c) => c.startSec === 0).durationSec, 30)
+  ok('nothing overlaps afterwards',
+    moved.every((c, i) => i === 0 || c.startSec >= C.clipEnd(moved[i - 1]) - 1e-9))
+}
+
+{
+  // Straddle: drop a short piece into the middle of a long one.
+  const long = [C.wholeTrackClip(200)]
+  const cut = C.splitAt(long, 150).clips          // 0-150, 150-200
+  const moved = C.placeClip(cut, cut[1].id, 50)   // 50-100 lands inside 0-150
+  eq('the straddled clip becomes two pieces', moved.length, 3)
+  eq('the left end keeps the original start', moved[0].startSec, 0)
+  eq('and stops where the dropped one starts', C.clipEnd(moved[0]), 50)
+  eq('the dropped clip sits in the middle', moved[1].startSec, 50)
+  eq('the right end resumes after it', moved[2].startSec, 100)
+  eq('and its source offset moved with it, so the audio does not slide',
+    moved[2].sourceOffsetSec, 100)
+}
+
+{
+  // Clipped on the left: the survivor's source offset must move by the same
+  // amount it was trimmed, or the audio inside slides.
+  const cut = C.splitAt([C.wholeTrackClip(200)], 100).clips  // 0-100, 100-200
+  const moved = C.placeClip(cut, cut[0].id, 60)              // 60-160 over 100-200
+  const right = moved.find((c) => c.startSec === 160)
+  ok('the right-hand clip survives, trimmed', right != null)
+  eq('trimmed by 60 seconds', right.durationSec, 40)
+  eq('and its source offset moved by the same 60', right.sourceOffsetSec, 160)
+  eq('so timeline 170s still reads source 170s', C.sourceTimeAt(moved, 170), 170)
+}
+
+{
+  const t = three()
+  const moved = C.placeClip(t, t[0].id, -40)
+  eq('a clip cannot be dragged before zero', moved[0].startSec, 0)
+}
+
+{
+  const t = three()
+  eq('placing an unknown clip changes nothing', C.placeClip(t, 'nope', 10).length, 3)
+}
+
+{
+  // The invariant that matters: after any drop, nothing overlaps.
+  let t = three()
+  const ids = t.map((c) => c.id)
+  for (const [i, at] of [[0, 90], [2, 15], [1, 150], [0, 0]]) {
+    t = C.placeClip(t, ids[i] ?? t[0].id, at)
+    ok(`no overlaps after dropping at ${at}`,
+      t.every((c, n) => n === 0 || c.startSec >= C.clipEnd(t[n - 1]) - 1e-9))
+  }
+}

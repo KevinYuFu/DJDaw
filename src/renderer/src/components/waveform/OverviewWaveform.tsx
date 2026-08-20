@@ -1,20 +1,28 @@
 /// <reference types="vite/client" />
 import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
+import type { Clip } from '@shared/clips'
+import { clipAt, timelineDuration } from '@shared/clips'
 import type { DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
+import { nearestBeatTime } from '@renderer/core/beatgrid'
 import { BAND_COLORS, BAND_COLORS_DIM } from '@renderer/core/constants'
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import {
+  OVERVIEW_CLIP_STYLE,
   OVERVIEW_CUE_STYLE,
   OVERVIEW_LOCATOR_STYLE,
   type BandColors,
+  buildClipColumns,
   buildColumns,
   canvasNeedsResize,
+  drawClipEdges,
+  drawClipGhost,
+  drawClipHighlight,
   drawCueMarkers,
   drawLocators,
   drawPlayhead,
@@ -24,7 +32,7 @@ import {
 import './waveform.css'
 
 /**
- * The whole track in one short strip, rekordbox's overview.
+ * The MACRO view: the whole track in one short strip, rekordbox's overview.
  *
  * The part already played is drawn in the dim band colours and the rest in the
  * bright ones, so the strip reads as a progress bar without needing one. The
@@ -32,12 +40,21 @@ import './waveform.css'
  * blitted through a clip each frame: re-walking a five-minute envelope sixty
  * times a second would cost more than everything else in the app put together.
  *
- * Clicking or dragging is a needle drop — a seek, not a scrub. The playhead
- * comes from the engine inside a rAF loop, never from React state.
+ * Clicking or dragging is a needle drop — a seek, not a scrub. With
+ * `draggableClips` on, a press that lands on a piece of a cut-up row drags
+ * that piece instead. The playhead comes from the engine inside a rAF loop,
+ * never from React state.
  */
 
 export interface OverviewWaveformProps {
   deckId: DeckId
+  /**
+   * Let a press drag the piece under it to a new place on the row, and draw
+   * the pieces the row is made of. On in the editing view, where reordering
+   * the chunks is the job; off on a performance deck, which is one whole-track
+   * clip that has nowhere to go but away from zero.
+   */
+  draggableClips?: boolean
 }
 
 /**
@@ -54,6 +71,10 @@ const MONO_COLOR_DIM = BAND_COLORS_DIM.high
 /** Playhead movement below this is invisible, so the frame can be skipped. */
 const MIN_PLAYHEAD_STEP_PX = 0.2
 
+/** Pointer travel below this is a click, above it a clip drag. */
+const DRAG_SLOP_PX = 3
+
+const NO_CLIPS: readonly Clip[] = []
 const NO_HOT_CUES: readonly HotCue[] = []
 const NO_LOCATORS: readonly MemoryCue[] = []
 
@@ -66,6 +87,11 @@ interface FrameState {
   cuePoint: number | null
   /** Locators. Stored on the track as `memoryCues`, the rekordbox name. */
   locators: readonly MemoryCue[]
+  /** The pieces the row is made of, in timeline order. Empty when not an edit row. */
+  clips: readonly Clip[]
+  selectedClipId: string | null
+  /** Whether this strip draws its pieces and lets them be dragged. */
+  draggable: boolean
   mono: boolean
 }
 
@@ -74,6 +100,7 @@ interface Layers {
   played: HTMLCanvasElement
   live: HTMLCanvasElement
   waveform: WaveformData | null
+  clips: readonly Clip[]
   duration: number
   width: number
   height: number
@@ -81,25 +108,84 @@ interface Layers {
   mono: boolean
 }
 
-export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElement {
+/** A needle drop: it began on empty space, or on a strip that does not drag. */
+interface SeekGesture {
+  kind: 'seek'
+  pointerId: number
+}
+
+/**
+ * A press that landed on a piece. Until it has travelled {@link DRAG_SLOP_PX}
+ * it is still a needle drop, so nothing is committed and nothing has moved.
+ */
+interface ClipGesture {
+  kind: 'clip'
+  pointerId: number
+  startX: number
+  clip: Clip
+  /** Strip geometry at press time, so a resize mid-drag cannot skew the maths. */
+  width: number
+  duration: number
+  dragging: boolean
+  /** Escape gives the drag up but keeps the gesture, so the release can tidy up. */
+  cancelled: boolean
+}
+
+type Gesture = SeekGesture | ClipGesture
+
+/** Where a dragged piece would land if it were dropped now. */
+interface Ghost {
+  clipId: string
+  startSec: number
+  durationSec: number
+}
+
+/**
+ * Nearest beat while Quantize is on: the rule the store applies when the drop
+ * commits, so the ghost can promise what the release will do.
+ *
+ * Read from the stores rather than captured at press time, because Quantize
+ * can be toggled with the pointer still down.
+ */
+function snapToGrid(deckId: DeckId, sec: number): number {
+  const state = useDecks.getState().decks[deckId]
+  if (!state.quantize || !state.trackId) return sec
+  const grid = useLibrary.getState().trackById(state.trackId)?.grid ?? null
+  return grid ? nearestBeatTime(grid, sec) : sec
+}
+
+export function OverviewWaveform({
+  deckId,
+  draggableClips = false
+}: OverviewWaveformProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef({ width: 0, height: 0 })
   const layersRef = useRef<Layers | null>(null)
   const dirtyRef = useRef(true)
-  const seekingRef = useRef(false)
+  const gestureRef = useRef<Gesture | null>(null)
+  const ghostRef = useRef<Ghost | null>(null)
 
   const status = useDecks((s) => s.decks[deckId].status)
   const waveform = useDecks((s) => s.decks[deckId].waveform)
   const trackId = useDecks((s) => s.decks[deckId].trackId)
+  const clips = useDecks((s) => s.decks[deckId].clips)
+  const selectedClipId = useDecks((s) => s.decks[deckId].selectedClipId)
   const track = useLibrary((s) => (trackId ? (s.trackById(trackId) ?? null) : null))
   const mono = useSettings((s) => s.waveformColorMode === 'mono')
 
   // The waveform's own bucket count is the most accurate length available; the
   // track's tag duration is only a fallback for the moments before it arrives.
-  const duration =
+  const sourceDuration =
     waveform && waveform.sampleRate > 0
       ? (waveform.bucketCount * waveform.bucketSize) / waveform.sampleRate
       : (track?.durationSec ?? 0)
+
+  // An edit row is a timeline, not a file: a piece dragged past the end of the
+  // audio makes the row longer than the track it came from, and the strip has
+  // to keep showing all of it.
+  const duration = draggableClips
+    ? Math.max(sourceDuration, timelineDuration(clips))
+    : sourceDuration
 
   const frameRef = useRef<FrameState>({
     deck: null,
@@ -108,6 +194,9 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
     hotCues: NO_HOT_CUES,
     cuePoint: null,
     locators: NO_LOCATORS,
+    clips: NO_CLIPS,
+    selectedClipId: null,
+    draggable: false,
     mono: false
   })
 
@@ -122,6 +211,9 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
       hotCues: track?.hotCues ?? NO_HOT_CUES,
       cuePoint: track?.cuePoint ?? null,
       locators: track?.memoryCues ?? NO_LOCATORS,
+      clips: draggableClips ? clips : NO_CLIPS,
+      selectedClipId: draggableClips ? selectedClipId : null,
+      draggable: draggableClips,
       mono
     }
     dirtyRef.current = true
@@ -156,6 +248,7 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
       if (width <= 0 || height <= 0) return
       const dpr = window.devicePixelRatio || 1
       const state = frameRef.current
+      const ghost = ghostRef.current
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const playX = state.duration > 0 ? clamp((position / state.duration) * width, 0, width) : 0
@@ -171,6 +264,22 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
       if (!ctx) return
       ctx.clearRect(0, 0, width, height)
       if (state.duration <= 0) return
+
+      // Under the waveform, as the MICRO view draws it, so the envelope stays
+      // the brightest thing on the strip. Mid-drag it marks the piece being
+      // moved, which is what gives the eye both ends of the move at once.
+      if (state.draggable) {
+        drawClipHighlight(
+          ctx,
+          state.clips,
+          ghost ? ghost.clipId : state.selectedClipId,
+          0,
+          state.duration,
+          width,
+          height,
+          OVERVIEW_CLIP_STYLE
+        )
+      }
 
       if (layers.waveform) {
         // Two clipped blits of full-size layers rather than a scaled partial
@@ -193,6 +302,21 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
         }
       }
 
+      // Hairlines where the row was cut. An uncut row draws none of them, so a
+      // freshly loaded edit row looks exactly like a performance deck's strip.
+      if (state.draggable) {
+        drawClipEdges(
+          ctx,
+          state.clips,
+          state.selectedClipId,
+          0,
+          state.duration,
+          width,
+          height,
+          OVERVIEW_CLIP_STYLE
+        )
+      }
+
       // The MACRO view is the whole track in 38 px, so locators are a tab and
       // a line here; the names belong to the MICRO view, which has the room.
       drawLocators(ctx, state.locators, 0, state.duration, width, height, OVERVIEW_LOCATOR_STYLE)
@@ -206,6 +330,9 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
         height,
         OVERVIEW_CUE_STYLE
       )
+      if (ghost) {
+        drawClipGhost(ctx, ghost.startSec, ghost.durationSec, 0, state.duration, width, height)
+      }
       drawPlayhead(ctx, playX, height)
     }
 
@@ -225,29 +352,124 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
     [deckId]
   )
 
+  /** Where the dragged piece would start if the pointer let go at `clientX`. */
+  const dropTarget = useCallback(
+    (gesture: ClipGesture, clientX: number): number => {
+      const raw =
+        gesture.clip.startSec + ((clientX - gesture.startX) * gesture.duration) / gesture.width
+      // Keep the piece on the strip: past either edge there is nothing to draw
+      // the ghost against and nothing to aim at.
+      const room = Math.max(0, gesture.duration - gesture.clip.durationSec)
+      return Math.max(0, snapToGrid(deckId, clamp(raw, 0, room)))
+    },
+    [deckId]
+  )
+
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>): void => {
       if (event.button !== 0) return
-      event.currentTarget.setPointerCapture(event.pointerId)
-      seekingRef.current = true
-      seekTo(event.clientX)
+      const canvas = event.currentTarget
+      canvas.setPointerCapture(event.pointerId)
+      const state = frameRef.current
+      const rect = canvas.getBoundingClientRect()
+      const grabbed =
+        state.draggable && rect.width > 0 && state.duration > 0
+          ? clipAt(
+              state.clips,
+              clamp((event.clientX - rect.left) / rect.width, 0, 1) * state.duration
+            )
+          : null
+
+      if (!grabbed) {
+        // Empty space, or a performance strip: the press is a needle drop and
+        // seeks straight away, exactly as it always has.
+        gestureRef.current = { kind: 'seek', pointerId: event.pointerId }
+        seekTo(event.clientX)
+        return
+      }
+
+      // On a piece, the seek waits until the gesture has decided what it is.
+      // Seeking now would jog the playhead every time a chunk is picked up.
+      gestureRef.current = {
+        kind: 'clip',
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        clip: grabbed,
+        width: rect.width,
+        duration: state.duration,
+        dragging: false,
+        cancelled: false
+      }
     },
     [seekTo]
   )
 
   const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>): void => {
-      if (seekingRef.current) seekTo(event.clientX)
+      const gesture = gestureRef.current
+      if (!gesture || gesture.pointerId !== event.pointerId) return
+      if (gesture.kind === 'seek') {
+        seekTo(event.clientX)
+        return
+      }
+      if (gesture.cancelled) return
+      if (!gesture.dragging) {
+        if (Math.abs(event.clientX - gesture.startX) <= DRAG_SLOP_PX) return
+        gesture.dragging = true
+      }
+      ghostRef.current = {
+        clipId: gesture.clip.id,
+        startSec: dropTarget(gesture, event.clientX),
+        durationSec: gesture.clip.durationSec
+      }
+      dirtyRef.current = true
     },
-    [seekTo]
+    [dropTarget, seekTo]
   )
 
-  const onPointerUp = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
-    if (!seekingRef.current) return
-    seekingRef.current = false
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
+  // pointerup, pointercancel and lostpointercapture all mean the gesture is
+  // over. Capture puts the first two here wherever the pointer has gone; the
+  // third catches a capture torn away without either. Whichever arrives first
+  // clears the ref, so the rest are no-ops — a drag that never ended would
+  // leave the row stuck mid-move.
+  const endGesture = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>): void => {
+      const gesture = gestureRef.current
+      if (!gesture || gesture.pointerId !== event.pointerId) return
+      gestureRef.current = null
+      const ghost = ghostRef.current
+      ghostRef.current = null
+      dirtyRef.current = true
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+
+      if (gesture.kind === 'seek' || gesture.cancelled) return
+      // A press that went nowhere is still a needle drop. Picking pieces up
+      // must not cost the strip its click-to-seek.
+      if (!gesture.dragging) {
+        seekTo(event.clientX)
+        return
+      }
+      if (ghost) useDecks.getState().moveClipTo(deckId, ghost.clipId, ghost.startSec)
+    },
+    [deckId, seekTo]
+  )
+
+  // Escape abandons a drag. The gesture stays until the pointer comes up, so
+  // the capture is still released there and the same press cannot pick the
+  // drag back up halfway through.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      const gesture = gestureRef.current
+      if (!gesture || gesture.kind !== 'clip' || !gesture.dragging) return
+      gesture.cancelled = true
+      ghostRef.current = null
+      dirtyRef.current = true
     }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   return (
@@ -257,9 +479,9 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
         className="waveform-overview__canvas"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onLostPointerCapture={onPointerUp}
+        onPointerUp={endGesture}
+        onPointerCancel={endGesture}
+        onLostPointerCapture={endGesture}
       />
     </div>
   )
@@ -280,6 +502,7 @@ function rasterise(
     played: document.createElement('canvas'),
     live: document.createElement('canvas'),
     waveform: null,
+    clips: NO_CLIPS,
     duration: 0,
     width: 0,
     height: 0,
@@ -289,6 +512,7 @@ function rasterise(
   const unchanged =
     current !== null &&
     layers.waveform === state.waveform &&
+    layers.clips === state.clips &&
     layers.duration === state.duration &&
     layers.width === width &&
     layers.height === height &&
@@ -297,15 +521,29 @@ function rasterise(
   if (unchanged) return layers
 
   layers.waveform = state.waveform && state.duration > 0 ? state.waveform : null
+  layers.clips = state.clips
   layers.duration = state.duration
   layers.width = width
   layers.height = height
   layers.dpr = dpr
   layers.mono = state.mono
 
-  const cols = layers.waveform
-    ? buildColumns(layers.waveform, 0, state.duration, width, layers.waveform.sampleRate)
-    : null
+  // Once a row is cut, timeline seconds stop matching source seconds, so the
+  // pieces are the only honest way to lay the envelope out. A row with no
+  // pieces yet — a deck still loading — falls back to the plain whole-file
+  // walk, which is what an uncut row comes out as anyway.
+  const cols = !layers.waveform
+    ? null
+    : layers.clips.length > 0
+      ? buildClipColumns(
+          layers.waveform,
+          layers.clips,
+          0,
+          state.duration,
+          width,
+          layers.waveform.sampleRate
+        )
+      : buildColumns(layers.waveform, 0, state.duration, width, layers.waveform.sampleRate)
   const passes: ReadonlyArray<[HTMLCanvasElement, BandColors, string]> = [
     [layers.played, BAND_COLORS_DIM, MONO_COLOR_DIM],
     [layers.live, BAND_COLORS, MONO_COLOR]

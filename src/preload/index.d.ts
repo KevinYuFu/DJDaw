@@ -1,4 +1,6 @@
 import type {
+  ExportRequest,
+  ExportResult,
   LibraryFile,
   Track,
   RekordboxImportResult,
@@ -53,6 +55,22 @@ export interface DJDawApi {
    */
   readWaveformCache(audioKey: string): Promise<ArrayBuffer | null>
   writeWaveformCache(audioKey: string, data: ArrayBuffer): Promise<void>
+  /**
+   * Write a finished render into `~/Music/DJDaw`, creating the folder if it is
+   * not there, and return the file it wrote. An existing name is never
+   * overwritten: a numeric suffix is added instead, so the returned path is the
+   * only reliable answer to where the export went.
+   *
+   * This never rejects for a failure the user can act on — no ffmpeg for MP3,
+   * a full disk — those come back with `path` null and `error` set to a line
+   * that can be shown as it is.
+   */
+  exportAudio(request: ExportRequest): Promise<ExportResult>
+  /**
+   * Show a file in Finder. Feed it the `path` from {@link exportAudio} to
+   * offer "reveal" after an export; a null path or a file that has since gone
+   * does nothing, so check the path first rather than relying on a throw.
+   */
   revealInFinder(path: string): Promise<void>
   /** Menu commands from the app menu. Returns an unsubscribe fn. */
   onMenuCommand(cb: (command: string) => void): () => void
