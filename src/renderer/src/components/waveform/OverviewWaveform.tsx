@@ -11,10 +11,12 @@ import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import {
   OVERVIEW_CUE_STYLE,
+  OVERVIEW_LOCATOR_STYLE,
   type BandColors,
   buildColumns,
   canvasNeedsResize,
   drawCueMarkers,
+  drawLocators,
   drawPlayhead,
   drawWaveform,
   sizeCanvas
@@ -53,7 +55,7 @@ const MONO_COLOR_DIM = BAND_COLORS_DIM.high
 const MIN_PLAYHEAD_STEP_PX = 0.2
 
 const NO_HOT_CUES: readonly HotCue[] = []
-const NO_MEMORY_CUES: readonly MemoryCue[] = []
+const NO_LOCATORS: readonly MemoryCue[] = []
 
 /** Everything a frame draws, kept in a ref so the rAF loop never re-subscribes. */
 interface FrameState {
@@ -62,7 +64,8 @@ interface FrameState {
   duration: number
   hotCues: readonly HotCue[]
   cuePoint: number | null
-  memoryCues: readonly MemoryCue[]
+  /** Locators. Stored on the track as `memoryCues`, the rekordbox name. */
+  locators: readonly MemoryCue[]
   mono: boolean
 }
 
@@ -104,7 +107,7 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
     duration: 0,
     hotCues: NO_HOT_CUES,
     cuePoint: null,
-    memoryCues: NO_MEMORY_CUES,
+    locators: NO_LOCATORS,
     mono: false
   })
 
@@ -118,7 +121,7 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
       duration,
       hotCues: track?.hotCues ?? NO_HOT_CUES,
       cuePoint: track?.cuePoint ?? null,
-      memoryCues: track?.memoryCues ?? NO_MEMORY_CUES,
+      locators: track?.memoryCues ?? NO_LOCATORS,
       mono
     }
     dirtyRef.current = true
@@ -190,11 +193,13 @@ export function OverviewWaveform({ deckId }: OverviewWaveformProps): ReactElemen
         }
       }
 
+      // The MACRO view is the whole track in 38 px, so locators are a tab and
+      // a line here; the names belong to the MICRO view, which has the room.
+      drawLocators(ctx, state.locators, 0, state.duration, width, height, OVERVIEW_LOCATOR_STYLE)
       drawCueMarkers(
         ctx,
         state.hotCues,
         state.cuePoint,
-        state.memoryCues,
         0,
         state.duration,
         width,
