@@ -389,7 +389,7 @@
 .mixer {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   padding: 8px 10px 10px;
   min-height: 0;
   overflow: hidden;
@@ -455,13 +455,24 @@
 /* Rotary control: an SVG arc plus a pointer, drawn to read at 30px. */
 .knob {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 1px;
   line-height: 0;
+  /* Dragged vertically, so the browser must not claim the gesture for a scroll,
+     and a fast drag must not select the label text next to it. */
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
 }
-.knob.is-disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.knob__readout {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1;
+  color: var(--text-dim);
+  /* formatDb pads the sign with a space so the readouts line up; without this
+     the browser would collapse it and the text would shift as the knob moves. */
+  white-space: pre;
 }
 .knob__body {
   fill: var(--bg-raised);
@@ -483,6 +494,13 @@
 .knob__pointer {
   stroke: var(--text);
   stroke-width: 1.6;
+  stroke-linecap: round;
+}
+/* The 12 o'clock mark, so a centred knob still reads as centred when its
+   value arc has shrunk to nothing. */
+.knob__detent {
+  stroke: var(--border-strong);
+  stroke-width: 1.4;
   stroke-linecap: round;
 }
 

@@ -448,8 +448,11 @@ dance music), 78.3 on GTZAN.
 
 ## Not built yet (deliberately)
 
-EQ, filters, channel faders and the crossfader are drawn but inert — the DSP
-comes later. Key detection, key lock / master tempo (needs a time-stretcher),
+Channel EQ, filter and trim are real: each deck runs
+trim -> low shelf -> mid peaking -> high shelf -> filter before its fader.
+The mapping lives in `src/shared/eq.ts` and is a DJM's: +6 dB boost, -26 dB cut,
+exponential filter sweep. Every parameter is ramped rather than stepped,
+because a stepped gain is an audible click. Key detection, key lock / master tempo (needs a time-stretcher),
 stem separation, the edit/arrangement timeline and track export are all future
 work. `Track.key` and `DeckState.keyLock` exist so the UI does not have to
 change shape when they land.
