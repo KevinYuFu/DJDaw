@@ -1,13 +1,13 @@
 /*
  * The window shell: the top-level grid, the toolbar strip, the mixer chrome,
- * the divider and the modals. Deck and browser internals are styled by
- * deck.css, waveform.css and browser.css.
+ * the divider and the modals. Deck, editing-view and browser internals are
+ * styled by deck.css, edit.css, waveform.css and browser.css.
  */
 
 .app {
   height: 100%;
   display: grid;
-  /* toolbar / decks / divider / browser */
+  /* toolbar / view / divider / browser */
   grid-template-rows: 40px var(--deck-height, 60%) 5px 1fr;
   background: var(--bg-app);
 }
@@ -328,6 +328,28 @@
   to {
     left: 100%;
   }
+}
+
+/* ---------------------------------------------------------------- edit area */
+
+/*
+ * The editing view takes the same grid row the decks use, so the divider and
+ * the browser under it behave identically in both views. It is a flex box with
+ * one child only so the view's own root stretches to the row without EditView
+ * having to know anything about the shell it sits in.
+ */
+.edit-area {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+.edit-area > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* ------------------------------------------------------------------ divider */

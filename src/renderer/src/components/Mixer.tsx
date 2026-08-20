@@ -14,7 +14,13 @@ import { clamp } from '@renderer/core/format'
  * under the cursor and doing nothing.
  */
 
-const DECKS: readonly DeckId[] = ['A', 'B']
+/**
+ * The mixer is a two-channel unit, like the hardware it is modelled on. The
+ * engine now carries four decks for the editing view, but only A and B are
+ * wired through here, so the channel type stays narrower than `DeckId`.
+ */
+const DECKS = ['A', 'B'] as const satisfies readonly DeckId[]
+type MixerChannel = (typeof DECKS)[number]
 
 const NO_DSP_TITLE =
   'Not implemented yet — the mixer DSP (trim, 3-band EQ, filter) is not built. ' +
@@ -241,7 +247,7 @@ function applyDeckGain(id: DeckId, gain: number): void {
 }
 
 export function Mixer(): ReactElement {
-  const [levels, setLevels] = useState<Record<DeckId, number>>({ A: 1, B: 1 })
+  const [levels, setLevels] = useState<Record<MixerChannel, number>>({ A: 1, B: 1 })
   const [crossfade, setCrossfade] = useState(0.5)
 
   const cross = crossfadeGains(crossfade)

@@ -3,13 +3,19 @@ import type { DeckId } from '@shared/types'
 import { BEAT_JUMP_SIZES, HOT_CUE_COUNT, LOOP_SIZES } from '@renderer/core/constants'
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
+import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 
 /**
  * The keyboard layer: the app's hardware surface when there is no CDJ plugged
- * in. Every binding acts on the focused deck (`Tab` swaps it) and is dispatched
- * from a single window-level listener that reads the stores with `getState()`,
- * so the handler is installed once and can never go stale.
+ * in. Every binding acts on the focused deck (`Tab` moves the focus) and is
+ * dispatched from a single window-level listener that reads the stores with
+ * `getState()`, so the handler is installed once and can never go stale.
+ *
+ * The map is the same in both views. What changes is how many decks `Tab`
+ * walks: the ring is owned by `useSettings.cycleFocusedDeck`, which knows the
+ * performance view draws two decks and the editing view four, so nothing here
+ * has to branch on the view.
  *
  * Bindings are matched on `event.code`, not `event.key`, for two reasons: the
  * map is positional the way a controller is, and `Shift+1` reports a key of
@@ -42,7 +48,9 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Y', action: 'Toggle quantize' },
   { keys: '- / =', action: 'Waveform zoom out / in' },
   { keys: '← / →', action: 'Nudge the playhead by one beat' },
-  { keys: 'Tab', action: 'Switch the focused deck' }
+  { keys: 'A', action: 'Load the track picked in the browser into the focused deck' },
+  { keys: 'Tab', action: 'Move the focus to the next deck' },
+  { keys: 'Shift + Tab', action: 'Move the focus back one deck' }
 ] as const
 
 /**
@@ -146,6 +154,21 @@ function beatJump(deck: DeckId, direction: -1 | 1): void {
 }
 
 /**
+ * `A` — load whatever the browser has selected onto a deck. Same path as the
+ * browser's own Enter-to-load: the store's `loadTrack` does the decode, the
+ * analysis and the deck swap, so the two routes cannot drift apart. With
+ * nothing selected there is nothing to load and the press is a no-op.
+ */
+function loadSelection(deck: DeckId): void {
+  const trackId = useLibrary.getState().selectedId
+  if (!trackId) return
+  void useDecks
+    .getState()
+    .loadTrack(deck, trackId)
+    .catch((err: unknown) => console.error('[keyboard] load failed', err))
+}
+
+/**
  * Codes that are safe to auto-repeat: holding them down should keep firing,
  * the way holding a beat-jump button on a controller does. Everything else
  * (transport, pads, toggles) is edge-triggered only.
@@ -182,6 +205,7 @@ function isBound(code: string): boolean {
     REPEATABLE.has(code) ||
     code === 'Space' ||
     code === 'Tab' ||
+    code === 'KeyA' ||
     code === 'KeyC' ||
     code === 'KeyL' ||
     code === 'KeyG' ||
@@ -239,7 +263,13 @@ export function useKeyboard(): void {
           break
 
         case 'Tab':
-          useSettings.getState().toggleFocusedDeck()
+          // Shift walks the ring backwards. In the performance view both
+          // directions are the same A/B swap, so this is unchanged there.
+          useSettings.getState().cycleFocusedDeck(shift ? -1 : 1)
+          break
+
+        case 'KeyA':
+          loadSelection(deck)
           break
 
         case 'KeyQ':

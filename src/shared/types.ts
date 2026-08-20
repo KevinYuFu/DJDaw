@@ -3,7 +3,15 @@
  * bridge and the renderer, so this file must stay free of runtime deps.
  */
 
-export type DeckId = 'A' | 'B'
+/**
+ * Every deck, in the order the views lay them out. The single ordered list:
+ * anything that builds one value per deck, or walks them, iterates this rather
+ * than writing the ids out again. The performance view uses the first two;
+ * the editing view stacks all four.
+ */
+export const DECK_IDS = ['A', 'B', 'C', 'D'] as const
+
+export type DeckId = (typeof DECK_IDS)[number]
 
 /**
  * Which collection a record belongs to.

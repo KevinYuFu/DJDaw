@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { DECK_IDS } from '@shared/types'
 import type { BeatGrid, DeckId, HotCue, Track, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
@@ -31,7 +32,7 @@ import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 
 /**
- * The two decks and everything the transport does.
+ * Every deck and everything the transport does.
  *
  * The playhead is deliberately not in here: at 60 Hz it would re-render the
  * whole app every frame. Actions that need the live position ask the engine
@@ -89,7 +90,7 @@ export interface DecksState {
   setZoom(deck: DeckId, index: number): void
   setHotCue(deck: DeckId, index: number): void
   triggerHotCue(deck: DeckId, index: number): void
-  /** Pad released — ends a press-and-hold preview started from a paused deck. */
+  /** Pad released — ends a held preview and parks on that hot cue point. */
   releaseHotCue(deck: DeckId, index: number): void
   deleteHotCue(deck: DeckId, index: number): void
   addMemoryCue(deck: DeckId): void
@@ -129,7 +130,10 @@ const TAP_HISTORY = 8
 
 /** Transport state that changes on every press but must not re-render the UI. */
 interface DeckRuntime {
-  /** Where a press-and-hold preview started, so the release can return there. */
+  /**
+   * Where a held preview parks when it is released: the point it is playing
+   * from, not where the playhead was before, which is what CDJ hardware does.
+   */
   previewReturnSec: number | null
   /** Hot cue pad currently held as a preview, or null. */
   previewCueIndex: number | null
@@ -161,9 +165,17 @@ function newRuntime(): DeckRuntime {
   }
 }
 
-const runtime: Record<DeckId, DeckRuntime> = { A: newRuntime(), B: newRuntime() }
+/**
+ * One value per deck. The ids come from `DECK_IDS` so adding a deck is a
+ * one-line change there, not a hunt through this file for hard-coded ids.
+ */
+function perDeck<T>(make: () => T): Record<DeckId, T> {
+  const out = {} as Record<DeckId, T>
+  for (const id of DECK_IDS) out[id] = make()
+  return out
+}
 
-const DECK_IDS: readonly DeckId[] = ['A', 'B']
+const runtime: Record<DeckId, DeckRuntime> = perDeck(newRuntime)
 
 function emptyDeck(): DeckState {
   return {
@@ -185,7 +197,7 @@ function emptyDeck(): DeckState {
 
 function patchDeck(id: DeckId, patch: Partial<DeckState>): void {
   useDecks.setState((s) => {
-    const decks: Record<DeckId, DeckState> = { A: s.decks.A, B: s.decks.B }
+    const decks: Record<DeckId, DeckState> = { ...s.decks }
     decks[id] = { ...decks[id], ...patch }
     return { decks }
   })
@@ -410,7 +422,7 @@ async function resolveGrid(id: DeckId, track: Track, buffer: AudioBuffer): Promi
 }
 
 export const useDecks = create<DecksState>()(() => ({
-  decks: { A: emptyDeck(), B: emptyDeck() },
+  decks: perDeck(emptyDeck),
 
   async loadTrack(id, trackId) {
     const track = useLibrary.getState().trackById(trackId)
@@ -654,10 +666,12 @@ export const useDecks = create<DecksState>()(() => ({
       return
     }
 
-    // Paused: preview for as long as the pad is held, then come back. A second
-    // pad pressed mid-preview must not overwrite where the preview began.
+    // Paused: preview for as long as the pad is held, then stop on the cue
+    // point itself — a CDJ leaves the playhead where the pad took it, not back
+    // where it was before the press. A second pad pressed mid-preview takes
+    // over, so the release lands on whichever cue is actually playing.
     const rt = runtime[id]
-    if (rt.previewReturnSec == null) rt.previewReturnSec = ctx.position
+    rt.previewReturnSec = cue.time
     rt.previewCueIndex = index
     seekDeck(ctx, cue.time)
     playDeck(ctx)

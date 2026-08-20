@@ -1,0 +1,302 @@
+/*
+ * The editing view: four deck rows stacked in the space the two performance
+ * decks use. Everything inside the waveform is drawn by waveformRender.ts and
+ * every colour here comes from theme.css.
+ *
+ * The whole sheet is a fight for vertical height. Four rows have to fit
+ * without scrolling, so the row keeps only what a compact deck needs — badge,
+ * artwork, titles, readouts, transport and pads — and gives the rest to the
+ * waveform, which is the part an edit is actually read from.
+ */
+
+.edit-view {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* The gap is the divider between rows: the background shows through it. */
+  gap: 1px;
+  overflow: hidden;
+  background: var(--border-soft);
+}
+
+.edit-track {
+  /* `1 1 0` not `1 1 auto`: the rows split the height evenly whatever is in
+     them, so a loaded row never squeezes an empty one. */
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 6px 10px 6px 0;
+  overflow: hidden;
+  background: var(--bg-panel);
+  /* Tint for everything in the row. Set once, used by every child. */
+  --track-color: var(--accent);
+}
+
+/*
+ * C and D fall back to colours theme.css already defines, so the view stays
+ * inside the palette; if per-deck variables are added later they win without
+ * this sheet changing.
+ */
+.edit-track[data-deck='A'] {
+  --track-color: var(--deck-a);
+}
+.edit-track[data-deck='B'] {
+  --track-color: var(--deck-b);
+}
+.edit-track[data-deck='C'] {
+  --track-color: var(--deck-c, var(--play));
+}
+.edit-track[data-deck='D'] {
+  --track-color: var(--deck-d, var(--danger));
+}
+
+/* The focused row is the one the unshifted keys act on, so it is meant to be
+   unmissable: lifted background and a lit bar down its left edge. */
+.edit-track.is-focused {
+  background: var(--bg-panel-2);
+}
+
+.edit-track__edge {
+  flex: 0 0 4px;
+  align-self: stretch;
+  border-radius: 0 2px 2px 0;
+  background: var(--border-soft);
+}
+.edit-track.is-focused .edit-track__edge {
+  background: var(--track-color);
+  box-shadow: 0 0 10px var(--track-color);
+}
+
+/* ------------------------------------------------------------ track details */
+
+.edit-track__info {
+  flex: 0 0 226px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.edit-track__id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.edit-track__badge {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--track-color);
+  color: var(--text-inverse);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.edit-track__art {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  object-fit: cover;
+}
+.edit-track__art.is-empty {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    rgba(255, 255, 255, 0.035) 5px 10px
+  );
+}
+
+.edit-track__titles {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.edit-track__title,
+.edit-track__artist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.edit-track__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.edit-track__artist {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.edit-track__stats {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.edit-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+.edit-stat__value {
+  font-size: 12px;
+}
+.edit-stat--bpm .edit-stat__value {
+  font-weight: 600;
+  color: var(--track-color);
+}
+.edit-stat--time {
+  margin-left: auto;
+}
+.edit-stat__sub {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* ----------------------------------------------------------------- waveform */
+
+.edit-track__wave {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+
+/* waveform.css sizes the detail view for a deck, where it sits under an
+   overview strip and can afford a floor. Here it takes the whole row height. */
+.edit-track__wave .waveform-detail {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.edit-track__empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  /* A size up from the rest of the chrome: this is a line to be read, not a
+     readout to be glanced at. */
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+.edit-track__empty kbd {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-bottom-color: var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* ----------------------------------------------------- transport and pads */
+
+.edit-track__controls {
+  flex: 0 0 264px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.edit-transport {
+  display: flex;
+  gap: 5px;
+}
+
+.edit-btn {
+  flex: 1 1 0;
+  height: 26px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 13px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.edit-btn__icon {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+}
+.edit-btn--play:not(.is-lit) .edit-btn__icon {
+  fill: var(--play);
+}
+.edit-btn--cue:not(.is-lit) .edit-btn__icon {
+  fill: var(--cue);
+}
+
+/* Lit states repeat themselves under :hover because theme.css's hover rule is
+   the more specific of the two. */
+.edit-btn--play.is-lit,
+.edit-btn--play.is-lit:hover:not(:disabled) {
+  background: var(--play);
+  border-color: var(--play);
+  color: var(--text-inverse);
+  box-shadow: 0 0 12px var(--play-glow);
+}
+.edit-btn--cue.is-lit,
+.edit-btn--cue.is-lit:hover:not(:disabled) {
+  background: var(--cue);
+  border-color: var(--cue);
+  color: var(--text-inverse);
+  box-shadow: 0 0 12px var(--cue-glow);
+}
+
+/* One row of eight rather than the deck's 2x4: the row is wide and short, so
+   the pads spend width, which there is plenty of, instead of height. */
+.edit-pads {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.edit-pad {
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  touch-action: none;
+}
+.edit-pad.is-set {
+  color: var(--text);
+}
+/* The tint is an inline style, so hover has to show up as something else. */
+.edit-pad.is-set:hover:not(:disabled) {
+  filter: brightness(1.3);
+}
+.edit-pad:not(:disabled):active {
+  transform: translateY(1px);
+}
