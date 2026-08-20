@@ -9,7 +9,8 @@ import { useSettings } from '@renderer/state/useSettings'
 
 /**
  * The rekordbox top strip: mode tabs, the master readouts, the setup guide and
- * the help modal.
+ * the help modal. The strip is drawn in every view — the tabs are how you get
+ * back out of one.
  *
  * On macOS the window is `hiddenInset`, so this bar is also the title bar —
  * it carries the drag region and the traffic-light inset that app.css adds.
@@ -149,6 +150,8 @@ export function Toolbar(): ReactElement {
   const masterVolume = useSettings((s) => s.masterVolume)
   const setMasterVolume = useSettings((s) => s.setMasterVolume)
   const focused = useSettings((s) => s.focusedDeck)
+  const view = useSettings((s) => s.view)
+  const setView = useSettings((s) => s.setView)
   const bpm = useMasterBpm()
   const [helpOpen, setHelpOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
@@ -163,8 +166,24 @@ export function Toolbar(): ReactElement {
         <button type="button" role="tab" aria-selected="false" disabled title={EXPORT_DISABLED_TITLE}>
           EXPORT
         </button>
-        <button type="button" role="tab" aria-selected="true" className="active">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'performance'}
+          className={view === 'performance' ? 'active' : undefined}
+          onClick={() => setView('performance')}
+        >
           PERFORMANCE
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'edit'}
+          className={view === 'edit' ? 'active' : undefined}
+          title="Four tracks stacked, for building an edit"
+          onClick={() => setView('edit')}
+        >
+          EDIT
         </button>
       </div>
 

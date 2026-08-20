@@ -1,21 +1,24 @@
-import type { DeckId } from '@shared/types'
+import { DECK_IDS, type DeckId } from '@shared/types'
 import { clamp } from '@renderer/core/format'
 import { DECK_WORKLET_URL } from '@renderer/audio/deckProtocol'
 import { Deck } from '@renderer/audio/Deck'
 
 /**
- * The audio graph: one AudioContext, two decks, one master gain.
+ * The audio graph: one AudioContext, one deck per {@link DECK_IDS}, one master
+ * gain.
  *
  *   Deck A ─┐
- *           ├─> master ─> destination
- *   Deck B ─┘
+ *   ...     ├─> master ─> destination
+ *   Deck D ─┘
  *
  * A singleton because there is exactly one output device and the worklet
  * module is registered per context; every module that needs audio reaches it
  * through `AudioEngine.shared()`.
+ *
+ * Every deck exists from the moment the engine starts, whatever the view is
+ * showing: a deck costs nothing until audio is loaded into it, and switching
+ * views must not have to build or tear down audio nodes.
  */
-
-const DECK_IDS: readonly DeckId[] = ['A', 'B']
 
 /** Time constant of the master volume ramp. Short enough to feel instant. */
 const MASTER_RAMP_SEC = 0.015
@@ -46,7 +49,7 @@ export class AudioEngine {
   }
 
   /**
-   * Create the context and load the deck worklet, then build both decks.
+   * Create the context and load the deck worklet, then build every deck.
    * Idempotent: concurrent callers await the same promise, and a resolved
    * engine is not rebuilt. A failure is not cached, so a retry can work.
    */

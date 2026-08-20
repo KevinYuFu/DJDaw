@@ -17,6 +17,7 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { Browser } from '@renderer/components/browser/Browser'
 import { analyzeTrackOffDeck } from '@renderer/components/browser/TrackTable'
 import { Deck } from '@renderer/components/deck/Deck'
+import { EditView } from '@renderer/components/edit/EditView'
 import { Mixer } from '@renderer/components/Mixer'
 import { Toolbar } from '@renderer/components/Toolbar'
 import { clamp } from '@renderer/core/format'
@@ -26,10 +27,15 @@ import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 
 /**
- * The window: toolbar, the two decks either side of the mixer, and the browser
- * below a draggable divider. This is also where the app's one-time wiring
- * lives — engine startup, library hydration, the key map and the application
- * menu — because everything below it is a view of the stores.
+ * The window: toolbar, the current view, and the browser below a draggable
+ * divider. This is also where the app's one-time wiring lives — engine
+ * startup, library hydration, the key map and the application menu — because
+ * everything below it is a view of the stores.
+ *
+ * Two views share the middle row: PERFORMANCE, the two decks either side of
+ * the mixer, and EDIT, four tracks stacked. Only that row swaps. The toolbar
+ * carries the tabs that switch it and the browser is where tracks come from,
+ * so both stay on screen in either view.
  */
 
 /** Must match the toolbar and handle rows in app.css. */
@@ -146,6 +152,7 @@ function DeckSlot({ id }: { id: DeckId }): ReactElement {
 }
 
 export function App(): ReactElement {
+  const view = useSettings((s) => s.view)
   const browserExpanded = useSettings((s) => s.browserExpanded)
   const toggleBrowserExpanded = useSettings((s) => s.toggleBrowserExpanded)
   const [deckHeight, setDeckHeight] = useState(() => clampDeckHeight(Math.round(window.innerHeight * 0.6)))
@@ -229,11 +236,17 @@ export function App(): ReactElement {
     <div className={classes.join(' ')} style={layout}>
       <Toolbar />
 
-      <main className="deck-area">
-        <DeckSlot id="A" />
-        <Mixer />
-        <DeckSlot id="B" />
-      </main>
+      {view === 'edit' ? (
+        <main className="edit-area">
+          <EditView />
+        </main>
+      ) : (
+        <main className="deck-area">
+          <DeckSlot id="A" />
+          <Mixer />
+          <DeckSlot id="B" />
+        </main>
+      )}
 
       <div
         className="split-handle"
