@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, WheelEvent as ReactWheelEvent } from 'react'
+import type { Clip } from '@shared/clips'
+import { clipAt } from '@shared/clips'
 import type { BeatGrid, DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
@@ -12,9 +14,11 @@ import { useSettings } from '@renderer/state/useSettings'
 import {
   DETAIL_CUE_STYLE,
   type WaveformColumns,
-  buildColumns,
+  buildClipColumns,
   canvasNeedsResize,
   drawBeatGrid,
+  drawClipEdges,
+  drawClipHighlight,
   drawCueMarkers,
   drawLoopRegion,
   drawPlayhead,
@@ -37,6 +41,12 @@ import './waveform.css'
 
 export interface DetailWaveformProps {
   deckId: DeckId
+  /**
+   * Let a click pick the piece under the pointer. On in the editing view,
+   * where the pieces are the thing being worked on, and off on a performance
+   * deck, which has nothing to select but the whole track.
+   */
+  selectClips?: boolean
 }
 
 /** Matches the overview, so the same track reads at the same weight in both. */
@@ -57,8 +67,12 @@ const WHEEL_STEP = 40
 const WHEEL_LINE_PX = 16
 const WHEEL_PAGE_PX = 100
 
+const NO_CLIPS: readonly Clip[] = []
 const NO_HOT_CUES: readonly HotCue[] = []
 const NO_MEMORY_CUES: readonly MemoryCue[] = []
+
+/** Pointer travel below this is a click, above it a scrub. */
+const CLICK_SLOP_PX = 3
 
 interface LoopRegion {
   active: boolean
@@ -75,23 +89,34 @@ interface FrameState {
   cuePoint: number | null
   memoryCues: readonly MemoryCue[]
   loop: LoopRegion | null
+  /** The pieces the row is made of, in timeline order. */
+  clips: readonly Clip[]
+  selectedClipId: string | null
   /** Seconds of audio across the full width. */
   span: number
   mono: boolean
 }
 
-export function DetailWaveform({ deckId }: DetailWaveformProps): ReactElement {
+export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef({ width: 0, height: 0 })
   const columnsRef = useRef<WaveformColumns | null>(null)
   const dirtyRef = useRef(true)
-  const dragRef = useRef<{ deck: Deck; startX: number; startTime: number } | null>(null)
+  const dragRef = useRef<{
+    deck: Deck
+    startX: number
+    startTime: number
+    /** Canvas left edge at pointer-down, so a click can be turned into a time. */
+    canvasLeft: number
+  } | null>(null)
   const wheelRef = useRef(0)
 
   const status = useDecks((s) => s.decks[deckId].status)
   const waveform = useDecks((s) => s.decks[deckId].waveform)
   const trackId = useDecks((s) => s.decks[deckId].trackId)
   const loop = useDecks((s) => s.decks[deckId].loop)
+  const clips = useDecks((s) => s.decks[deckId].clips)
+  const selectedClipId = useDecks((s) => s.decks[deckId].selectedClipId)
   const zoomIndex = useDecks((s) => s.decks[deckId].zoomIndex)
   const track = useLibrary((s) => (trackId ? (s.trackById(trackId) ?? null) : null))
   const mono = useSettings((s) => s.waveformColorMode === 'mono')
@@ -106,6 +131,8 @@ export function DetailWaveform({ deckId }: DetailWaveformProps): ReactElement {
     cuePoint: null,
     memoryCues: NO_MEMORY_CUES,
     loop: null,
+    clips: NO_CLIPS,
+    selectedClipId: null,
     span: WAVE_ZOOM_LEVELS[0],
     mono: false
   })
@@ -122,6 +149,8 @@ export function DetailWaveform({ deckId }: DetailWaveformProps): ReactElement {
       cuePoint: track?.cuePoint ?? null,
       memoryCues: track?.memoryCues ?? NO_MEMORY_CUES,
       loop,
+      clips,
+      selectedClipId,
       span,
       mono
     }
@@ -175,9 +204,15 @@ export function DetailWaveform({ deckId }: DetailWaveformProps): ReactElement {
       const from = position - state.span / 2
       const to = position + state.span / 2
 
+      drawClipHighlight(ctx, state.clips, state.selectedClipId, from, to, width, height)
+
       if (state.waveform) {
-        const cols = buildColumns(
+        // Per clip, not per pixel: each piece draws the slice of the file its
+        // `sourceOffsetSec` points at, so a cut row shows what it plays and a
+        // deleted piece leaves the background bare.
+        const cols = buildClipColumns(
           state.waveform,
+          state.clips,
           from,
           to,
           width,
@@ -207,6 +242,7 @@ export function DetailWaveform({ deckId }: DetailWaveformProps): ReactElement {
         height,
         DETAIL_CUE_STYLE
       )
+      drawClipEdges(ctx, state.clips, state.selectedClipId, from, to, width, height)
       drawPlayhead(ctx, width / 2, height)
     }
 
@@ -221,7 +257,12 @@ export function DetailWaveform({ deckId }: DetailWaveformProps): ReactElement {
     event.currentTarget.setPointerCapture(event.pointerId)
     // The deck is captured with the gesture: a track loaded mid-drag must not
     // leave the old one stuck in scrub mode.
-    dragRef.current = { deck, startX: event.clientX, startTime: deck.positionSeconds() }
+    dragRef.current = {
+      deck,
+      startX: event.clientX,
+      startTime: deck.positionSeconds(),
+      canvasLeft: event.currentTarget.getBoundingClientRect().left
+    }
     deck.beginScrub()
   }, [])
 
@@ -235,15 +276,32 @@ export function DetailWaveform({ deckId }: DetailWaveformProps): ReactElement {
     drag.deck.scrubToSeconds(drag.startTime - (event.clientX - drag.startX) * secondsPerPixel)
   }, [])
 
-  const endScrub = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
-    const drag = dragRef.current
-    if (!drag) return
-    dragRef.current = null
-    drag.deck.endScrub()
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-  }, [])
+  const endScrub = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>): void => {
+      const drag = dragRef.current
+      if (!drag) return
+      dragRef.current = null
+      drag.deck.endScrub()
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+
+      // A press that went nowhere was a click, and a click picks the piece
+      // under it. The playhead did not move, so the window is still the one
+      // the press landed in and `startTime` is still its centre.
+      const { width } = boxRef.current
+      if (!selectClips || width <= 0) return
+      if (Math.abs(event.clientX - drag.startX) > CLICK_SLOP_PX) return
+      const { clips: rowClips, span: rowSpan } = frameRef.current
+      const offsetPx = event.clientX - drag.canvasLeft - width / 2
+      const timelineSec = drag.startTime + offsetPx * (rowSpan / width)
+      // Clicking a gap selects nothing, the way clicking empty space in a DAW
+      // clears the selection.
+      const clip = clipAt(rowClips, timelineSec)
+      useDecks.getState().selectClip(deckId, clip ? clip.id : null)
+    },
+    [deckId, selectClips]
+  )
 
   const onWheel = useCallback(
     (event: ReactWheelEvent<HTMLCanvasElement>): void => {

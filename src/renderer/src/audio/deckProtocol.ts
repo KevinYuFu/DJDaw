@@ -15,6 +15,19 @@ export interface StemPayload {
   channels: Float32Array[]
 }
 
+/**
+ * One playable piece of a deck's timeline, in frames.
+ *
+ * `startFrame`/`endFrame` are TIMELINE positions — where the piece sits on the
+ * row — and `sourceOffsetFrame` is where in the file it reads from. The two
+ * only agree on an uncut deck.
+ */
+export interface RegionFrames {
+  startFrame: number
+  endFrame: number
+  sourceOffsetFrame: number
+}
+
 export type DeckCommand =
   /** Hand the deck its audio. Replaces anything already loaded. */
   | { type: 'load'; stems: StemPayload[]; frames: number; sampleRate: number }
@@ -32,6 +45,13 @@ export type DeckCommand =
   /** Level of one stem layer, 0-1 linear. */
   | { type: 'stemGain'; id: string; gain: number }
   | { type: 'loop'; enabled: boolean; startFrame: number; endFrame: number }
+  /**
+   * The pieces this deck plays, sorted and non-overlapping. Anything between
+   * them is a gap and plays as silence while the playhead runs on. An empty
+   * list means the whole file, straight through, which is what an uncut deck
+   * sends.
+   */
+  | { type: 'regions'; regions: RegionFrames[] }
   /**
    * Enter/leave scrub mode. While scrubbing the playhead chases `scrubTarget`
    * and the deck sounds it out, the way a CDJ platter does in search mode.
@@ -54,5 +74,5 @@ export type DeckEvent =
       /** `AudioContext.currentTime` when this state was sampled. */
       ctxTime: number
     }
-  /** Playback ran off the end of the file. */
+  /** Playback ran off the end of the last region. */
   | { type: 'ended'; frame: number }

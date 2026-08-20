@@ -15,6 +15,9 @@ This applies even when my alternative is technically better. Kevin decides.
 
 ## Branches and PRs
 
+**Always `git checkout main && git pull` before starting anything.** Kevin
+merges often, so a branch cut from a stale main wastes both our time.
+
 Every new feature goes on its own branch. Never commit straight to `main`.
 
 After each code change, push the branch and open (or update) a pull request, so

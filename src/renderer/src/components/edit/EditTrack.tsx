@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -20,6 +20,12 @@ export interface EditTrackProps {
 }
 
 const EMPTY_TIME = '0:00.0'
+
+/** How long a refused cut explains itself for, in ms. */
+const NOTICE_MS = 1800
+
+/** Fallback for a refusal that arrived without a reason. */
+const CUT_FAILED = 'Cannot cut here'
 
 const PAD_INDICES = Array.from({ length: HOT_CUE_COUNT }, (_, i) => i)
 
@@ -61,6 +67,8 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   const track = useLibrary((s) => (trackId ? s.trackById(trackId) : undefined))
   const focused = useSettings((s) => s.focusedDeck === deckId)
   const [cueHeld, setCueHeld] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const noticeTimer = useRef(0)
 
   const [bpmRef, setBpm] = useTextRef<HTMLSpanElement>()
   const [elapsedRef, setElapsed] = useTextRef<HTMLSpanElement>()
@@ -92,6 +100,23 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
     setRemaining(`-${EMPTY_TIME}`)
     setBpm(formatBpm(null))
   }, [deck, setBpm, setElapsed, setRemaining])
+
+  // A row emptied or unmounted mid-notice must not fire into a dead component.
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
+
+  // A cut on a clip boundary or in a gap is an ordinary thing to ask for by
+  // accident, so `cutAtPlayhead` refuses with a reason rather than throwing,
+  // and the row shows it for a moment instead of looking broken.
+  const onCut = (): void => {
+    const result = useDecks.getState().cutAtPlayhead(deckId)
+    window.clearTimeout(noticeTimer.current)
+    if (result.ok) {
+      setNotice(null)
+      return
+    }
+    setNotice(result.reason ?? CUT_FAILED)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
+  }
 
   const cues = track?.hotCues ?? []
   const title = track?.title ?? (status === 'loading' ? 'Loading' : 'Empty')
@@ -177,7 +202,7 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
 
       <div className="edit-track__wave">
         {status === 'ready' ? (
-          <DetailWaveform deckId={deckId} />
+          <DetailWaveform deckId={deckId} selectClips />
         ) : (
           <div className="edit-track__empty">
             {status === 'loading' ? (
@@ -223,6 +248,19 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
             </svg>
             <span>Cue</span>
           </button>
+
+          <button
+            type="button"
+            className="edit-btn edit-btn--cut"
+            disabled={!ready}
+            onClick={onCut}
+            title="Cut the track in two at the playhead (Ctrl+E)"
+          >
+            <span>Cut</span>
+            <span className="edit-btn__key">Ctrl+E</span>
+          </button>
+
+          {notice !== null ? <span className="edit-note">{notice}</span> : null}
         </div>
 
         <div className="edit-pads">

@@ -140,3 +140,125 @@ for (const [name, target] of [['forward', 205000], ['backward', 195000]]) {
   }
   ok('playback still advances across play/pause cycles', p.pos > start)
 }
+
+// ---------------------------------------------------------------------------
+// Regions: the playhead is a timeline position, not a position in the file.
+// ---------------------------------------------------------------------------
+
+/** What the source signal is at a given file frame, for checking the mapping. */
+const source = (frame) => Math.sin(frame * 0.01) * 0.5
+/** Second 0-1 of the file, then a one-second hole, then second 10-11. */
+const GAPPED = [
+  { startFrame: 0, endFrame: SR, sourceOffsetFrame: 0 },
+  { startFrame: 2 * SR, endFrame: 3 * SR, sourceOffsetFrame: 10 * SR }
+]
+
+/** Render `quanta`, returning the left channel as one contiguous array. */
+const capture = (p, quanta) => {
+  const out = new Float32Array(quanta * 128)
+  for (let q = 0; q < quanta; q++) {
+    p.process([], scratch)
+    out.set(scratch[0][0], q * 128)
+  }
+  return out
+}
+
+// A deleted piece is a hole, not a stop: it plays as silence and the playhead
+// runs straight through it.
+{
+  const p = deck()
+  cmd(p, { type: 'regions', regions: GAPPED })
+  cmd(p, { type: 'play' })
+  const peaks = []
+  for (let q = 0; q < 1100; q++) {
+    p.process([], scratch)
+    let peak = 0
+    for (const v of scratch[0][0]) peak = Math.max(peak, Math.abs(v))
+    peaks.push({ pos: p.pos, peak })
+  }
+  const at = (sec) => peaks.find((s) => s.pos >= sec * SR).peak
+  ok('the first region plays', at(0.5) > 0.3)
+  ok('the gap is silent', at(1.5) === 0)
+  ok('the second region plays', at(2.5) > 0.3)
+  eq('the playhead crosses the gap without stopping', p.pos, 1100 * 128, 0.51)
+}
+
+// A region boundary is a source discontinuity and clicks unless it is spliced.
+{
+  const p = deck()
+  cmd(p, {
+    type: 'regions',
+    regions: [
+      { startFrame: 0, endFrame: SR, sourceOffsetFrame: 0 },
+      { startFrame: SR, endFrame: 2 * SR, sourceOffsetFrame: 30 * SR }
+    ]
+  })
+  // Start 20 quanta short of the boundary, so the play fade is long finished.
+  cmd(p, { type: 'seek', frame: SR - 2560 })
+  cmd(p, { type: 'play' })
+  const audio = capture(p, 40)
+  let jump = 0
+  for (let i = 2401; i < 3400; i++) jump = Math.max(jump, Math.abs(audio[i] - audio[i - 1]))
+  ok('a region boundary does not click', jump < 0.02)
+  ok('both sides of the boundary still play', Math.abs(audio[2400]) + Math.abs(audio[3399]) > 0)
+}
+
+// The uncut case is the one every performance deck uses, so it has to be the
+// same audio and the same playhead as before regions existed.
+{
+  const plain = deck()
+  const empty = deck()
+  cmd(empty, { type: 'regions', regions: [] })
+  cmd(plain, { type: 'play' })
+  cmd(empty, { type: 'play' })
+  let same = true
+  const a = capture(plain, 100)
+  const b = capture(empty, 100)
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) same = false
+  ok('an empty region list plays the whole file unchanged', same && plain.pos === empty.pos)
+}
+
+// Playback ends at the end of the last region, not the end of the file.
+{
+  const p = deck()
+  const ended = []
+  p.port.postMessage = (m) => {
+    if (m.type === 'ended') ended.push(m)
+  }
+  cmd(p, { type: 'regions', regions: GAPPED })
+  cmd(p, { type: 'play' })
+  render(p, 1200)
+  eq('playback stops at the end of the last region', p.pos, 3 * SR, 0.51)
+  ok('the deck reports it ended there', ended.length === 1 && !p.playing)
+}
+
+// Seeks are given timeline positions and must land on them, gap or not.
+{
+  const p = deck()
+  cmd(p, { type: 'regions', regions: GAPPED })
+  cmd(p, { type: 'seek', frame: 1.5 * SR })
+  settle(p)
+  eq('a seek into a gap lands where asked', p.pos, 1.5 * SR, 0.51)
+  cmd(p, { type: 'seek', frame: 2.6 * SR })
+  settle(p)
+  eq('a seek across a gap lands where asked', p.pos, 2.6 * SR, 0.51)
+  cmd(p, { type: 'seek', frame: 30 * SR })
+  settle(p)
+  eq('a seek past the last region clamps to the timeline end', p.pos, 3 * SR, 0.51)
+}
+
+// The whole point: after a cut, timeline seconds are not file seconds.
+{
+  const p = deck()
+  cmd(p, { type: 'regions', regions: GAPPED })
+  cmd(p, { type: 'seek', frame: 2.5 * SR })
+  cmd(p, { type: 'play' })
+  render(p, 40)
+  const audio = capture(p, 1)
+  // Timeline 2.5s sits 0.5s into a region that reads from 10s, plus the 40
+  // quanta just rendered.
+  const first = 10.5 * SR + 40 * 128
+  let err = 0
+  for (let i = 0; i < 128; i++) err = Math.max(err, Math.abs(audio[i] - source(first + i)))
+  ok('a region reads from its source offset', err < 1e-6)
+}

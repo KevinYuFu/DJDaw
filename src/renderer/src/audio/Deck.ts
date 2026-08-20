@@ -1,6 +1,12 @@
 import type { DeckId } from '@shared/types'
+import type { Region } from '@shared/clips'
 import { clamp } from '@renderer/core/format'
-import { DECK_PROCESSOR_NAME, type DeckCommand, type DeckEvent } from '@renderer/audio/deckProtocol'
+import {
+  DECK_PROCESSOR_NAME,
+  type DeckCommand,
+  type DeckEvent,
+  type RegionFrames
+} from '@renderer/audio/deckProtocol'
 
 /**
  * One deck: the typed façade over `worklets/deck-processor.js`.
@@ -57,9 +63,18 @@ export class Deck {
    * one frame of context time at rate 1.
    */
   fileSampleRate: number
+  /**
+   * Length of the deck's timeline in seconds. On an uncut deck that is the
+   * length of the file; once regions are set it is the end of the last one,
+   * which is what every seek, loop and waveform clamps against.
+   */
   durationSec = 0
 
   private readonly ctx: AudioContext
+  /** Length of the file itself, to fall back on when the regions are cleared. */
+  private sourceDurationSec = 0
+  /** The deck's timeline, empty when it plays the whole file straight through. */
+  private regions: RegionFrames[] = []
   private lastSnapshot: DeckSnapshot
   /** Transport state as last reported by the worklet. */
   private reportedPlaying = false
@@ -103,7 +118,11 @@ export class Deck {
   load(buffer: AudioBuffer): void {
     this.frames = buffer.length
     this.fileSampleRate = buffer.sampleRate
+    this.sourceDurationSec = buffer.duration
     this.durationSec = buffer.duration
+    // A timeline belongs to the track it was cut from. The worklet drops its
+    // regions on load too, so both sides start the new track uncut.
+    this.regions = []
 
     // Mono files ship one channel and the worklet duplicates it to both
     // outputs. Above stereo only the front pair is kept: a two-channel deck
@@ -135,6 +154,8 @@ export class Deck {
     this.post({ type: 'unload' })
     this.frames = 0
     this.durationSec = 0
+    this.sourceDurationSec = 0
+    this.regions = []
     this.fileSampleRate = this.ctx.sampleRate
     this.resetState()
     this.emitState()
@@ -151,7 +172,7 @@ export class Deck {
     this.post({ type: 'play' })
     // Playing from the end restarts the file in the worklet; mirror that here
     // so the playhead does not sit at the end until the next report.
-    if (this.positionFrame() >= this.frames - 1) {
+    if (this.positionFrame() >= this.timelineFrames() - 1) {
       this.lastSnapshot = { ...this.lastSnapshot, frame: 0, ctxTime: this.ctx.currentTime }
     }
     this.expectPlaying(true)
@@ -210,7 +231,7 @@ export class Deck {
     if (snap.rate !== 0) {
       frame += (this.ctx.currentTime - snap.ctxTime) * snap.rate * this.fileSampleRate
     }
-    return clamp(frame, 0, this.frames)
+    return clamp(frame, 0, this.timelineFrames())
   }
 
   /** {@link positionFrame} in seconds, clamped to the loaded track. */
@@ -232,6 +253,35 @@ export class Deck {
   setGain(linear: number): void {
     if (!Number.isFinite(linear)) return
     this.post({ type: 'gain', gain: clamp(linear, 0, MAX_GAIN) })
+  }
+
+  /**
+   * Set the pieces this deck plays, in timeline order.
+   *
+   * An empty list puts the deck back to playing the whole file, which is what
+   * an uncut deck wants and what the two performance decks always send.
+   */
+  setRegions(regions: Region[]): void {
+    const sr = this.fileSampleRate
+    this.regions = regions
+      .map((r) => ({
+        startFrame: Math.round(r.startSec * sr),
+        endFrame: Math.round((r.startSec + r.durationSec) * sr),
+        sourceOffsetFrame: Math.round(r.sourceOffsetSec * sr)
+      }))
+      .filter((r) => r.endFrame > r.startFrame)
+    // Timeline seconds, not file seconds: cutting a track changes how long the
+    // row is, and everything that clamps a position clamps against this.
+    this.durationSec = this.regions.length > 0
+      ? this.timelineFrames() / sr
+      : this.sourceDurationSec
+    this.post({ type: 'regions', regions: this.regions })
+  }
+
+  /** Timeline length in frames: the end of the last region, else the file. */
+  private timelineFrames(): number {
+    const last = this.regions[this.regions.length - 1]
+    return last ? last.endFrame : this.frames
   }
 
   setLoop(enabled: boolean, startSec: number, endSec: number): void {

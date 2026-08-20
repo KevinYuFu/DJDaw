@@ -23,7 +23,8 @@ const MODULES = [
   'src/shared/rekordboxXml.ts',
   'src/shared/rekordboxImport.ts',
   'src/shared/collection.ts',
-  'src/shared/playlistTree.ts'
+  'src/shared/playlistTree.ts',
+  'src/shared/clips.ts'
 ]
 
 /** The renderer's path aliases, which Vite supplies in the app. */
