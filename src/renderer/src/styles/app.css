@@ -400,7 +400,9 @@
 
 .mixer__row {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  /* minmax(0, 1fr) rather than 1fr: the readouts must not be able to widen a
+     column, or the strip would shift sideways as a knob is turned. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   justify-items: center;
   column-gap: 6px;
@@ -430,9 +432,46 @@
 }
 
 .mixer__row-label {
-  width: 42px;
+  /* Held down to leave the knob columns room for the longest readout, which is
+     the filter's `HPF 18.0k` at full sweep. */
+  width: 36px;
   text-align: center;
   font-size: 8px;
+  /* FILTER is the longest of them and only just fits; a wrap here would push
+     the knob rows apart. */
+  white-space: nowrap;
+}
+
+/*
+ * How deep a full band cut goes. Two floors, both real: a DJM channel EQ stops
+ * at -26 dB and its isolator mode takes the band to nothing. One switch for the
+ * whole mixer, as on the hardware, so it sits above the channels.
+ */
+.mixer__mode {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.mixer__mode-tabs {
+  display: flex;
+  gap: 1px;
+}
+.mixer__mode-tabs button {
+  flex: 1 1 0;
+  padding: 2px 0;
+  border-radius: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.mixer__mode-tabs button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.mixer__mode-tabs button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
 }
 
 .mixer__row--faders {
@@ -459,6 +498,9 @@
   align-items: center;
   gap: 1px;
   line-height: 0;
+  /* Fills its grid column so the readout under it has a box to centre in. */
+  width: 100%;
+  min-width: 0;
   /* Dragged vertically, so the browser must not claim the gesture for a scroll,
      and a fast drag must not select the label text next to it. */
   cursor: ns-resize;
@@ -473,6 +515,11 @@
   /* formatDb pads the sign with a space so the readouts line up; without this
      the browser would collapse it and the text would shift as the knob moves. */
   white-space: pre;
+  /* The readouts are not all the same length — `KILL`, `OFF` and `HPF 18.0k`
+     all appear here — so the line is given the column's full width and centred
+     in it. Sized from the box rather than the text, nothing below can move. */
+  width: 100%;
+  text-align: center;
 }
 .knob__body {
   fill: var(--bg-raised);

@@ -459,11 +459,30 @@ dance music), 78.3 on GTZAN.
 
 ## Not built yet (deliberately)
 
-Channel EQ, filter and trim are real: each deck runs
-trim -> low shelf -> mid peaking -> high shelf -> filter before its fader.
-The mapping lives in `src/shared/eq.ts` and is a DJM's: +6 dB boost, -26 dB cut,
-exponential filter sweep. Every parameter is ramped rather than stepped,
-because a stepped gain is an audible click. Key detection, key lock / master tempo (needs a time-stretcher),
+Channel EQ, filter and trim are real. Each deck runs
+trim -> three-way Linkwitz-Riley crossover -> a gain per band -> summed ->
+filter -> fader. It is a crossover-and-sum rather than shelving filters,
+because only a crossover can take a band to silence — which is what an isolator
+is. Ableton's EQ Three works the same way.
+
+Crossovers at 250 Hz and 2.5 kHz. Two modes, as rekordbox exposes them:
+EQ cuts to -26 dB like a DJM channel EQ, ISO cuts to silence. Both boost +6 dB.
+The mapping lives in `src/shared/eq.ts`; the graph is built by
+`createChannelStrip` in `audio/Deck.ts`, which takes a `BaseAudioContext` so an
+offline export builds the identical strip rather than a second copy that can
+drift.
+
+Two traps worth knowing, both found by measuring rather than reading:
+
+- **Web Audio reads `Q` on a lowpass/highpass in decibels, not as a Q factor.**
+  Passing 0.7071 asks for Q 1.085. Three resonant slopes summed measured
+  +7.4 dB at each crossover with every knob centred. `Deck.ts` converts.
+- A Butterworth split leaves +3 dB on each crossover even when flat, which is a
+  measured artefact of EQ Three. Linkwitz-Riley sums flat; measured worst
+  deviation across 30 Hz - 18 kHz is -0.12 dB.
+
+Every parameter is ramped rather than stepped, because a stepped gain is an
+audible click and a stepped filter frequency zippers. Key detection, key lock / master tempo (needs a time-stretcher),
 stem separation, the edit/arrangement timeline and track export are all future
 work. `Track.key` and `DeckState.keyLock` exist so the UI does not have to
 change shape when they land.

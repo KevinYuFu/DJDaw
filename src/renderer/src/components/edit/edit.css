@@ -399,6 +399,13 @@
   position: relative;
 }
 
+/* The drag readout carries a name and a value — `Low KILL`, `Filter HPF 18.0k`
+   — and the widest of those must stay on one line: this note is anchored to the
+   bottom of the strip, so a second line would grow up over the waveform. */
+.edit-eq .edit-note {
+  white-space: nowrap;
+}
+
 /* A channel that is doing something is marked on the row itself, not just on
    the knob: a killed bass on row 3 has to be visible without reading knobs. */
 .edit-track.is-eq-on .edit-eq {
