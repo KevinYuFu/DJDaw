@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, RefObject } from 'react'
 import type { DeckId } from '@shared/types'
-import type { ChannelEq } from '@shared/eq'
+import type { ChannelEq, EqMode } from '@shared/eq'
 import { CENTRE, eqGainDb, formatDb, formatFilter, trimGainDb } from '@shared/eq'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { useDecks } from '@renderer/state/useDecks'
+import { useSettings } from '@renderer/state/useSettings'
 import { clamp } from '@renderer/core/format'
 
 /**
@@ -32,17 +33,26 @@ interface KnobSpec {
   /** Which knob of the channel this drives. */
   id: keyof ChannelEq
   label: string
-  /** The small readout under the knob. */
-  format(value: number): string
+  /**
+   * The small readout under the knob. Trim and the filter take the mode too
+   * and ignore it: only the three bands have a cut floor to choose.
+   */
+  format(value: number, mode: EqMode): string
 }
 
 const CHANNEL_KNOBS: readonly KnobSpec[] = [
   { id: 'trim', label: 'TRIM', format: (v) => formatDb(trimGainDb(v)) },
-  { id: 'high', label: 'HI', format: (v) => formatDb(eqGainDb(v)) },
-  { id: 'mid', label: 'MID', format: (v) => formatDb(eqGainDb(v)) },
-  { id: 'low', label: 'LOW', format: (v) => formatDb(eqGainDb(v)) },
+  { id: 'high', label: 'HI', format: (v, mode) => formatDb(eqGainDb(v, mode)) },
+  { id: 'mid', label: 'MID', format: (v, mode) => formatDb(eqGainDb(v, mode)) },
+  { id: 'low', label: 'LOW', format: (v, mode) => formatDb(eqGainDb(v, mode)) },
   { id: 'filter', label: 'FILTER', format: (v) => formatFilter(v) }
 ]
+
+/**
+ * What the two cut floors mean, in one line. Both are real: a DJM channel EQ
+ * bottoms out at -26 dB, and its isolator mode takes the band to nothing.
+ */
+const EQ_MODE_TITLE = 'EQ cuts to -26 dB, like a DJM. ISO cuts to silence.'
 
 const KNOB_SIZE = 30
 const KNOB_RADIUS = 11
@@ -327,6 +337,8 @@ export function Mixer(): ReactElement {
   const eqB = useDecks((s) => s.decks.B.eq)
   const setChannelKnob = useDecks((s) => s.setChannelKnob)
   const resetChannelKnob = useDecks((s) => s.resetChannelKnob)
+  const eqMode = useSettings((s) => s.eqMode)
+  const setEqMode = useSettings((s) => s.setEqMode)
 
   const cross = crossfadeGains(crossfade)
   const gainA = levels.A * cross.A
@@ -369,13 +381,37 @@ export function Mixer(): ReactElement {
         ))}
       </div>
 
+      {/* The cut floor is one switch for the whole mixer, as it is on the
+          hardware, so it sits above the channels rather than inside one. */}
+      <div className="mixer__mode" role="group" aria-label="Cut depth" title={EQ_MODE_TITLE}>
+        <span className="label">CUT</span>
+        <div className="mixer__mode-tabs">
+          <button
+            type="button"
+            className={eqMode === 'eq' ? 'active' : undefined}
+            aria-pressed={eqMode === 'eq'}
+            onClick={() => setEqMode('eq')}
+          >
+            EQ
+          </button>
+          <button
+            type="button"
+            className={eqMode === 'isolator' ? 'active' : undefined}
+            aria-pressed={eqMode === 'isolator'}
+            onClick={() => setEqMode('isolator')}
+          >
+            ISO
+          </button>
+        </div>
+      </div>
+
       {CHANNEL_KNOBS.map((spec) => (
         <div className="mixer__row mixer__row--knobs" key={spec.id}>
           <Knob
             deck="A"
             label={spec.label}
             value={eq.A[spec.id]}
-            readout={spec.format(eq.A[spec.id])}
+            readout={spec.format(eq.A[spec.id], eqMode)}
             onChange={(value) => setChannelKnob('A', spec.id, value)}
             onReset={() => resetChannelKnob('A', spec.id)}
           />
@@ -384,7 +420,7 @@ export function Mixer(): ReactElement {
             deck="B"
             label={spec.label}
             value={eq.B[spec.id]}
-            readout={spec.format(eq.B[spec.id])}
+            readout={spec.format(eq.B[spec.id], eqMode)}
             onChange={(value) => setChannelKnob('B', spec.id, value)}
             onReset={() => resetChannelKnob('B', spec.id)}
           />
