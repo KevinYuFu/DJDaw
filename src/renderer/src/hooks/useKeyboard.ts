@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { DECK_IDS } from '@shared/types'
 import type { DeckId } from '@shared/types'
 import { BEAT_JUMP_SIZES, HOT_CUE_COUNT, LOOP_SIZES } from '@renderer/core/constants'
 import { clamp } from '@renderer/core/format'
@@ -220,7 +221,12 @@ function isBound(code: string): boolean {
  * Press-and-hold bindings — the hot cue pads and CUE — need the keyup as well,
  * so the deck knows to stop previewing. The deck each held key was pressed on
  * is remembered, because `Tab` can move the focus while a pad is down, and the
- * release has to go back to the deck that actually started playing.
+ * release has to go back to the deck that actually started playing, not to
+ * whichever one is focused by the time the DJ lets go.
+ *
+ * The keyup that never comes is covered too: losing the window mid-hold ends
+ * every deck's preview, since a deck left previewing plays on with nothing
+ * left to stop it.
  */
 export function useKeyboard(): void {
   useEffect(() => {
@@ -364,10 +370,14 @@ export function useKeyboard(): void {
       releaseHeld(event.code)
     }
 
-    // A pad held while the window loses focus never gets its keyup, which
-    // would leave the deck previewing forever.
+    // A key held while the window loses focus never sends its keyup, and a
+    // preview nothing ever ends is the worst thing this map can do. So blur
+    // does not try to work out which keys were down: it drops the map and ends
+    // the preview on every deck. `endPreview` is a no-op where there is none.
     const onBlur = (): void => {
-      for (const code of [...held.keys()]) releaseHeld(code)
+      held.clear()
+      const decks = useDecks.getState()
+      for (const id of DECK_IDS) decks.endPreview(id)
     }
 
     window.addEventListener('keydown', onKeyDown)

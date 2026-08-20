@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -22,6 +22,30 @@ export interface EditTrackProps {
 const EMPTY_TIME = '0:00.0'
 
 const PAD_INDICES = Array.from({ length: HOT_CUE_COUNT }, (_, i) => i)
+
+/**
+ * The pointer holding a pad down, and which pad it is holding.
+ *
+ * A press and its release are one gesture, so only the pointer that started it
+ * may end it: a second finger landing on another pad must not release the
+ * first one's preview, and a stray release from a pointer that never pressed
+ * must not release anything at all.
+ */
+interface HeldPad {
+  pointerId: number
+  index: number
+}
+
+/**
+ * A preview is sounding, but it is not playback: PLAY stays dark and the
+ * button only gets a faint green rim, so "something is coming out of this row"
+ * is still readable at a glance without the transport claiming to be rolling.
+ * The held CUE button or the held pad says which preview it is.
+ */
+const PREVIEW_HINT = {
+  borderColor: 'var(--play)',
+  boxShadow: 'inset 0 0 0 1px var(--play-glow)'
+} as const
 
 /**
  * Buttons that keep focus swallow the Space shortcut, so the row hands it
@@ -58,9 +82,14 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   const status = useDecks((s) => s.decks[deckId].status)
   const trackId = useDecks((s) => s.decks[deckId].trackId)
   const playing = useDecks((s) => s.decks[deckId].playing)
+  const previewing = useDecks((s) => s.decks[deckId].previewing)
   const track = useLibrary((s) => (trackId ? s.trackById(trackId) : undefined))
   const focused = useSettings((s) => s.focusedDeck === deckId)
   const [cueHeld, setCueHeld] = useState(false)
+  // The pointers holding CUE and a pad down. Only the pointer that started a
+  // hold may end it, so a second pointer cannot release someone else's press.
+  const heldCue = useRef<number | null>(null)
+  const heldPad = useRef<HeldPad | null>(null)
 
   const [bpmRef, setBpm] = useTextRef<HTMLSpanElement>()
   const [elapsedRef, setElapsed] = useTextRef<HTMLSpanElement>()
@@ -69,6 +98,11 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   const ready = status === 'ready'
   // `deck()` throws until the engine has initialised, which `ready` implies.
   const deck = ready ? AudioEngine.shared().deck(deckId) : null
+  // A held preview runs the deck without being playback, so the transport
+  // reads as stopped: PLAY unlit, and still offering to play. Pressing it
+  // there latches the preview into real playback, which is what the store's
+  // togglePlay already does.
+  const rolling = playing && !previewing
 
   useRaf(() => {
     if (!deck) return
@@ -93,6 +127,29 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
     setBpm(formatBpm(null))
   }, [deck, setBpm, setElapsed, setRemaining])
 
+  // A control that stops taking pointer events mid-hold — the row emptied, so
+  // its buttons went disabled — never sees its own release. Nothing else would
+  // ever end that preview, so end it here.
+  useEffect(() => {
+    if (ready || (heldCue.current === null && heldPad.current === null)) return
+    heldCue.current = null
+    heldPad.current = null
+    setCueHeld(false)
+    useDecks.getState().endPreview(deckId)
+  }, [ready, deckId])
+
+  // Same for a row unmounted mid-hold: an unmounted element never sees its own
+  // pointerup, and a stuck preview outlives the component that started it.
+  useEffect(
+    () => () => {
+      if (heldCue.current === null && heldPad.current === null) return
+      heldCue.current = null
+      heldPad.current = null
+      useDecks.getState().endPreview(deckId)
+    },
+    [deckId]
+  )
+
   const cues = track?.hotCues ?? []
   const title = track?.title ?? (status === 'loading' ? 'Loading' : 'Empty')
   const artist = track?.artist ?? ''
@@ -102,11 +159,18 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
     // Capture, so the release still lands here if the pointer slides off the
     // button mid-preview; letting go anywhere must stop the preview.
     e.currentTarget.setPointerCapture(e.pointerId)
+    heldCue.current = e.pointerId
     setCueHeld(true)
     useDecks.getState().cuePress(deckId)
   }
 
-  const onCueUp = (): void => {
+  // pointerup, pointercancel and lostpointercapture all mean the hold is over.
+  // Capture puts the first two on this button wherever the pointer has gone;
+  // the third catches a capture torn away without either. Whichever arrives
+  // first clears the ref, so the rest are no-ops.
+  const onCueEnd = (e: ReactPointerEvent<HTMLButtonElement>): void => {
+    if (heldCue.current !== e.pointerId) return
+    heldCue.current = null
     setCueHeld(false)
     useDecks.getState().cueRelease(deckId)
   }
@@ -117,12 +181,25 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
     cue: HotCue | undefined
   ): void => {
     if (e.button !== 0) return
-    e.currentTarget.setPointerCapture(e.pointerId)
     if (e.shiftKey) {
+      // A delete is over the instant it happens; there is no hold to track.
       if (cue) useDecks.getState().deleteHotCue(deckId, index)
       return
     }
+    // Capture before the trigger. Without it the release only arrives while
+    // the pointer is still over the pad, and a release a few pixels away
+    // leaves the preview running until the track hits its end.
+    e.currentTarget.setPointerCapture(e.pointerId)
+    heldPad.current = { pointerId: e.pointerId, index }
     useDecks.getState().triggerHotCue(deckId, index)
+  }
+
+  /** The pad counterpart of {@link onCueEnd}, released by cue index. */
+  const onPadEnd = (e: ReactPointerEvent<HTMLButtonElement>): void => {
+    const hold = heldPad.current
+    if (!hold || hold.pointerId !== e.pointerId) return
+    heldPad.current = null
+    useDecks.getState().releaseHotCue(deckId, hold.index)
   }
 
   return (
@@ -198,15 +275,18 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
         <div className="edit-transport">
           <button
             type="button"
-            className={`edit-btn edit-btn--play${playing ? ' is-lit' : ''}`}
+            className={`edit-btn edit-btn--play${rolling ? ' is-lit' : ''}${
+              previewing ? ' is-previewing' : ''
+            }`}
+            style={previewing ? PREVIEW_HINT : undefined}
             disabled={!ready}
             onClick={() => useDecks.getState().togglePlay(deckId)}
-            title="Play / pause (Space)"
+            title={previewing ? 'Play: keep playing from here (Space)' : 'Play / pause (Space)'}
           >
             <svg className="edit-btn__icon" viewBox="0 0 12 12" aria-hidden="true">
-              {playing ? <path d="M2 1h3v10H2zM7 1h3v10H7z" /> : <path d="M2.5 1L10.5 6L2.5 11z" />}
+              {rolling ? <path d="M2 1h3v10H2zM7 1h3v10H7z" /> : <path d="M2.5 1L10.5 6L2.5 11z" />}
             </svg>
-            <span>{playing ? 'Pause' : 'Play'}</span>
+            <span>{rolling ? 'Pause' : 'Play'}</span>
           </button>
 
           <button
@@ -214,8 +294,9 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
             className={`edit-btn edit-btn--cue${cueHeld ? ' is-lit' : ''}`}
             disabled={!ready}
             onPointerDown={onCueDown}
-            onPointerUp={onCueUp}
-            onPointerCancel={onCueUp}
+            onPointerUp={onCueEnd}
+            onPointerCancel={onCueEnd}
+            onLostPointerCapture={onCueEnd}
             title="Cue: back to cue while playing, hold to preview from the cue point, or set it here (C)"
           >
             <svg className="edit-btn__icon" viewBox="0 0 12 12" aria-hidden="true">
@@ -241,8 +322,9 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
                 }
                 disabled={!ready}
                 onPointerDown={(e) => onPadDown(e, index, cue)}
-                onPointerUp={() => useDecks.getState().releaseHotCue(deckId, index)}
-                onPointerCancel={() => useDecks.getState().releaseHotCue(deckId, index)}
+                onPointerUp={onPadEnd}
+                onPointerCancel={onPadEnd}
+                onLostPointerCapture={onPadEnd}
                 title={
                   cue
                     ? `Hot cue ${label} at ${formatTime(cue.time)} — hold to preview, shift-click to delete (${index + 1})`
