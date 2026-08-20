@@ -13,6 +13,7 @@ import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import {
   DETAIL_CUE_STYLE,
+  DETAIL_LOCATOR_STYLE,
   type WaveformColumns,
   buildClipColumns,
   canvasNeedsResize,
@@ -20,6 +21,7 @@ import {
   drawClipEdges,
   drawClipHighlight,
   drawCueMarkers,
+  drawLocators,
   drawLoopRegion,
   drawPlayhead,
   drawWaveform,
@@ -69,7 +71,7 @@ const WHEEL_PAGE_PX = 100
 
 const NO_CLIPS: readonly Clip[] = []
 const NO_HOT_CUES: readonly HotCue[] = []
-const NO_MEMORY_CUES: readonly MemoryCue[] = []
+const NO_LOCATORS: readonly MemoryCue[] = []
 
 /** Pointer travel below this is a click, above it a scrub. */
 const CLICK_SLOP_PX = 3
@@ -87,7 +89,8 @@ interface FrameState {
   grid: BeatGrid | null
   hotCues: readonly HotCue[]
   cuePoint: number | null
-  memoryCues: readonly MemoryCue[]
+  /** Locators. Stored on the track as `memoryCues`, the rekordbox name. */
+  locators: readonly MemoryCue[]
   loop: LoopRegion | null
   /** The pieces the row is made of, in timeline order. */
   clips: readonly Clip[]
@@ -129,7 +132,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
     grid: null,
     hotCues: NO_HOT_CUES,
     cuePoint: null,
-    memoryCues: NO_MEMORY_CUES,
+    locators: NO_LOCATORS,
     loop: null,
     clips: NO_CLIPS,
     selectedClipId: null,
@@ -147,7 +150,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       grid: track?.grid ?? null,
       hotCues: track?.hotCues ?? NO_HOT_CUES,
       cuePoint: track?.cuePoint ?? null,
-      memoryCues: track?.memoryCues ?? NO_MEMORY_CUES,
+      locators: track?.memoryCues ?? NO_LOCATORS,
       loop,
       clips,
       selectedClipId,
@@ -231,17 +234,10 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         drawLoopRegion(ctx, state.loop.startSec, state.loop.endSec, from, to, width, height)
       }
       if (state.grid) drawBeatGrid(ctx, state.grid, from, to, width, height)
-      drawCueMarkers(
-        ctx,
-        state.hotCues,
-        state.cuePoint,
-        state.memoryCues,
-        from,
-        to,
-        width,
-        height,
-        DETAIL_CUE_STYLE
-      )
+      // Locators first: they are the background the cues sit on, and this is
+      // the MICRO view, so their names have room.
+      drawLocators(ctx, state.locators, from, to, width, height, DETAIL_LOCATOR_STYLE)
+      drawCueMarkers(ctx, state.hotCues, state.cuePoint, from, to, width, height, DETAIL_CUE_STYLE)
       drawClipEdges(ctx, state.clips, state.selectedClipId, from, to, width, height)
       drawPlayhead(ctx, width / 2, height)
     }
