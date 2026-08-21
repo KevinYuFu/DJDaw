@@ -43,6 +43,38 @@ Kevin can review it on GitHub. He approves and merges — I do not merge.
 
 Branch names: `feat/short-description`, `fix/short-description`.
 
+## How to comment code
+
+A comment says **what the code is for**, to someone seeing it for the first
+time. Nobody remembers the history of the code, so do not write it down.
+
+- No explaining the bug that was fixed.
+- No explaining what the code used to do.
+- No justifying the change, or arguing with an alternative.
+- No naming Kevin, or any decision he made.
+
+Most comments are one line. If a line of code is obvious, it gets no comment.
+
+Bad:
+
+```ts
+// A freshly loaded deck parks at the top of the file, not on its cue point.
+// rekordbox has this as a preference and Kevin runs it this way: an imported
+// track carries a memory cue from wherever the last edit left off, and loading
+// straight onto it hides the intro.
+const start = 0
+```
+
+Good:
+
+```ts
+// Load from track start.
+const start = 0
+```
+
+The same goes for commit messages and PR descriptions. Say what changed and
+what it does now. Keep it short.
+
 ## Save every rule Kevin gives me
 
 When Kevin gives me an instruction about how to work, I add it to this file
