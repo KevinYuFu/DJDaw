@@ -3,13 +3,17 @@ import type { Region } from '@shared/clips'
 import {
   bandGain,
   dbToGain,
+  eqGainDb,
   filterSetting,
   trimGainDb,
   type ChannelEq,
   type EqMode,
   CENTRE,
   CROSSOVER_HZ,
-  CROSSOVER_Q
+  CROSSOVER_Q,
+  MID_BELL_HZ,
+  MID_BELL_Q,
+  SHELF_CORNER_HZ
 } from '@shared/eq'
 import { clamp } from '@renderer/core/format'
 import {
@@ -72,6 +76,16 @@ const MAX_RATE = 4
 const EQ_RAMP_SEC = 0.02
 
 /**
+ * Crossfade between the EQ and ISO paths, in seconds.
+ *
+ * Short, because a mode change should feel like a switch, but not instant: the
+ * two paths have different phase responses, so cutting straight from one to the
+ * other steps the waveform and clicks. A mode change is rare enough that 30 ms
+ * costs nothing.
+ */
+const MODE_XFADE_SEC = 0.03
+
+/**
  * Biquads per crossover slope. Two cascaded Butterworth sections make one
  * Linkwitz-Riley 24 dB/oct slope, and LR is the whole point: its bands sum
  * flat. A single Butterworth pair leaves a +3 dB bump sitting on each crossover
@@ -108,31 +122,59 @@ function slope(type: BiquadFilterType, hz: number): CrossoverSection[] {
 /**
  * The nodes of one mixer channel strip.
  *
- * The EQ is a crossover-and-sum, not a chain of shelves: the signal is split
- * three ways, each band passes through a plain gain, and the three are summed.
- * Only that can take a band to silence, which is what an isolator has to do —
- * a shelf can lean on a band but never remove it.
+ * Two EQ circuits sit side by side, because the two modes want opposite things
+ * and no single topology gives both:
+ *
+ *   EQ mode   three shelving/bell filters in series. At 0 dB each one is an
+ *             identity, so a centred channel is transparent — measured, a loud
+ *             master comes out with 0.00 dB of peak growth. It cannot reach
+ *             silence, which is exactly what a DJM channel EQ's -26 dB floor
+ *             is.
+ *   ISO mode  the crossover-and-sum. It can take a band to nothing, and it
+ *             rotates phase between the bands whatever the knobs say — which
+ *             grows the peak of that same master by +7.3 dB with every knob
+ *             centred. Acceptable in an isolator, which you reach for to
+ *             remove a band, and not acceptable in a flat channel.
+ *
+ * Both are built once and both stay wired. The mode picks one by crossfading
+ * their gates, because reconnecting nodes under live audio clicks. The cost is
+ * three idle biquads per deck.
  */
 export interface ChannelStrip {
   /** Trim, first in the strip. Connect the source here. */
   readonly input: GainNode
-  /** One gain per band, each fed by its own crossover path. */
+  /** EQ mode: low shelf, mid bell, high shelf, in series. */
+  readonly shelves: Readonly<Record<'low' | 'mid' | 'high', BiquadFilterNode>>
+  /** ISO mode: one gain per band, each fed by its own crossover path. */
   readonly bands: Readonly<Record<'low' | 'mid' | 'high', GainNode>>
+  /** Gate on the shelf path. 1 in EQ mode, 0 in ISO mode. */
+  readonly shelfGain: GainNode
+  /** Gate on the crossover path. 1 in ISO mode, 0 in EQ mode. */
+  readonly isoGain: GainNode
   /**
    * The filter knob, and the last node in the strip: connect this to the
    * channel fader. One node covers both modes; its type flips, the graph does
    * not.
    */
   readonly filter: BiquadFilterNode
+  /**
+   * The mode currently gated in, or null before the first apply. Mutable, and
+   * the reason {@link applyChannelStrip} can tell a mode change from a knob
+   * move: the crossfade has to run once per change, not restart on every frame
+   * of a knob drag, or the muted path never reaches zero and leaks.
+   */
+  mode: EqMode | null
 }
 
 /**
  * Build a channel strip.
  *
  * ```
- *  in -> trim -+-> LP LP ----------> low  -+
- *              +-> HP HP  LP LP ---> mid  -+-> sum -> filter -> out
- *              +-> HP HP ----------> high -+
+ *          +-> lowshelf -> bell -> highshelf ---> shelfGain -+
+ *  in -> trim                                                +-> filter -> out
+ *          |  +-> LP LP ----------> low  -+                  |
+ *          +--+-> HP HP  LP LP ---> mid  -+-> sum -> isoGain -+
+ *             +-> HP HP ----------> high -+
  * ```
  *
  * Built once and never rebuilt, because rewiring a live graph clicks: a knob
@@ -140,18 +182,41 @@ export interface ChannelStrip {
  * offline render builds the identical strip and an export sounds like what was
  * heard.
  *
- * A three-way parallel split does not sum flat by default, so this one was
- * measured rather than assumed: an impulse through the finished strip in an
- * OfflineAudioContext, every knob centred, is within 0.12 dB of the input
- * across 30 Hz - 18 kHz, and each band reads exactly -6 dB at its own
- * crossover, which is the Linkwitz-Riley signature. The residual 0.12 dB is the
- * mid path's own phase shift at the far crossover and is as good as a three-way
- * split gets.
+ * A three-way parallel split does not sum flat by default, so the crossover was
+ * measured rather than assumed: an impulse through it in an OfflineAudioContext
+ * with every knob centred is within 0.12 dB of the input across 30 Hz - 18 kHz,
+ * and each band reads exactly -6 dB at its own crossover, which is the
+ * Linkwitz-Riley signature. Flat is not the same as transparent, though — that
+ * split still rotates phase between the bands, which is why EQ mode is not
+ * built from it.
  */
 export function createChannelStrip(ctx: BaseAudioContext): ChannelStrip {
   const trim = ctx.createGain()
-  const sum = ctx.createGain()
 
+  // EQ mode. Shelving and peaking filters read `Q` as a real Q factor, not in
+  // decibels the way a low-pass does, so qFactorToDb must not be used here.
+  // A shelf ignores Q outright; only the bell's is load-bearing.
+  const shelf = (type: BiquadFilterType, hz: number, q: number): BiquadFilterNode => {
+    const node = ctx.createBiquadFilter()
+    node.type = type
+    node.frequency.value = hz
+    node.Q.value = q
+    node.gain.value = 0
+    return node
+  }
+  const shelves = {
+    low: shelf('lowshelf', SHELF_CORNER_HZ.low, Math.SQRT1_2),
+    mid: shelf('peaking', MID_BELL_HZ, MID_BELL_Q),
+    high: shelf('highshelf', SHELF_CORNER_HZ.high, Math.SQRT1_2)
+  }
+  const shelfGain = ctx.createGain()
+  trim.connect(shelves.low)
+  shelves.low.connect(shelves.mid)
+  shelves.mid.connect(shelves.high)
+  shelves.high.connect(shelfGain)
+
+  // ISO mode.
+  const sum = ctx.createGain()
   const band = (sections: CrossoverSection[]): GainNode => {
     let node: AudioNode = trim
     for (const section of sections) {
@@ -167,7 +232,6 @@ export function createChannelStrip(ctx: BaseAudioContext): ChannelStrip {
     gain.connect(sum)
     return gain
   }
-
   const bands = {
     low: band(slope('lowpass', CROSSOVER_HZ.low)),
     mid: band([
@@ -176,28 +240,39 @@ export function createChannelStrip(ctx: BaseAudioContext): ChannelStrip {
     ]),
     high: band(slope('highpass', CROSSOVER_HZ.high))
   }
+  const isoGain = ctx.createGain()
+  sum.connect(isoGain)
 
-  // Parked wherever a centred knob puts it: a low-pass above the top of
-  // hearing, which is inaudible.
+  // EQ is the app's default mode, and it is also the safe one to sit in until
+  // the first apply: flat shelves pass the signal through untouched.
+  shelfGain.gain.value = 1
+  isoGain.gain.value = 0
+
+  // Parked as an identity: see {@link FILTER_BYPASS_TYPE}. `gain` is only read
+  // by the peaking type and is left at its default 0 for the whole session,
+  // which is what makes the parked state exact.
   const parked = filterSetting(CENTRE)
   const filter = ctx.createBiquadFilter()
-  filter.type = parked.type
+  filter.type = FILTER_BYPASS_TYPE
   filter.frequency.value = parked.frequency
-  filter.Q.value = qFactorToDb(parked.q)
-  sum.connect(filter)
+  filter.Q.value = parked.q
+  shelfGain.connect(filter)
+  isoGain.connect(filter)
 
-  return { input: trim, bands, filter }
+  return { input: trim, shelves, bands, shelfGain, isoGain, filter, mode: null }
 }
 
 /**
  * Push a channel's knob positions onto a strip, as of `now` on its context.
  *
  * Every knob is a 0-1 position; the mapping from position to dB or Hz lives in
- * `@shared/eq`, so the offline render reuses it unchanged. Nothing is stepped —
- * see {@link EQ_RAMP_SEC}.
+ * `@shared/eq`, so the offline render reuses it unchanged. Nothing a hand can
+ * move is stepped — see {@link EQ_RAMP_SEC}.
  *
- * A full isolator cut is a band gain of exactly zero. The ramp only approaches
- * it, but it is under -100 dB within five time constants, so the band is
+ * `mode` picks the path rather than the floor. Each path carries its own floor
+ * because that is what its circuit can do: the shelves stop at -26 dB, the
+ * crossover goes to a band gain of exactly zero. The ramp only approaches that
+ * zero, but it is under -100 dB within five time constants, so the band is
  * silent by any measure that matters and never arrives as a click.
  */
 export function applyChannelStrip(
@@ -215,35 +290,108 @@ export function applyChannelStrip(
   ) {
     return
   }
+
+  const switching = strip.mode !== mode
+  const first = strip.mode === null
+  const incoming = mode === 'eq' ? strip.shelfGain : strip.isoGain
+  // A path that is inaudible — muted, or on a strip nothing has played through
+  // yet — can be stepped into place instead of ramped. That is what stops it
+  // coming back wrong: it has not been updated since the mode last left it, and
+  // gliding from those stale positions would drag a stale band across the
+  // crossfade. It also lets an offline render start exact on its first sample.
+  // A second mode change inside the crossfade catches the path part way up, and
+  // then it is audible and has to ramp like anything else.
+  const step = switching && (first || incoming.gain.value === 0)
+
+  if (switching) {
+    strip.mode = mode
+    // Equal-gain, not equal-power: mid-fade both paths carry very nearly the
+    // same signal, so their sum holds at unity. Snapped rather than faded on
+    // the first apply, which lands before the deck has any audio to click.
+    gate(strip.shelfGain.gain, mode === 'eq' ? 1 : 0, now, !first)
+    gate(strip.isoGain.gain, mode === 'eq' ? 0 : 1, now, !first)
+  }
+
+  // Trim and the filter knob are shared by both paths, so they always ramp.
   strip.input.gain.setTargetAtTime(dbToGain(trimGainDb(eq.trim)), now, EQ_RAMP_SEC)
-  strip.bands.low.gain.setTargetAtTime(bandGain(eq.low, mode), now, EQ_RAMP_SEC)
-  strip.bands.mid.gain.setTargetAtTime(bandGain(eq.mid, mode), now, EQ_RAMP_SEC)
-  strip.bands.high.gain.setTargetAtTime(bandGain(eq.high, mode), now, EQ_RAMP_SEC)
+  // Only the live path is worth the parameter ramps. The muted one is left
+  // alone until the mode comes back to it.
+  if (mode === 'eq') {
+    setParam(strip.shelves.low.gain, eqGainDb(eq.low, 'eq'), now, step)
+    setParam(strip.shelves.mid.gain, eqGainDb(eq.mid, 'eq'), now, step)
+    setParam(strip.shelves.high.gain, eqGainDb(eq.high, 'eq'), now, step)
+  } else {
+    setParam(strip.bands.low.gain, bandGain(eq.low, 'isolator'), now, step)
+    setParam(strip.bands.mid.gain, bandGain(eq.mid, 'isolator'), now, step)
+    setParam(strip.bands.high.gain, bandGain(eq.high, 'isolator'), now, step)
+  }
   applyFilter(strip.filter, eq.filter, now)
 }
+
+/** Ramp a parameter towards `value`, or step it when the path is silent. */
+function setParam(param: AudioParam, value: number, now: number, step: boolean): void {
+  if (!step) {
+    param.setTargetAtTime(value, now, EQ_RAMP_SEC)
+    return
+  }
+  param.cancelScheduledValues(now)
+  param.setValueAtTime(value, now)
+}
+
+/** Move a path's gate to `target`, crossfading unless told to snap. */
+function gate(param: AudioParam, target: number, now: number, ramp: boolean): void {
+  // Read before cancelling: cancelScheduledValues drops a ramp in flight and
+  // the parameter falls back to where that ramp started, not where it had got
+  // to, so a second mode change inside the crossfade would jump.
+  const current = param.value
+  param.cancelScheduledValues(now)
+  if (!ramp) {
+    param.setValueAtTime(target, now)
+    return
+  }
+  param.setValueAtTime(current, now)
+  param.linearRampToValueAtTime(target, now + MODE_XFADE_SEC)
+}
+
+/**
+ * What a bypassed filter knob parks on.
+ *
+ * A peaking biquad at 0 dB has numerator coefficients identical to its
+ * denominator, so it is an exact identity whatever its frequency and Q. Parking
+ * on a low-pass above the audible range is not: at 22 kHz it still rotates
+ * phase across the top of the band, which measured +0.53 dB of peak growth on a
+ * loud master with every knob centred — as much as the old crossover EQ was
+ * blamed for. It is worse at 44.1 kHz, where the node is clamped to Nyquist.
+ */
+const FILTER_BYPASS_TYPE: BiquadFilterType = 'peaking'
 
 /**
  * Move the filter knob's single node.
  *
- * Crossing the centre swaps low-pass for high-pass. The frequency and Q have to
- * jump on that swap rather than ramp: the two modes only meet either side of
- * the dead zone, where a low-pass sits near 17 kHz and a high-pass near 25 Hz,
- * so both are transparent at the moment of the flip and the jump is silent.
- * Ramping instead would drag a fresh high-pass down from 17 kHz and mute the
- * deck on the way through.
+ * The type changes when the knob enters or leaves the dead zone, and again if
+ * it is thrown from one side of centre to the other. Frequency and Q jump on
+ * that swap rather than ramp: the flip only ever happens at the edge of the
+ * dead zone, where the low-pass sits near 17 kHz and the high-pass near 26 Hz
+ * and both are near enough transparent that the jump is silent. Ramping instead
+ * would drag a fresh high-pass down from 17 kHz and mute the deck on the way
+ * through.
  */
 function applyFilter(filter: BiquadFilterNode, knob: number, now: number): void {
   const setting = filterSetting(knob)
-  if (filter.type !== setting.type) {
+  const type = setting.bypassed ? FILTER_BYPASS_TYPE : setting.type
+  // Only a low-pass and a high-pass read Q in decibels. A peaking filter's Q is
+  // a real Q factor, so the parked state must not be converted.
+  const q = type === FILTER_BYPASS_TYPE ? setting.q : qFactorToDb(setting.q)
+  if (filter.type !== type) {
     filter.frequency.cancelScheduledValues(now)
     filter.Q.cancelScheduledValues(now)
-    filter.type = setting.type
+    filter.type = type
     filter.frequency.setValueAtTime(setting.frequency, now)
-    filter.Q.setValueAtTime(qFactorToDb(setting.q), now)
+    filter.Q.setValueAtTime(q, now)
     return
   }
   filter.frequency.setTargetAtTime(setting.frequency, now, EQ_RAMP_SEC)
-  filter.Q.setTargetAtTime(qFactorToDb(setting.q), now, EQ_RAMP_SEC)
+  filter.Q.setTargetAtTime(q, now, EQ_RAMP_SEC)
 }
 
 export class Deck {

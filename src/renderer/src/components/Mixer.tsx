@@ -40,6 +40,13 @@ interface KnobSpec {
   format(value: number, mode: EqMode): string
 }
 
+/**
+ * Top to bottom: HI, MID, LOW. Every DJ mixer stacks the bands that way, so a
+ * hand that knows the hardware reaches for the right knob without looking.
+ * Leave it alone. The editing view lays the same knobs out in a row, and there
+ * it runs LO, MID, HI left to right, because a horizontal strip has to read
+ * the way frequency does. The two orders disagree on purpose.
+ */
 const CHANNEL_KNOBS: readonly KnobSpec[] = [
   { id: 'trim', label: 'TRIM', format: (v) => formatDb(trimGainDb(v)) },
   { id: 'high', label: 'HI', format: (v, mode) => formatDb(eqGainDb(v, mode)) },
@@ -49,10 +56,15 @@ const CHANNEL_KNOBS: readonly KnobSpec[] = [
 ]
 
 /**
- * What the two cut floors mean, in one line. Both are real: a DJM channel EQ
- * bottoms out at -26 dB, and its isolator mode takes the band to nothing.
+ * The switch picks between two different circuits, not two settings of one, so
+ * the tooltip says what each one sounds like rather than naming the filters.
+ * No numbers here: the readout under every knob already shows the dB.
  */
-const EQ_MODE_TITLE = 'EQ cuts to -26 dB, like a DJM. ISO cuts to silence.'
+const EQ_MODE_TITLE = [
+  'EQ: turn a band down and it drops a lot, but you can still hear it.',
+  'ISO: turn a band down and it is gone. Silent.',
+  'On a DDJ-FLX10 this is shift+CUE. rekordbox has the same switch in its settings.'
+].join('\n')
 
 const KNOB_SIZE = 30
 const KNOB_RADIUS = 11
@@ -381,9 +393,9 @@ export function Mixer(): ReactElement {
         ))}
       </div>
 
-      {/* The cut floor is one switch for the whole mixer, as it is on the
+      {/* EQ or isolator is one switch for the whole mixer, as it is on the
           hardware, so it sits above the channels rather than inside one. */}
-      <div className="mixer__mode" role="group" aria-label="Cut depth" title={EQ_MODE_TITLE}>
+      <div className="mixer__mode" role="group" aria-label="EQ or isolator" title={EQ_MODE_TITLE}>
         <span className="label">CUT</span>
         <div className="mixer__mode-tabs">
           <button
