@@ -443,9 +443,9 @@ export function EditView(): ReactElement {
   return (
     <div className="edit-view">
       <header className="edit-view__bar">
-        <div className="edit-view__left" />
-
-        {notice !== null ? <span className="edit-note">{notice}</span> : null}
+        <div className="edit-view__left">
+          {notice !== null ? <span className="edit-note">{notice}</span> : null}
+        </div>
 
         <button
           type="button"
@@ -460,26 +460,28 @@ export function EditView(): ReactElement {
           <span>{playing ? 'Pause' : 'Play'}</span>
         </button>
 
-        <button
-          type="button"
-          className="edit-btn edit-btn--cut"
-          disabled={!canCut}
-          onClick={onCut}
-          title={`Cut row ${focused} in two at the playhead (Ctrl+E)`}
-        >
-          <span>Cut</span>
-          <span className="edit-btn__key">Ctrl+E</span>
-        </button>
+        <div className="edit-view__right">
+          <button
+            type="button"
+            className="edit-btn edit-btn--cut"
+            disabled={!canCut}
+            onClick={onCut}
+            title={`Cut row ${focused} in two at the playhead (Ctrl+E)`}
+          >
+            <span>Cut</span>
+            <span className="edit-btn__key">Ctrl+E</span>
+          </button>
 
-        <button
-          type="button"
-          className="edit-btn edit-btn--export"
-          disabled={loaded.length === 0}
-          onClick={() => setExportOpen(true)}
-          title={loaded.length === 0 ? 'Load a track first' : 'Save this edit as a file'}
-        >
-          <span>Export</span>
-        </button>
+          <button
+            type="button"
+            className="edit-btn edit-btn--export"
+            disabled={loaded.length === 0}
+            onClick={() => setExportOpen(true)}
+            title={loaded.length === 0 ? 'Load a track first' : 'Save this edit as a file'}
+          >
+            <span>Export</span>
+          </button>
+        </div>
       </header>
 
       {DECK_IDS.map((id) => (

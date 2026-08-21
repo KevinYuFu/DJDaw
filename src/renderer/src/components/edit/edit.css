@@ -27,9 +27,15 @@
  * one row, which today is the export button and nothing else. It sits above
  * the rows so no row has to give width to a control that is not its own.
  */
+/*
+ * Three columns, so PLAY is centred on the strip rather than on whatever is
+ * beside it: the two outer cells are the same width whatever they hold, and
+ * adding something on either side does not move it.
+ */
 .edit-view__bar {
   flex: 0 0 auto;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 8px;
   padding: 4px 10px;
@@ -37,9 +43,19 @@
   border-bottom: 1px solid var(--border-soft);
 }
 
-/* Empty for now: the transport is on the right, and this side is spare. */
+/* Spare, apart from a refused cut explaining itself next to PLAY. */
 .edit-view__left {
-  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.edit-view__right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
   min-width: 0;
 }
 
