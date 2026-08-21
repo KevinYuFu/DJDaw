@@ -15,7 +15,20 @@ This applies even when my alternative is technically better. Kevin decides.
 
 ## Branches and PRs
 
-Every new feature goes on its own branch. Never commit straight to `main`.
+**Every branch starts from `main`.** Never commit straight to `main`, and never
+stack one PR on another — no PR should ever merge into another PR.
+
+If a request genuinely cannot be built without unmerged work, **stop and ask**.
+Do not stack on your own judgement. The usual answer is to wait for the parent
+to merge, then branch from `main`.
+
+Stacking to avoid merge conflicts is the wrong reason. Conflicts are normal and
+resolvable; a stack makes every PR harder to review and forces a merge order.
+
+**Check `git branch --show-current` before starting any work, and again before
+launching subagents.** Subagents inherit whatever branch the tree is on. I have
+shipped work onto the wrong branch once by switching to test something and
+forgetting to switch back — verify, do not assume.
 
 After each code change, push the branch and open (or update) a pull request, so
 Kevin can review it on GitHub. He approves and merges — I do not merge.
