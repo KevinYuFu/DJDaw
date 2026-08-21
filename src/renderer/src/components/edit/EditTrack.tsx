@@ -199,8 +199,6 @@ function ChannelFader({ deckId, disabled }: ChannelFaderProps): ReactElement {
         onDoubleClick={() => !disabled && useDecks.getState().setFader(deckId, FADER_UNITY)}
       >
         <div className="edit-fader__slot" />
-        {/* 0 dB, so the hand can find it without reading the number. */}
-        <div className="edit-fader__unity" style={{ bottom: `${FADER_UNITY * 100}%` }} />
         <div className="edit-fader__fill" style={{ height: `${pct}%` }} />
       </div>
       <span className="edit-fader__value mono">{db}</span>

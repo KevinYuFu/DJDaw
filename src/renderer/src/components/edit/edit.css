@@ -730,25 +730,6 @@
   background: var(--deck-color, var(--accent));
 }
 
-/*
- * 0 dB. The fader runs to silence, so the flat point is not the middle.
- *
- * Notched in from the sides rather than drawn across, because a line all the
- * way over reads as a grip — and it lands exactly on the top of the fill when
- * the level is at unity, which is where it would look most like one.
- */
-.edit-fader__unity {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 3px;
-  margin-bottom: -1.5px;
-  background:
-    linear-gradient(to right, rgba(255, 255, 255, 0.75) 0 3px, transparent 3px) left center /
-      100% 1px no-repeat,
-    linear-gradient(to left, rgba(255, 255, 255, 0.75) 0 3px, transparent 3px) right center /
-      100% 1px no-repeat;
-}
 
 .edit-fader__value {
   flex: 0 0 auto;
