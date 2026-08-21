@@ -25,6 +25,7 @@ import { useKeyboard } from '@renderer/hooks/useKeyboard'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
+import type { ViewName } from '@renderer/state/useSettings'
 
 /**
  * The window: toolbar, the current view, and the browser below a draggable
@@ -41,17 +42,43 @@ import { useSettings } from '@renderer/state/useSettings'
 /** Must match the toolbar and handle rows in app.css. */
 const TOOLBAR_H = 40
 const HANDLE_H = 5
-/** Below this a deck loses its transport row; below that the browser is a header. */
-const MIN_DECK_H = 360
 const MIN_BROWSER_H = 120
 /** Deck height taken by everything but the detail waveform. */
 const DECK_CHROME_H = 290
 /** Detail waveform height a deck opens at. The splitter changes it from there. */
 const DEFAULT_WAVE_H = 150
 
-function clampDeckHeight(height: number): number {
+/** The editing view's export bar and the gaps between its four rows. */
+const EDIT_CHROME_H = 38
+/** One editing row: transport, EQ strip, pads, and the row's own padding. */
+const EDIT_ROW_MIN_H = 110
+const EDIT_ROW_H = 126
+
+/**
+ * The two views want different amounts of height and get their own, so the
+ * performance view can run a short waveform over a tall browser while the
+ * editing view still has room for four full rows.
+ */
+const VIEW_HEIGHTS: Record<ViewName, { min: number; preferred: number }> = {
+  performance: { min: 360, preferred: DECK_CHROME_H + DEFAULT_WAVE_H },
+  edit: {
+    min: EDIT_CHROME_H + 4 * EDIT_ROW_MIN_H,
+    preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
+  }
+}
+
+function clampDeckHeight(height: number, view: ViewName): number {
+  const { min } = VIEW_HEIGHTS[view]
   const max = window.innerHeight - TOOLBAR_H - HANDLE_H - MIN_BROWSER_H
-  return clamp(height, MIN_DECK_H, Math.max(MIN_DECK_H, max))
+  return clamp(height, min, Math.max(min, max))
+}
+
+function defaultHeights(): Record<ViewName, number> {
+  const out = {} as Record<ViewName, number>
+  for (const name of Object.keys(VIEW_HEIGHTS) as ViewName[]) {
+    out[name] = clampDeckHeight(VIEW_HEIGHTS[name].preferred, name)
+  }
+  return out
 }
 
 /**
@@ -159,7 +186,16 @@ export function App(): ReactElement {
   const view = useSettings((s) => s.view)
   const browserExpanded = useSettings((s) => s.browserExpanded)
   const toggleBrowserExpanded = useSettings((s) => s.toggleBrowserExpanded)
-  const [deckHeight, setDeckHeight] = useState(() => clampDeckHeight(DECK_CHROME_H + DEFAULT_WAVE_H))
+  const [heights, setHeights] = useState(defaultHeights)
+  const deckHeight = heights[view]
+  const setDeckHeight = useCallback(
+    (next: number | ((prev: number) => number)): void =>
+      setHeights((prev) => {
+        const value = typeof next === 'function' ? next(prev[view]) : next
+        return prev[view] === value ? prev : { ...prev, [view]: value }
+      }),
+    [view]
+  )
   const [resizing, setResizing] = useState(false)
   const drag = useRef<{ pointerY: number; height: number } | null>(null)
 
@@ -196,7 +232,11 @@ export function App(): ReactElement {
   useEffect(() => window.api.onMenuCommand(runMenuCommand), [])
 
   useEffect(() => {
-    const onResize = (): void => setDeckHeight((height) => clampDeckHeight(height))
+    const onResize = (): void => setHeights((prev) => {
+      const next = {} as Record<ViewName, number>
+      for (const name of Object.keys(prev) as ViewName[]) next[name] = clampDeckHeight(prev[name], name)
+      return next
+    })
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -212,11 +252,14 @@ export function App(): ReactElement {
     [deckHeight]
   )
 
-  const onHandleMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const start = drag.current
-    if (!start) return
-    setDeckHeight(clampDeckHeight(start.height + (event.clientY - start.pointerY)))
-  }, [])
+  const onHandleMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const start = drag.current
+      if (!start) return
+      setDeckHeight(clampDeckHeight(start.height + (event.clientY - start.pointerY), view))
+    },
+    [setDeckHeight, view]
+  )
 
   const onHandleUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     drag.current = null

@@ -87,7 +87,7 @@ const KNOB_RADIUS = 10
 const KNOB_SWEEP = 270
 
 /** Width of the trim slider in px. The drag is 1:1 with the pointer across it. */
-const TRIM_SLIDER_W = 66
+const TRIM_SLIDER_W = 60
 
 interface EqKnobSpec {
   id: keyof ChannelEq
