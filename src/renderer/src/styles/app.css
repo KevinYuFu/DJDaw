@@ -436,7 +436,7 @@
      the filter's `HPF 18.0k` at full sweep. */
   width: 36px;
   text-align: center;
-  font-size: 8px;
+  font-size: 10px;
   /* FILTER is the longest of them and only just fits; a wrap here would push
      the knob rows apart. */
   white-space: nowrap;

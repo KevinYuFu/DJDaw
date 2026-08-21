@@ -257,12 +257,14 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
+  min-height: 0;
 }
 
 .edit-transport {
   display: flex;
   gap: 5px;
+  flex: 0 0 auto;
   /* The anchor for the cut notice, which floats above the row rather than
      taking a line of its own: there is no spare height for one. */
   position: relative;
@@ -289,7 +291,7 @@
 
 .edit-btn {
   flex: 1 1 0;
-  height: 26px;
+  height: 24px;
   padding: 0 8px;
   display: inline-flex;
   align-items: center;
@@ -322,7 +324,7 @@
 }
 .edit-btn__key {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -355,10 +357,11 @@
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 4px;
+  flex: 0 0 auto;
 }
 
 .edit-pad {
-  height: 26px;
+  height: 24px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -390,8 +393,10 @@
 .edit-eq {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
-  padding: 1px 4px;
+  padding: 2px 4px;
+  flex: 0 0 auto;
   border: 1px solid transparent;
   border-radius: var(--radius);
   /* The anchor for the drag readout, which floats above the strip the way the
@@ -415,11 +420,11 @@
 
 .edit-knob {
   flex: 0 0 auto;
-  width: 26px;
+  width: 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   line-height: 0;
   cursor: ns-resize;
   touch-action: none;
@@ -433,10 +438,10 @@
 }
 
 .edit-knob__label {
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: var(--text-faint);
 }
 .edit-knob.is-moved .edit-knob__label {
@@ -450,19 +455,19 @@
 }
 .edit-knob__track {
   fill: none;
-  stroke: var(--border);
-  stroke-width: 2;
+  stroke: var(--border-strong);
+  stroke-width: 2.5;
   stroke-linecap: round;
 }
 .edit-knob__value {
   fill: none;
   stroke: var(--track-color);
-  stroke-width: 2;
+  stroke-width: 2.5;
   stroke-linecap: round;
 }
 .edit-knob__pointer {
-  stroke: var(--text);
-  stroke-width: 1.5;
+  stroke: #ffffff;
+  stroke-width: 2;
   stroke-linecap: round;
 }
 
@@ -470,11 +475,11 @@
    knobs beside it have first call on the width. */
 .edit-btn--flat {
   flex: 0 0 auto;
-  height: 22px;
+  height: 24px;
   margin-left: auto;
   padding: 0 9px;
-  border-radius: 11px;
-  font-size: 9px;
+  border-radius: 12px;
+  font-size: 10px;
 }
 .edit-btn--flat.is-lit,
 .edit-btn--flat.is-lit:hover:not(:disabled) {

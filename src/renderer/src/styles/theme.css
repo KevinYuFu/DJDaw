@@ -12,14 +12,14 @@
   --bg-sunken: #121215;
   --bg-waveform: #08080a;
 
-  --border: #35353c;
-  --border-soft: #26262c;
-  --border-strong: #4a4a54;
+  --border: #50505b;
+  --border-soft: #3c3c46;
+  --border-strong: #696977;
 
   /* Text */
   --text: #e6e6ea;
-  --text-dim: #9a9aa4;
-  --text-faint: #66666f;
+  --text-dim: #babac6;
+  --text-faint: #a4a4b2;
   --text-inverse: #0e0e10;
 
   /* Pioneer blue, used for selection and active states */
@@ -136,7 +136,7 @@ input:focus {
 
 /* Small caps label used all over the rekordbox chrome */
 .label {
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);

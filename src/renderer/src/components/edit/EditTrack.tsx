@@ -81,13 +81,13 @@ function tint(hex: string, alpha: number): string {
 const KNOB_TRAVEL_PX = 140
 
 /** Drawn small: five of these plus a button share the width of the pad row. */
-const KNOB_SIZE = 22
-const KNOB_RADIUS = 8.5
+const KNOB_SIZE = 26
+const KNOB_RADIUS = 10
 /** Sweep of a rotary control, -135 to +135 degrees, as on the hardware. */
 const KNOB_SWEEP = 270
 
 /** Width of the trim slider in px. The drag is 1:1 with the pointer across it. */
-const TRIM_SLIDER_W = 66
+const TRIM_SLIDER_W = 60
 
 interface EqKnobSpec {
   id: keyof ChannelEq
