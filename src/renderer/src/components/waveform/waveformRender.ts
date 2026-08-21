@@ -1036,13 +1036,10 @@ export interface ClipStyle {
   edgeColor: string
   edgeWidth: number
   /**
-   * Space left between two pieces, in CSS px.
+   * Space left between two pieces, in CSS px. Zero: the pieces meet.
    *
-   * A cut is drawn as the gap between two cards rather than as a line through
-   * one waveform. The beat grid draws full-height white lines every bar, so a
-   * cut drawn as one more of those is camouflage — but nothing else on the
-   * strip is a shape, and two shapes side by side read as two pieces without
-   * anything having to be found.
+   * The audio either side of a cut is continuous and the waveform should look
+   * it. What marks the cut is the two outlines meeting, not a hole.
    */
   cardGap: number
   /** Corner radius of a piece, in CSS px. */
@@ -1059,8 +1056,8 @@ export interface ClipStyle {
 export const DEFAULT_CLIP_STYLE: ClipStyle = {
   edgeColor: 'rgba(255,255,255,0.72)',
   edgeWidth: 1.5,
-  cardGap: 7,
-  cardRadius: 4,
+  cardGap: 0,
+  cardRadius: 3,
   selectedEdgeColor: '#ffffff',
   selectedEdgeWidth: 2.5,
   selectedFill: 'rgba(255,255,255,0.12)',
@@ -1078,7 +1075,7 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
 export const OVERVIEW_CLIP_STYLE: ClipStyle = {
   edgeColor: 'rgba(255,255,255,0.7)',
   edgeWidth: 1,
-  cardGap: 4,
+  cardGap: 0,
   cardRadius: 2,
   selectedEdgeColor: '#ffffff',
   selectedEdgeWidth: 1.5,
@@ -1196,17 +1193,6 @@ export function drawClipEdges(
 
   ctx.save()
 
-  // Clear the gaps first. Without this the waveform runs straight across them
-  // and the pieces are only outlined, not separated — which is most of why a
-  // cut was still hard to find. A card has to be an island.
-  for (const clip of clips) {
-    if (clip.startSec >= to) break
-    if (clip.startSec + clip.durationSec <= from) continue
-    const r = cardRect(clip, from, scale, width, style)
-    if (!r) continue
-    ctx.clearRect(r.x - style.cardGap, 0, style.cardGap, height)
-    ctx.clearRect(r.x + r.w, 0, style.cardGap, height)
-  }
 
   for (const clip of clips) {
     if (clip.startSec >= to) break

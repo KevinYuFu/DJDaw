@@ -99,10 +99,12 @@ const clip = (startSec, durationSec, id) => ({ id, startSec, durationSec, source
   ok(`every piece gets a card — ${ctx.rects.length}`, ctx.rects.length === 4)
   ok('in the band colour', ctx.rects.every((r) => r.fill === DEFAULT_CLIP_STYLE.bandFill))
   const gap = DEFAULT_CLIP_STYLE.cardGap
-  ok(`each is inset by half the gap — ${JSON.stringify(ctx.rects[1])}`,
+  ok(`a card covers its piece — ${JSON.stringify(ctx.rects[1])}`,
     Math.abs(ctx.rects[1].x - (100 + gap / 2)) < 1 && Math.abs(ctx.rects[1].w - (100 - gap)) < 1)
-  ok('so there is space between two of them',
-    ctx.rects[1].x > ctx.rects[0].x + ctx.rects[0].w)
+  // The audio either side of a cut is continuous, so the cards meet: what
+  // marks the cut is their two outlines, not a hole in the waveform.
+  ok(`two cards meet rather than leaving a hole — ${ctx.rects[0].x + ctx.rects[0].w} then ${ctx.rects[1].x}`,
+    Math.abs(ctx.rects[1].x - (ctx.rects[0].x + ctx.rects[0].w)) <= 1)
 }
 {
   // Only what is on screen, clipped to the edges.
