@@ -280,13 +280,29 @@ export function drawWaveform(
 }
 
 /**
- * Above 1 deepens the tint of a column one band dominates; 1 would leave
- * everything close to white.
+ * Band weights applied before the colour is worked out.
+ *
+ * Bass first, then highs, then mids. A column with real low end reads red even
+ * when the bands above it are just as loud, because the kick is the thing a DJ
+ * is looking for; between the other two, hats and snares place a section
+ * faster than the mids do.
  */
-const RGB_SATURATION = 1.7
+const BAND_WEIGHT = { low: 1, mid: 0.4, high: 0.55 }
 
-/** Channel levels are rounded to this many steps so runs share one fill. */
-const RGB_STEPS = 16
+/**
+ * How bright each channel can get, in the same order of priority.
+ *
+ * Green stops well short of full: mids are the least useful thing to pick out
+ * of a waveform, and a green that reached full would wash every busy section
+ * out to white.
+ */
+const CHANNEL_CEILING = { red: 1, green: 0.62, blue: 0.95 }
+
+/** Above 1 tightens a channel around the band that dominates its column. */
+const CHANNEL_GAMMA = { red: 2, green: 1.8, blue: 1.4 }
+
+/** Levels per channel. Eight, as the hardware stores them. */
+const RGB_STEPS = 8
 
 /**
  * The RGB waveform: red lows, green mids, blue highs, white where all three
@@ -332,18 +348,24 @@ function fillRgb(
 /**
  * The colour for one column of an RGB waveform, from its three band peaks.
  *
- * Each channel is scaled against the loudest band in the column, so the hue
- * shows the balance of the sound rather than how loud it is. Silence is black.
+ * The bands are scaled against the loudest of the three first, so the hue
+ * shows the balance of the sound rather than how loud it is, then mixed
+ * through {@link BAND_TO_RGB}. Silence is black.
  */
 export function rgbColumnColor(low: number, mid: number, high: number): string {
-  const peak = low > mid ? (low > high ? low : high) : mid > high ? mid : high
+  const l = low * BAND_WEIGHT.low
+  const m = mid * BAND_WEIGHT.mid
+  const h = high * BAND_WEIGHT.high
+  const peak = l > m ? (l > h ? l : h) : m > h ? m : h
   if (!(peak > 0)) return 'rgb(0,0,0)'
-  return `rgb(${channel(low / peak)},${channel(mid / peak)},${channel(high / peak)})`
+  return `rgb(${channel(l / peak, 'red')},${channel(m / peak, 'green')},${channel(h / peak, 'blue')})`
 }
 
-function channel(ratio: number): number {
-  const shaped = Math.pow(ratio <= 0 ? 0 : ratio > 1 ? 1 : ratio, RGB_SATURATION)
-  return Math.round((Math.round(shaped * RGB_STEPS) * 255) / RGB_STEPS)
+/** One channel, shaped by its own curve and ceiling, as a stepped byte. */
+function channel(ratio: number, id: 'red' | 'green' | 'blue'): number {
+  const r = ratio <= 0 ? 0 : ratio > 1 ? 1 : ratio
+  const v = Math.pow(r, CHANNEL_GAMMA[id]) * CHANNEL_CEILING[id]
+  return Math.round((Math.round(v * RGB_STEPS) * 255) / RGB_STEPS)
 }
 
 /** One band as a single path of mirrored 1 px bars — far cheaper than a fill per column. */
