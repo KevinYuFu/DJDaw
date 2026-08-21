@@ -875,28 +875,30 @@ export const useDecks = create<DecksState>()(() => ({
       patchDeck(id, { loopBeats: cue.loopBeats, loop: { active: true, startSec: cue.time, endSec: end } })
     }
 
-    if (ctx.deck.playing) {
+    const rt = runtime[id]
+    // A preview makes sound, so `deck.playing` is true during one too.
+    const previewing = rt.cuePreview || rt.previewCueIndex !== null
+
+    if (ctx.deck.playing && !previewing) {
       // Playing: jump and keep rolling.
       seekDeck(ctx, cue.time)
       return
     }
 
-    // Paused: preview for as long as the pad is held, then stop on the cue
-    // point itself — a CDJ leaves the playhead where the pad took it, not back
-    // where it was before the press. A second pad pressed mid-preview takes
-    // over, so the release lands on whichever cue is actually playing.
-    const rt = runtime[id]
+    // Preview while this pad is held, then park on the cue point itself. The
+    // press takes the preview over from any other pad or from CUE, so only
+    // this pad's release ends it.
     rt.previewReturnSec = cue.time
     rt.previewCueIndex = index
+    rt.cuePreview = false
     seekDeck(ctx, cue.time)
     playDeck(ctx)
     patchDeck(id, { playing: true, previewing: true })
   },
 
   releaseHotCue(id, index) {
-    // Only the pad that owns the preview ends it. A second pad pressed
-    // mid-hold takes the preview over, so the first one's release — which
-    // arrives whenever the DJ happens to let go — must leave it running.
+    // Only the pad that owns the preview ends it; an overridden pad's release
+    // does nothing.
     if (runtime[id].previewCueIndex !== index) return
     useDecks.getState().endPreview(id)
   },
