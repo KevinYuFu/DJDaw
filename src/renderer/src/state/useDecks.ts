@@ -12,6 +12,7 @@ import {
 } from '@shared/clips'
 import type { Clip } from '@shared/clips'
 import { CENTRE, flatChannel, isFlat } from '@shared/eq'
+import { FADER_UNITY, crossfadeGainFor, faderGain } from '@shared/fader'
 import type { ChannelEq } from '@shared/eq'
 import { nearestPoint, nextPoint, pointsOfInterest, prevPoint } from '@shared/pointsOfInterest'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
@@ -103,6 +104,14 @@ export interface DeckState {
    * through it. Ejecting the deck is the channel going away, and does clear it.
    */
   eq: ChannelEq
+  /**
+   * Channel fader travel, 0 at the bottom and 1 at the top, silent to +6 dB.
+   *
+   * Session state like the EQ, so it outlives a track swap. Both views drive
+   * this one value: two of them would fight over the deck's gain, and whichever
+   * mounted last would win.
+   */
+  fader: number
 }
 
 /** Whether a cut happened, and if not, short plain text saying why. */
@@ -113,6 +122,8 @@ export interface CutResult {
 
 export interface DecksState {
   decks: Record<DeckId, DeckState>
+  /** Crossfader, 0 full A and 1 full B. Only decks A and B are on it. */
+  crossfade: number
   loadTrack(deck: DeckId, trackId: string): Promise<void>
   /**
    * Eject: stop the deck, drop its audio and put it back to empty. Also how a
@@ -191,6 +202,9 @@ export interface DecksState {
    */
   moveClipTo(deck: DeckId, clipId: string, toStartSec: number): void
   /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
+  /** Move the channel fader. See {@link DeckState.fader}. */
+  setFader(deck: DeckId, position: number): void
+  setCrossfade(position: number): void
   setChannelKnob(deck: DeckId, knob: keyof ChannelEq, value: number): void
   /** Put one knob back to centre. What a double-click on a knob does. */
   resetChannelKnob(deck: DeckId, knob: keyof ChannelEq): void
@@ -296,7 +310,8 @@ function emptyDeck(): DeckState {
     buffer: null,
     clips: [],
     selectedClipId: null,
-    eq: flatChannel()
+    eq: flatChannel(),
+    fader: FADER_UNITY
   }
 }
 
@@ -500,6 +515,23 @@ function applyEq(id: DeckId, eq: ChannelEq): void {
 }
 
 /**
+ * Push a deck's level: its own fader, times its share of the crossfader.
+ *
+ * One place computes this. Two of them — a view each — would each push a level
+ * that left the other's out, and whichever ran last would win.
+ */
+function applyFader(id: DeckId): void {
+  const s = useDecks.getState()
+  try {
+    AudioEngine.shared()
+      .deck(id)
+      .setGain(faderGain(s.decks[id].fader) * crossfadeGainFor(id, s.crossfade))
+  } catch {
+    // Nothing to push to before the engine exists; `loadTrack` re-applies it.
+  }
+}
+
+/**
  * Mirror the engine's own view of playback into the store. The worklet is the
  * authority — it is what actually stops at the end of the file — so the
  * optimistic `playing` flags the actions set are corrected from here.
@@ -595,6 +627,7 @@ async function resolveGrid(id: DeckId, track: Track, buffer: AudioBuffer): Promi
 
 export const useDecks = create<DecksState>()(() => ({
   decks: perDeck(emptyDeck),
+  crossfade: 0.5,
 
   async loadTrack(id, trackId) {
     const track = useLibrary.getState().trackById(trackId)
@@ -634,6 +667,7 @@ export const useDecks = create<DecksState>()(() => ({
       // EQ'd channel rather than resetting it. This also lands knobs that were
       // moved before the engine existed.
       applyEq(id, useDecks.getState().decks[id].eq)
+      applyFader(id)
 
       // A deck that is still running must stop before its audio is replaced.
       if (deck.playing) deck.pause()
@@ -1122,6 +1156,21 @@ export const useDecks = create<DecksState>()(() => ({
     const selected = ctx.state.selectedClipId
     const orphaned = selected !== null && !clips.some((c) => c.id === selected)
     setClips(ctx, clips, orphaned ? { selectedClipId: null } : {})
+  },
+
+  setFader(id, position) {
+    const next = clamp(position, 0, 1)
+    if (useDecks.getState().decks[id].fader === next) return
+    patchDeck(id, { fader: next })
+    applyFader(id)
+  },
+
+  setCrossfade(position) {
+    const next = clamp(position, 0, 1)
+    if (useDecks.getState().crossfade === next) return
+    useDecks.setState({ crossfade: next })
+    applyFader('A')
+    applyFader('B')
   },
 
   setChannelKnob(id, knob, value) {

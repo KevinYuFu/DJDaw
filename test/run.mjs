@@ -29,6 +29,7 @@ const MODULES = [
   'src/shared/pointsOfInterest.ts',
   'src/shared/wav.ts',
   'src/shared/deckList.ts',
+  'src/shared/fader.ts',
   'src/renderer/src/components/waveform/waveformRender.ts'
 ]
 

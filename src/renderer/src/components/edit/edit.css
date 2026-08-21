@@ -675,3 +675,83 @@
   border-radius: 1px;
   background: var(--text);
 }
+
+/* Channel fader: level, kept apart from the EQ because it is not part of it. */
+.edit-fader {
+  flex: 0 0 auto;
+  width: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+  min-height: 0;
+}
+.edit-fader.is-disabled {
+  opacity: 0.4;
+}
+
+.edit-fader__track {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.edit-fader.is-disabled .edit-fader__track {
+  cursor: default;
+}
+
+.edit-fader__slot {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 5px;
+  margin-left: -2.5px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+}
+
+.edit-fader__fill {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 5px;
+  margin-left: -2.5px;
+  border-radius: 3px;
+  background: var(--deck-color, var(--accent));
+  opacity: 0.85;
+}
+
+/* 0 dB. The fader runs to silence, so the flat point is not the middle. */
+.edit-fader__unity {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.edit-fader__cap {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 7px;
+  margin-bottom: -3.5px;
+  border-radius: 2px;
+  background: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.edit-fader:not(.is-disabled) .edit-fader__track:hover .edit-fader__cap {
+  background: #ffffff;
+}
+
+.edit-fader__value {
+  flex: 0 0 auto;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-dim);
+}
