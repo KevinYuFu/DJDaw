@@ -28,7 +28,8 @@ const MODULES = [
   'src/shared/eq.ts',
   'src/shared/pointsOfInterest.ts',
   'src/shared/wav.ts',
-  'src/shared/deckList.ts'
+  'src/shared/deckList.ts',
+  'src/renderer/src/components/waveform/waveformRender.ts'
 ]
 
 /** The renderer's path aliases, which Vite supplies in the app. */

@@ -6,6 +6,7 @@ import { KEYBOARD_SHORTCUTS } from '@renderer/hooks/useKeyboard'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
+import type { WaveformColorMode } from '@renderer/state/useSettings'
 
 /**
  * The rekordbox top strip: mode tabs, the master readouts, the setup guide and
@@ -98,6 +99,48 @@ function Modal({ title, onClose, children }: ModalProps): ReactElement {
   )
 }
 
+/** Waveform colouring choices, in the order they appear in the panel. */
+const WAVEFORM_COLOR_OPTIONS: ReadonlyArray<{
+  value: WaveformColorMode
+  label: string
+  note: string
+}> = [
+  { value: '3band', label: '3 Band', note: 'Blue lows, orange mids, white highs.' },
+  { value: 'rgb', label: 'RGB', note: 'Red lows, green mids, blue highs. White where all three are.' },
+  { value: 'mono', label: 'Mono', note: 'One envelope in the deck colour.' }
+]
+
+function SettingsModal({ onClose }: { onClose(): void }): ReactElement {
+  const waveformColorMode = useSettings((s) => s.waveformColorMode)
+  const setWaveformColorMode = useSettings((s) => s.setWaveformColorMode)
+
+  return (
+    <Modal title="Settings" onClose={onClose}>
+      <div className="settings">
+        <fieldset className="settings__group">
+          <legend className="settings__legend">Waveform colour</legend>
+          {WAVEFORM_COLOR_OPTIONS.map((option) => (
+            <label
+              key={option.value}
+              className={`settings__choice${waveformColorMode === option.value ? ' is-on' : ''}`}
+            >
+              <input
+                type="radio"
+                name="waveform-colour"
+                value={option.value}
+                checked={waveformColorMode === option.value}
+                onChange={() => setWaveformColorMode(option.value)}
+              />
+              <span className="settings__choice-label">{option.label}</span>
+              <span className="settings__choice-note">{option.note}</span>
+            </label>
+          ))}
+        </fieldset>
+      </div>
+    </Modal>
+  )
+}
+
 function ShortcutsModal({ onClose }: { onClose(): void }): ReactElement {
   return (
     <Modal title="Keyboard Shortcuts" onClose={onClose}>
@@ -155,6 +198,7 @@ export function Toolbar(): ReactElement {
   const bpm = useMasterBpm()
   const [helpOpen, setHelpOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
     <header className="toolbar">
@@ -213,6 +257,16 @@ export function Toolbar(): ReactElement {
       <button
         type="button"
         className="toolbar__setup"
+        title="Settings"
+        aria-haspopup="dialog"
+        onClick={() => setSettingsOpen(true)}
+      >
+        SETTINGS
+      </button>
+
+      <button
+        type="button"
+        className="toolbar__setup"
         title="How to make rekordbox export its XML on its own"
         aria-haspopup="dialog"
         onClick={() => setSetupOpen(true)}
@@ -230,6 +284,7 @@ export function Toolbar(): ReactElement {
         ?
       </button>
 
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {setupOpen && <SetupModal onClose={() => setSetupOpen(false)} />}
       {helpOpen && <ShortcutsModal onClose={() => setHelpOpen(false)} />}
     </header>

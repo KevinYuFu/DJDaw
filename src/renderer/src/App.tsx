@@ -44,6 +44,10 @@ const HANDLE_H = 5
 /** Below this a deck loses its transport row; below that the browser is a header. */
 const MIN_DECK_H = 360
 const MIN_BROWSER_H = 120
+/** Deck height taken by everything but the detail waveform. */
+const DECK_CHROME_H = 290
+/** Detail waveform height a deck opens at. The splitter changes it from there. */
+const DEFAULT_WAVE_H = 150
 
 function clampDeckHeight(height: number): number {
   const max = window.innerHeight - TOOLBAR_H - HANDLE_H - MIN_BROWSER_H
@@ -155,7 +159,7 @@ export function App(): ReactElement {
   const view = useSettings((s) => s.view)
   const browserExpanded = useSettings((s) => s.browserExpanded)
   const toggleBrowserExpanded = useSettings((s) => s.toggleBrowserExpanded)
-  const [deckHeight, setDeckHeight] = useState(() => clampDeckHeight(Math.round(window.innerHeight * 0.6)))
+  const [deckHeight, setDeckHeight] = useState(() => clampDeckHeight(DECK_CHROME_H + DEFAULT_WAVE_H))
   const [resizing, setResizing] = useState(false)
   const drag = useRef<{ pointerY: number; height: number } | null>(null)
 
