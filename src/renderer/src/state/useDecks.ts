@@ -636,10 +636,9 @@ export const useDecks = create<DecksState>()(() => ({
       deck.load(buffer)
       audioLoaded = true
       deck.setRate(1 + useDecks.getState().decks[id].pitchPercent / 100)
-      const start = clamp(track.cuePoint ?? 0, 0, buffer.duration)
+      // Load from track start.
+      const start = 0
       deck.seekSeconds(start)
-      // A freshly loaded deck parks on its cue point, so CUE must read as a
-      // preview rather than as "set the cue point here".
       runtime[id].commandedSec = start
       // One clip covering the whole file. The engine is told about it like any
       // other set of clips, so a never-cut deck and a cut one follow the same
