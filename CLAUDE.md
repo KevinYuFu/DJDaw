@@ -20,6 +20,11 @@ merges often, so a branch cut from a stale main wastes both our time.
 
 Every new feature goes on its own branch. Never commit straight to `main`.
 
+**Check `git branch --show-current` before starting any work, and again before
+launching subagents.** Subagents inherit whatever branch the tree is on. I have
+already shipped work onto the wrong branch once by switching branches to test
+something and forgetting to switch back — verify, do not assume.
+
 After each code change, push the branch and open (or update) a pull request, so
 Kevin can review it on GitHub. He approves and merges — I do not merge.
 
