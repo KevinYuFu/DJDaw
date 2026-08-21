@@ -237,35 +237,53 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       drawClipHighlight(ctx, state.clips, state.selectedClipId, from, to, width, height)
 
       if (state.waveform) {
+        // One column per device pixel, not per CSS pixel: on a retina panel
+        // that is twice the detail, and it is what keeps a drum hit a spike.
+        const columns = Math.max(1, Math.round(width * dpr))
+        const columnSec = state.span / columns
+
+        // The strip scrolls a whole column at a time, and a column is a whole
+        // device pixel.
+        //
+        // Both halves of that matter. Laying the columns out from the playhead
+        // would give each one a different slice of audio every frame and its
+        // height would change under it. Landing them on a fraction of a pixel
+        // would blend every bar across two pixels by an amount that changes
+        // every frame, and the colour would flicker. Either way the strip
+        // pulses instead of moving.
+        const grid = { index: Math.round(from / columnSec), columnSec }
+        const gridFrom = grid.index * columnSec
+        const gridTo = gridFrom + columns * columnSec
+
         // Per clip, not per pixel: each piece draws the slice of the file its
         // `sourceOffsetSec` points at, so a cut row shows what it plays and a
         // deleted piece leaves the background bare.
-        // One column per device pixel, not per CSS pixel: on a retina panel
-        // that is twice the detail, and it is what keeps a drum hit a spike.
         const cols = buildClipColumns(
           state.waveform,
           state.clips,
-          from,
-          to,
-          width * dpr,
+          gridFrom,
+          gridTo,
+          columns,
           state.waveform.sampleRate,
-          columnsRef.current
+          columnsRef.current,
+          grid
         )
         columnsRef.current = cols
         // Reading samples is only worth it while a column covers few enough of
         // them to have a shape of its own; zoomed out it costs milliseconds and
         // looks identical.
-        const perColumn = (state.span * state.waveform.sampleRate) / (width * dpr)
+        const perColumn = columnSec * state.waveform.sampleRate
         const extents =
           state.channels && perColumn <= MAX_SAMPLES_PER_COLUMN
             ? buildClipExtents(
                 state.channels,
                 state.clips,
-                from,
-                to,
-                width * dpr,
+                gridFrom,
+                gridTo,
+                columns,
                 state.waveform.sampleRate,
-                extentsRef.current
+                extentsRef.current,
+                grid
               )
             : null
         extentsRef.current = extents
