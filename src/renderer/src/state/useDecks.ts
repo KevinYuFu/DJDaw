@@ -55,6 +55,14 @@ export interface DeckState {
   trackId: string | null
   status: 'empty' | 'loading' | 'ready'
   playing: boolean
+  /**
+   * True only while a hot cue pad or CUE is held down on a stopped deck.
+   *
+   * The deck is making sound either way, so `playing` alone cannot tell a
+   * momentary preview from real playback — and the transport must not light up
+   * PLAY for a gesture the DJ is about to let go of.
+   */
+  previewing: boolean
   /** Tempo fader position in percent, -tempoRange..+tempoRange. */
   pitchPercent: number
   tempoRange: number
@@ -108,6 +116,16 @@ export interface DecksState {
    */
   cuePress(deck: DeckId): void
   cueRelease(deck: DeckId): void
+  /**
+   * End whatever preview this deck is running, exactly as releasing the pad
+   * does. A no-op on a deck that is not previewing.
+   *
+   * Every route out of a preview goes through here, including the UI's safety
+   * net for a release that lands off the pad or never arrives at all: a
+   * pointer that comes up somewhere else still ends the gesture, so a preview
+   * can never outlive the press that started it.
+   */
+  endPreview(deck: DeckId): void
   seek(deck: DeckId, sec: number): void
   beatJump(deck: DeckId, beats: number): void
   setPitch(deck: DeckId, percent: number): void
@@ -227,6 +245,7 @@ function emptyDeck(): DeckState {
     trackId: null,
     status: 'empty',
     playing: false,
+    previewing: false,
     pitchPercent: 0,
     tempoRange: TEMPO_RANGES[0],
     keyLock: false,
@@ -250,11 +269,18 @@ function patchDeck(id: DeckId, patch: Partial<DeckState>): void {
   })
 }
 
+/**
+ * Forget that this deck's playback is a preview: the return position, the pad
+ * that owns it, and the flag the UI reads. It does not touch the transport, so
+ * it is equally the way a preview ends and the way one is promoted to real
+ * playback — the caller decides which by what it does with the deck after.
+ */
 function clearPreview(id: DeckId): void {
   const rt = runtime[id]
   rt.previewReturnSec = null
   rt.previewCueIndex = null
   rt.cuePreview = false
+  if (useDecks.getState().decks[id].previewing) patchDeck(id, { previewing: false })
 }
 
 /**
@@ -403,6 +429,9 @@ function watchDeck(id: DeckId, deck: Deck): void {
     if (useDecks.getState().decks[id].playing !== s.playing) patchDeck(id, { playing: s.playing })
   })
   deck.onEnded(() => {
+    // Running off the end stops the deck without any release, so the preview
+    // ends here too — and with it the position it would have returned to,
+    // which the deck has long since played past.
     clearPreview(id)
     patchDeck(id, { playing: false })
   })
@@ -498,6 +527,7 @@ export const useDecks = create<DecksState>()(() => ({
       trackId,
       status: 'loading',
       playing: false,
+      previewing: false,
       waveform: null,
       buffer: null,
       loop: null,
@@ -576,6 +606,7 @@ export const useDecks = create<DecksState>()(() => ({
           trackId: null,
           status: 'empty',
           playing: false,
+      previewing: false,
           waveform: null,
           buffer: null,
           loop: null,
@@ -607,6 +638,7 @@ export const useDecks = create<DecksState>()(() => ({
       trackId: null,
       status: 'empty',
       playing: false,
+      previewing: false,
       waveform: null,
       buffer: null,
       loop: null,
@@ -625,14 +657,15 @@ export const useDecks = create<DecksState>()(() => ({
     clearPreview(id)
     if (previewing) {
       // PLAY during a preview latches rather than toggles: the deck is already
-      // rolling from the cue point and simply keeps going, and there is now
-      // nowhere to return to when the button or pad comes back up.
+      // rolling from the cue point and simply keeps going. `clearPreview` above
+      // dropped the return position with the flag, which is what stops the
+      // release that follows from yanking the playhead back to the cue.
       if (!ctx.deck.playing) ctx.deck.play()
-      patchDeck(id, { playing: true })
+      patchDeck(id, { playing: true, previewing: false })
       return
     }
     ctx.deck.togglePlay()
-    patchDeck(id, { playing: ctx.deck.playing })
+    patchDeck(id, { playing: ctx.deck.playing, previewing: false })
   },
 
   cuePress(id) {
@@ -654,7 +687,7 @@ export const useDecks = create<DecksState>()(() => ({
       runtime[id].cuePreview = true
       runtime[id].previewReturnSec = cue
       playDeck(ctx)
-      patchDeck(id, { playing: true })
+      patchDeck(id, { playing: true, previewing: true })
       return
     }
 
@@ -665,15 +698,23 @@ export const useDecks = create<DecksState>()(() => ({
   },
 
   cueRelease(id) {
+    // Only CUE's own preview: the button coming up must not stop a pad's.
+    if (!runtime[id].cuePreview) return
+    useDecks.getState().endPreview(id)
+  },
+
+  endPreview(id) {
     const rt = runtime[id]
-    if (!rt.cuePreview) return
-    const ctx = context(id)
-    rt.cuePreview = false
+    if (!rt.cuePreview && rt.previewCueIndex === null) return
+    // Read the return position before clearing, then stop and park on it. Both
+    // preview branches always record one, so there is nothing to fall back to.
     const back = rt.previewReturnSec
-    rt.previewReturnSec = null
+    clearPreview(id)
+    const ctx = context(id)
+    // An ejected deck has already been stopped and cleared by `unloadDeck`.
     if (!ctx) return
     ctx.deck.pause()
-    seekDeck(ctx, back ?? ctx.track.cuePoint ?? 0)
+    if (back != null) seekDeck(ctx, back)
     patchDeck(id, { playing: false })
   },
 
@@ -768,20 +809,15 @@ export const useDecks = create<DecksState>()(() => ({
     rt.previewCueIndex = index
     seekDeck(ctx, cue.time)
     playDeck(ctx)
-    patchDeck(id, { playing: true })
+    patchDeck(id, { playing: true, previewing: true })
   },
 
   releaseHotCue(id, index) {
-    const rt = runtime[id]
-    if (rt.previewCueIndex !== index) return
-    const back = rt.previewReturnSec
-    rt.previewCueIndex = null
-    rt.previewReturnSec = null
-    const ctx = context(id)
-    if (!ctx) return
-    ctx.deck.pause()
-    if (back != null) seekDeck(ctx, back)
-    patchDeck(id, { playing: false })
+    // Only the pad that owns the preview ends it. A second pad pressed
+    // mid-hold takes the preview over, so the first one's release — which
+    // arrives whenever the DJ happens to let go — must leave it running.
+    if (runtime[id].previewCueIndex !== index) return
+    useDecks.getState().endPreview(id)
   },
 
   deleteHotCue(id, index) {

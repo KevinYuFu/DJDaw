@@ -23,6 +23,19 @@ const GRID_NUDGE_BEATS = 1 / 32
 
 const PAD_INDICES = Array.from({ length: HOT_CUE_COUNT }, (_, i) => i)
 
+/**
+ * The pointer holding a pad down, and which pad it is holding.
+ *
+ * A press and its release are one gesture, so only the pointer that started it
+ * may end it: a second finger landing on another pad must not release the
+ * first one's preview, and a stray release from a pointer that never pressed
+ * must not release anything at all.
+ */
+interface HeldPad {
+  pointerId: number
+  index: number
+}
+
 /** Buttons that keep focus swallow the Space shortcut. */
 function preventFocus(e: ReactMouseEvent<HTMLElement>): void {
   e.preventDefault()
@@ -219,6 +232,8 @@ export function PadSection({ deckId }: PadSectionProps): ReactElement {
   const deck = useDecks((s) => s.decks[deckId])
   const track = useLibrary((s) => (deck.trackId ? s.trackById(deck.trackId) : undefined))
 
+  const held = useRef<HeldPad | null>(null)
+
   const ready = deck.status === 'ready'
   const hasGrid = ready && track?.grid != null
   const cues = track?.hotCues ?? []
@@ -229,20 +244,51 @@ export function PadSection({ deckId }: PadSectionProps): ReactElement {
       ? 'No beat grid yet. Tap the tempo first.'
       : 'Grid BPM. Click to type a new one. Enter to apply, Escape to cancel.'
 
+  // A pad that stops taking pointer events mid-hold — the deck ejected, so
+  // every pad went disabled — takes its release with it. Nothing else would
+  // ever end that preview, so end it here.
+  useEffect(() => {
+    if (ready || !held.current) return
+    held.current = null
+    useDecks.getState().endPreview(deckId)
+  }, [ready, deckId])
+
+  // Same for a pad unmounted mid-hold: an unmounted element never sees its own
+  // pointerup, and a stuck preview outlives the component that started it.
+  useEffect(
+    () => () => {
+      if (!held.current) return
+      held.current = null
+      useDecks.getState().endPreview(deckId)
+    },
+    [deckId]
+  )
+
   const onPadDown = (e: ReactPointerEvent<HTMLButtonElement>, index: number, cue: HotCue | undefined): void => {
     if (e.button !== 0) return
-    // Capture, so a pad held while the pointer drifts off still gets its
-    // release and the paused-deck preview ends where it should.
-    e.currentTarget.setPointerCapture(e.pointerId)
     if (e.shiftKey) {
+      // A delete is over the instant it happens; there is no hold to track.
       if (cue) useDecks.getState().deleteHotCue(deckId, index)
       return
     }
+    // Capture before the trigger. Without it the release only arrives while
+    // the pointer is still over the pad, and a release a few pixels away
+    // leaves the preview running until the track hits its end.
+    e.currentTarget.setPointerCapture(e.pointerId)
+    held.current = { pointerId: e.pointerId, index }
     useDecks.getState().triggerHotCue(deckId, index)
   }
 
-  const onPadUp = (index: number): void => {
-    useDecks.getState().releaseHotCue(deckId, index)
+  // pointerup, pointercancel and lostpointercapture all mean the same thing
+  // here: the hold is over. Capture makes the first two land on the pad
+  // wherever the pointer has wandered to, and the third catches the releases
+  // that never fire as either — a capture torn away by the browser, say.
+  // Whichever arrives first clears the ref, so the rest are no-ops.
+  const onPadEnd = (e: ReactPointerEvent<HTMLButtonElement>): void => {
+    const hold = held.current
+    if (!hold || hold.pointerId !== e.pointerId) return
+    held.current = null
+    useDecks.getState().releaseHotCue(deckId, hold.index)
   }
 
   const jump = (beats: number): void => useDecks.getState().beatJump(deckId, beats)
@@ -265,8 +311,9 @@ export function PadSection({ deckId }: PadSectionProps): ReactElement {
               style={cue ? { background: tint(cue.color, 0.3), borderColor: tint(cue.color, 0.9) } : undefined}
               disabled={!ready}
               onPointerDown={(e) => onPadDown(e, index, cue)}
-              onPointerUp={() => onPadUp(index)}
-              onPointerCancel={() => onPadUp(index)}
+              onPointerUp={onPadEnd}
+              onPointerCancel={onPadEnd}
+              onLostPointerCapture={onPadEnd}
               title={
                 cue
                   ? `Hot cue ${label} at ${formatTime(cue.time)} — hold to preview, shift-click to delete (${index + 1})`
