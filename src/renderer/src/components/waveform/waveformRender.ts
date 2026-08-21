@@ -1078,30 +1078,21 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
   selectedHandleFill: 'rgba(255,255,255,0.31)',
   selectedEdgeColor: 'rgba(255,255,255,0.8)',
   selectedEdgeWidth: 2,
-  selectedFill: 'rgba(255,255,255,0.035)',
+  selectedFill: 'rgba(255,255,255,0.025)',
   bandFill: 'rgba(255,255,255,0.07)'
 }
 
 /**
- * The same chrome for the MACRO view, where the whole track is a few hundred
- * pixels wide and 38 tall.
- *
- * Everything is a hairline here, and a selected piece is marked by its wash
- * rather than by fatter edges: at this size a 2px division reads as a spike in
- * the audio instead of as a cut.
+ * The MACRO view uses the same numbers, so a piece is marked the same amount
+ * whichever strip it is looked at on. Spread rather than copied: two lists of
+ * the same values drift the moment one of them is tuned.
  */
 export const OVERVIEW_CLIP_STYLE: ClipStyle = {
-  edgeColor: 'rgba(255,255,255,0.7)',
-  edgeWidth: 1,
-  cardGap: 0,
-  cardRadius: 2,
-  handleHeight: 0,
-  handleFill: 'rgba(255,255,255,0.3)',
-  selectedHandleFill: 'rgba(255,255,255,0.6)',
-  selectedEdgeColor: '#ffffff',
-  selectedEdgeWidth: 1.5,
-  selectedFill: 'rgba(255,255,255,0.16)',
-  bandFill: 'rgba(255,255,255,0.08)'
+  ...DEFAULT_CLIP_STYLE,
+  // No handle here. The strip is thirty pixels tall, and a press anywhere on a
+  // piece already picks it up — the handle exists in the zoomed view only
+  // because a press there means scrub.
+  handleHeight: 0
 }
 
 /**
