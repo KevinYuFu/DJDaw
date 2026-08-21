@@ -9,16 +9,14 @@ import { useSettings } from '@renderer/state/useSettings'
 import type { WaveformColorMode } from '@renderer/state/useSettings'
 
 /**
- * The rekordbox top strip: mode tabs, the master readouts, the setup guide and
- * the help modal. The strip is drawn in every view — the tabs are how you get
+ * The top strip: the two modes, the master readouts, the setup guide and the
+ * help modal. The strip is drawn in every view — the tabs are how you get
  * back out of one.
  *
  * On macOS the window is `hiddenInset`, so this bar is also the title bar —
  * it carries the drag region and the traffic-light inset that app.css adds.
  */
 
-const EXPORT_DISABLED_TITLE =
-  'EXPORT mode is not implemented yet — playlist export and track rendering are future work.'
 
 /** One short line each: this list is read by a dyslexic user. */
 const SETUP_STEPS = [
@@ -207,9 +205,6 @@ export function Toolbar(): ReactElement {
       </div>
 
       <div className="toolbar__tabs" role="tablist" aria-label="Mode">
-        <button type="button" role="tab" aria-selected="false" disabled title={EXPORT_DISABLED_TITLE}>
-          EXPORT
-        </button>
         <button
           type="button"
           role="tab"
