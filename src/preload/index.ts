@@ -31,6 +31,7 @@ const api: DJDawApi = {
   saveLibrary: (lib) => ipcRenderer.invoke('library:save', lib),
   readWaveformCache: (audioKey) => ipcRenderer.invoke('waveform:read', audioKey),
   writeWaveformCache: (audioKey, data) => ipcRenderer.invoke('waveform:write', audioKey, data),
+  exportAudio: (request) => ipcRenderer.invoke('audio:export', request),
   revealInFinder: (path) => ipcRenderer.invoke('shell:reveal', path),
 
   onMenuCommand: (cb) => {

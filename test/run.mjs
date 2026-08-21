@@ -27,6 +27,7 @@ const MODULES = [
   'src/shared/clips.ts',
   'src/shared/eq.ts',
   'src/shared/pointsOfInterest.ts',
+  'src/shared/wav.ts',
   'src/shared/deckList.ts'
 ]
 

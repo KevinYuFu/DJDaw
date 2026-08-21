@@ -16,24 +16,35 @@ between tracks.
 **Done**
 - The view itself, four stacked tracks, focus and `Tab` switching
 - Per-track rekordbox navigation
-
+- **EQ per track.** Trim, three-band EQ and a filter knob on all four decks,
+  in both the mixer and the editing rows.
 - **Cut / split.** `Ctrl+E` (or `Cmd+E`) splits at the playhead, plus a Cut
   button. Delete leaves a gap that plays silent; Shift+Delete closes it. Cuts
   snap to the beat grid when Quantize is on.
+- **Moving clips.** Drag a piece along its row in the MACRO view. Drops snap
+  to the grid when Quantize is on and go through `placeClip`, so a piece
+  dropped on a neighbour trims or splits it the way a DAW does. Overlaps are
+  gone with it: nothing can leave two clips claiming the same second.
+- **Export.** Render an edit out as a file. WAV or MP3, one row or all four
+  mixed, from the EXPORT button in the editing view. It runs the same worklet
+  as playback inside an `OfflineAudioContext`, so the file is what was heard.
+  MP3 is encoded in main and needs ffmpeg; without it the panel says so.
 
 **Next**
-- **Moving clips.** Dragging a piece along the row, and onto another row.
-  Two things are deliberately unfinished until then:
-  - **Overlaps.** If clips ever overlap, the earliest one wins. Deterministic,
-    but a DAW would trim the one underneath instead.
-  - **The grid drifts after a ripple delete.** The beat grid is in source time,
-    which equals timeline time while a track is only cut. A ripple delete
-    shifts later clips off it, so quantised cuts after one snap to the
-    pre-ripple grid. Re-gridding an edited row belongs with clip moving.
-- **EQ per track.** Done. Trim, three-band EQ and a filter knob on all four
-  decks, in both the mixer and the editing rows.
+- **Dragging between rows.** A piece moves along its own row today. Dropping
+  it on another row is not built.
+- **The grid drifts after a ripple delete.** The beat grid is in source time,
+  which equals timeline time while a track is only cut. A ripple delete shifts
+  later clips off it, so quantised cuts after one snap to the pre-ripple grid.
+  Moving clips does the same. An edited row needs re-gridding.
 
 **Later**
+- **Back into rekordbox.** An export has to be imported into rekordbox by
+  hand. Kevin wants it to land in his collection on its own. He has flagged it
+  as a later problem, so it is written down rather than started. Worth knowing
+  before it is: the XML we read is an export rekordbox writes, not a way in,
+  so this is a different problem from the mirror and not an extension of it.
+  **Ask Kevin first.**
 - **Automation.** Draw in fader, EQ and effect moves over time.
   **Ask Kevin first** — he has a specific system in mind for making this easy
   to draw. Do not design one.
@@ -49,6 +60,33 @@ between tracks.
   shown. The sidebar node is still a stub.
 
 ---
+
+## Master chain
+
+Kevin's idea, not scheduled. A master processing chain after the crossfader,
+with pluggable effects — a limiter first, since that is what stops the mix bus
+clipping the output.
+
+This matters more than it sounds. The channel crossover rotates phase between
+bands, which grows peaks: a real loud master measured **+7.3 dB of peak growth
+with every knob centred**, and +9.5 dB with the low boosted. Web Audio is float
+internally so nothing clips inside the graph, but it clips at the output device
+and again when an export is quantised. A master limiter is the standard answer
+and every DJ application has one.
+
+## Export
+
+- **Exports can clip.** A loud master played through an interpolating engine
+  peaks slightly above full scale — a real edit measured +1.0 dB — and the WAV
+  encoder clamps, so those peaks flatten. Nothing here introduces it, it is a
+  property of any interpolating player, but the export is where it becomes
+  permanent. Wants either a warning with the measured peak, or a touch of
+  headroom applied on render.
+- **Getting an edit back into rekordbox.** Kevin's stated want: an export
+  should land in his rekordbox collection without a manual import. rekordbox
+  has no import API, so the likely routes are writing into a watched folder, or
+  generating an XML that rekordbox can import. Not designed yet — **ask Kevin
+  first**, since it touches his real library.
 
 ## Analysis
 
@@ -83,9 +121,6 @@ between tracks.
 - **Stem separation.** Offline, quality over speed. Demucs via a Python
   sidecar. The deck engine already carries a stem layer array with per-layer
   gain, so playback needs no re-architecting — one layer today is the full mix.
-- **Export.** Render an edit out as a playable track. The deck worklet already
-  runs inside `OfflineAudioContext`, so the render will use identical DSP to
-  what was heard.
 
 ---
 

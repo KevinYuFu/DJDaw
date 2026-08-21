@@ -13,6 +13,8 @@ import { readFile, stat } from 'node:fs/promises'
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import type {
+  ExportRequest,
+  ExportResult,
   LibraryFile,
   RekordboxImportResult,
   RekordboxSyncResult,
@@ -20,6 +22,7 @@ import type {
 } from '@shared/types'
 import { parseRekordboxXml } from '@shared/rekordboxXml'
 import { trackFromRekordbox } from '@shared/rekordboxImport'
+import { exportAudio } from './export'
 import {
   getRekordboxXmlPath,
   importPaths,
@@ -334,6 +337,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('rekordbox:syncNow', (): Promise<RekordboxSyncResult> => syncRekordbox())
 
   ipcMain.handle('rekordbox:clear', (): Promise<void> => clearRekordboxXml())
+
+  // Never rejects: a failed export comes back as `error` on the result, so the
+  // renderer can show the reason instead of catching.
+  ipcMain.handle('audio:export', (_event, request: ExportRequest): Promise<ExportResult> =>
+    exportAudio(request)
+  )
 
   ipcMain.handle('shell:reveal', (_event, path: string): void => {
     shell.showItemInFolder(path)
