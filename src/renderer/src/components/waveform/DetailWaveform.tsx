@@ -371,7 +371,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       // already spoken for.
       if (selectClips && width > 0 && state.clips.length > 1) {
         const y = event.clientY - rect.top
-        if (y <= DEFAULT_CLIP_STYLE.handleHeight) {
+        const h = DEFAULT_CLIP_STYLE.handleHeight
+        if (y <= h || y >= rect.height - h) {
           const centre = deck.positionSeconds()
           const at = centre + (event.clientX - rect.left - width / 2) * (state.span / width)
           const grabbed = clipAt(state.clips, at)
