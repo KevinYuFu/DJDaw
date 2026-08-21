@@ -52,6 +52,20 @@ export interface BandColors {
  * flat arrays so a zoomed detail view can rebuild them every frame without
  * allocating.
  */
+/**
+ * A column grid fixed to the track: which column is leftmost, and exactly how
+ * long one is.
+ *
+ * Both numbers have to come from the caller. Working either of them out from a
+ * left edge that slides with the playhead leaves a rounding error, and that is
+ * enough to move a bucket boundary about while the audio under the column has
+ * not changed.
+ */
+export interface ColumnGrid {
+  index: number
+  columnSec: number
+}
+
 export interface WaveformColumns {
   /** Column count, i.e. the pixel width these peaks were built for. */
   width: number
@@ -115,7 +129,9 @@ export function fillColumns(
   cols: WaveformColumns,
   colFrom: number,
   colCount: number,
-  sampleRate: number
+  sampleRate: number,
+  /** Absolute bucket position of the first column and the width of one. */
+  bucketGrid?: { index: number; bucketsPerColumn: number; offsetBuckets: number }
 ): void {
   if (colCount <= 0) return
   const first = Math.max(0, colFrom)
@@ -138,8 +154,12 @@ export function fillColumns(
     // Recomputed from `fromSec` rather than accumulated: a per-column step
     // drifts audibly over a five-minute overview.
     const n = c - colFrom
-    const b0 = (fromSec + (span * n) / colCount) * bucketsPerSec
-    const b1 = (fromSec + (span * (n + 1)) / colCount) * bucketsPerSec
+    const b0 = bucketGrid
+      ? (bucketGrid.index + n) * bucketGrid.bucketsPerColumn + bucketGrid.offsetBuckets
+      : (fromSec + (span * n) / colCount) * bucketsPerSec
+    const b1 = bucketGrid
+      ? (bucketGrid.index + n + 1) * bucketGrid.bucketsPerColumn + bucketGrid.offsetBuckets
+      : (fromSec + (span * (n + 1)) / colCount) * bucketsPerSec
     let i0 = Math.floor(b0)
     let i1 = Math.ceil(b1) - 1
     // A bucket wider than the column: hold the value it covers.
@@ -190,7 +210,9 @@ export function buildClipColumns(
   toSec: number,
   width: number,
   sampleRate: number,
-  reuse?: WaveformColumns | null
+  reuse?: WaveformColumns | null,
+  /** Draw on a grid fixed to the track rather than to the view. */
+  grid?: ColumnGrid
 ): WaveformColumns {
   const count = Math.max(1, Math.floor(width))
   const cols = columnsFor(count, reuse)
@@ -201,6 +223,10 @@ export function buildClipColumns(
   const span = toSec - fromSec
   if (!(span > 0)) return cols
   const scale = count / span
+  const bucketsPerSec = wave.bucketSize > 0 ? sampleRate / wave.bucketSize : 0
+  const columnTime = grid
+    ? (c: number): number => (grid.index + c) * grid.columnSec
+    : (c: number): number => fromSec + c / scale
 
   for (const clip of clips) {
     if (clip.startSec >= toSec) break
@@ -216,9 +242,22 @@ export function buildClipColumns(
     // Take the source window from the rounded column edges, not from the clip
     // edges: the peaks then line up with the pixels they are drawn into, so a
     // cut does not shift the envelope by half a column.
-    const s0 = clip.sourceOffsetSec + fromSec + c0 / scale - clip.startSec
-    const s1 = clip.sourceOffsetSec + fromSec + c1 / scale - clip.startSec
-    fillColumns(wave, s0, s1, cols, c0, c1 - c0, sampleRate)
+    const s0 = clip.sourceOffsetSec + columnTime(c0) - clip.startSec
+    const s1 = clip.sourceOffsetSec + columnTime(c1) - clip.startSec
+    fillColumns(
+      wave,
+      s0,
+      s1,
+      cols,
+      c0,
+      c1 - c0,
+      sampleRate,
+      grid && {
+        index: grid.index + c0,
+        bucketsPerColumn: grid.columnSec * bucketsPerSec,
+        offsetBuckets: (clip.sourceOffsetSec - clip.startSec) * bucketsPerSec
+      }
+    )
   }
   return cols
 }
@@ -252,7 +291,9 @@ export function buildClipExtents(
   toSec: number,
   width: number,
   sampleRate: number,
-  reuse?: ColumnExtents | null
+  reuse?: ColumnExtents | null,
+  /** See the same argument on {@link buildClipColumns}. */
+  grid?: ColumnGrid
 ): ColumnExtents {
   const count = Math.max(1, Math.floor(width))
   const out =
@@ -284,7 +325,9 @@ export function buildClipExtents(
     if (c1 <= c0) continue
 
     const sourceAt = (col: number): number =>
-      clip.sourceOffsetSec + fromSec + col / scale - clip.startSec
+      clip.sourceOffsetSec +
+      (grid ? (grid.index + col) * grid.columnSec : fromSec + col / scale) -
+      clip.startSec
 
     for (let c = c0; c < c1; c++) {
       let i0 = Math.round(sourceAt(c) * sampleRate)
