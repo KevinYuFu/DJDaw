@@ -1036,41 +1036,35 @@ export interface ClipStyle {
   edgeColor: string
   edgeWidth: number
   /**
-   * Width of the break punched through everything at a division, in CSS px.
+   * Space left between two pieces, in CSS px.
    *
-   * A line on its own is not enough. The beat grid draws full-height white
-   * lines too, so a cut drawn as one more of those is lost among the bars —
-   * and a cut is the one mark on the strip that has to be unmissable. Nothing
-   * else on the strip leaves a hole, so a hole reads as a cut immediately.
+   * A cut is drawn as the gap between two cards rather than as a line through
+   * one waveform. The beat grid draws full-height white lines every bar, so a
+   * cut drawn as one more of those is camouflage — but nothing else on the
+   * strip is a shape, and two shapes side by side read as two pieces without
+   * anything having to be found.
    */
-  seamGap: number
-  /** Height of the block at each end of a division, in CSS px. */
-  seamCap: number
+  cardGap: number
+  /** Corner radius of a piece, in CSS px. */
+  cardRadius: number
   /** The selected piece's edges, drawn brighter and wider. */
   selectedEdgeColor: string
   selectedEdgeWidth: number
   /** Wash over the selected piece, painted under the waveform. */
   selectedFill: string
-  /**
-   * Wash over every other piece, painted under the waveform.
-   *
-   * This is what actually makes a cut visible. A division on its own is a
-   * vertical line, and the beat grid is full of those; alternating the ground
-   * under the pieces turns them into blocks, and a block boundary is read
-   * at a glance without hunting for the line that made it.
-   */
+  /** Ground under a piece, painted below the waveform. */
   bandFill: string
 }
 
 export const DEFAULT_CLIP_STYLE: ClipStyle = {
-  edgeColor: '#ffffff',
+  edgeColor: 'rgba(255,255,255,0.22)',
   edgeWidth: 1,
-  seamGap: 5,
-  seamCap: 7,
-  selectedEdgeColor: '#ffffff',
-  selectedEdgeWidth: 2,
-  selectedFill: 'rgba(255,255,255,0.09)',
-  bandFill: 'rgba(255,255,255,0.10)'
+  cardGap: 5,
+  cardRadius: 4,
+  selectedEdgeColor: 'rgba(255,255,255,0.85)',
+  selectedEdgeWidth: 1.5,
+  selectedFill: 'rgba(255,255,255,0.10)',
+  bandFill: 'rgba(255,255,255,0.045)'
 }
 
 /**
@@ -1082,14 +1076,14 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
  * the audio instead of as a cut.
  */
 export const OVERVIEW_CLIP_STYLE: ClipStyle = {
-  edgeColor: '#ffffff',
+  edgeColor: 'rgba(255,255,255,0.28)',
   edgeWidth: 1,
-  seamGap: 3,
-  seamCap: 4,
-  selectedEdgeColor: '#ffffff',
+  cardGap: 3,
+  cardRadius: 2,
+  selectedEdgeColor: 'rgba(255,255,255,0.9)',
   selectedEdgeWidth: 1,
-  selectedFill: 'rgba(255,255,255,0.13)',
-  bandFill: 'rgba(255,255,255,0.11)'
+  selectedFill: 'rgba(255,255,255,0.14)',
+  bandFill: 'rgba(255,255,255,0.06)'
 }
 
 /**
@@ -1144,6 +1138,21 @@ export function drawClipHighlight(
  * Nothing is drawn for a row that has never been cut: one piece covering the
  * whole track would just tint the strip for no reason.
  */
+/** A piece's rectangle on screen, with the gap between pieces taken out. */
+function cardRect(
+  clip: Clip,
+  from: number,
+  scale: number,
+  width: number,
+  style: ClipStyle
+): { x: number; w: number } | null {
+  const half = style.cardGap / 2
+  const x = (clip.startSec - from) * scale + half
+  const right = (clip.startSec + clip.durationSec - from) * scale - half
+  if (right <= 0 || x >= width) return null
+  return { x, w: right - x }
+}
+
 export function drawClipBands(
   ctx: CanvasRenderingContext2D,
   clips: readonly Clip[],
@@ -1159,14 +1168,14 @@ export function drawClipBands(
 
   ctx.save()
   ctx.fillStyle = style.bandFill
-  for (let i = 1; i < clips.length; i += 2) {
-    const clip = clips[i]
+  for (const clip of clips) {
     if (clip.startSec >= to) break
-    const end = clip.startSec + clip.durationSec
-    if (end <= from) continue
-    const x0 = Math.max(0, (clip.startSec - from) * scale)
-    const x1 = Math.min(width, (end - from) * scale)
-    if (x1 > x0) ctx.fillRect(x0, 0, x1 - x0, height)
+    if (clip.startSec + clip.durationSec <= from) continue
+    const r = cardRect(clip, from, scale, width, style)
+    if (!r) continue
+    ctx.beginPath()
+    ctx.roundRect(r.x, 0.5, r.w, height - 1, style.cardRadius)
+    ctx.fill()
   }
   ctx.restore()
 }
@@ -1182,68 +1191,34 @@ export function drawClipEdges(
   style: ClipStyle = DEFAULT_CLIP_STYLE
 ): void {
   const span = to - from
-  if (!(span > 0) || width <= 0) return
+  if (clips.length < 2 || !(span > 0) || width <= 0) return
   const scale = width / span
 
   ctx.save()
-  for (let i = 0; i < clips.length; i++) {
-    const clip = clips[i]
+  for (const clip of clips) {
     if (clip.startSec >= to) break
-    const end = clip.startSec + clip.durationSec
-    if (end <= from) continue
+    if (clip.startSec + clip.durationSec <= from) continue
+    const r = cardRect(clip, from, scale, width, style)
+    if (!r) continue
 
     const selected = clip.id === selectedId
-    const prev = clips[i - 1]
-    const next = clips[i + 1]
-
-    // The seam between two touching pieces is one line, drawn as the later
-    // piece's start, and it belongs to the selection if either side is selected.
-    if (clip.startSec > 0) {
-      const afterSelected =
-        prev !== undefined &&
-        prev.id === selectedId &&
-        prev.startSec + prev.durationSec >= clip.startSec
-      edge(ctx, (clip.startSec - from) * scale, selected || afterSelected, style, width, height)
+    const w = selected ? style.selectedEdgeWidth : style.edgeWidth
+    // Half a line in, so a 1px outline lands on a pixel instead of across two.
+    const inset = w / 2
+    ctx.beginPath()
+    ctx.roundRect(r.x + inset, inset, r.w - w, height - w, style.cardRadius)
+    if (selected) {
+      ctx.fillStyle = style.selectedFill
+      ctx.fill()
     }
-
-    // A trailing edge only where the audio actually stops: a gap after this
-    // piece, or the selected piece sitting at the end of the row.
-    if (next !== undefined ? next.startSec > end : selected) {
-      const w = selected ? style.selectedEdgeWidth : style.edgeWidth
-      edge(ctx, (end - from) * scale - w, selected, style, width, height)
-    }
+    ctx.lineWidth = w
+    ctx.strokeStyle = selected ? style.selectedEdgeColor : style.edgeColor
+    ctx.stroke()
   }
   ctx.restore()
 }
 
 /** One division, skipped rather than half drawn when it falls outside the view. */
-function edge(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  strong: boolean,
-  style: ClipStyle,
-  width: number,
-  height: number
-): void {
-  const w = strong ? style.selectedEdgeWidth : style.edgeWidth
-  const gap = style.seamGap
-  if (x < -gap || x > width + gap) return
-
-  const left = Math.round(x) - Math.floor((gap - w) / 2)
-  // Punch through the waveform and the beat grid alike. A break is the part
-  // that reads as a cut; the line and the blocks only say where exactly.
-  if (gap > 0) ctx.clearRect(left, 0, gap, height)
-
-  ctx.fillStyle = strong ? style.selectedEdgeColor : style.edgeColor
-  ctx.fillRect(Math.round(x), 0, w, height)
-  // A block at each end, so the cut is still obvious across a quiet passage
-  // where there is no waveform for the break to interrupt.
-  const cap = style.seamCap
-  if (cap > 0) {
-    ctx.fillRect(left, 0, gap, cap)
-    ctx.fillRect(left, height - cap, gap, cap)
-  }
-}
 
 /**
  * How a piece being dragged is previewed at the place it would land.

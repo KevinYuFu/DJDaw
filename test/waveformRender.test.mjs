@@ -66,7 +66,17 @@ function stubCtx() {
     restore() {},
     fillRect(x, y, w, h) {
       rects.push({ x: Math.round(x), w: Math.round(w), fill: this.fillStyle })
-    }
+    },
+    beginPath() {
+      this.pending = null
+    },
+    roundRect(x, y, w) {
+      this.pending = { x: Math.round(x), w: Math.round(w) }
+    },
+    fill() {
+      if (this.pending) rects.push({ ...this.pending, fill: this.fillStyle })
+    },
+    stroke() {}
   }
 }
 const clip = (startSec, durationSec, id) => ({ id, startSec, durationSec, sourceOffsetSec: 0 })
@@ -86,16 +96,18 @@ const clip = (startSec, durationSec, id) => ({ id, startSec, durationSec, source
   const ctx = stubCtx()
   const clips = [clip(0, 10, 'a'), clip(10, 10, 'b'), clip(20, 10, 'c'), clip(30, 10, 'd')]
   drawClipBands(ctx, clips, 0, 40, 400, 50)
-  ok(`every other piece is washed — ${ctx.rects.length} rects`, ctx.rects.length === 2)
-  ok('the second piece', ctx.rects[0].x === 100 && ctx.rects[0].w === 100)
-  ok('and the fourth', ctx.rects[1].x === 300 && ctx.rects[1].w === 100)
+  ok(`every piece gets a card — ${ctx.rects.length}`, ctx.rects.length === 4)
   ok('in the band colour', ctx.rects.every((r) => r.fill === DEFAULT_CLIP_STYLE.bandFill))
+  const gap = DEFAULT_CLIP_STYLE.cardGap
+  ok(`each is inset by half the gap — ${JSON.stringify(ctx.rects[1])}`,
+    Math.abs(ctx.rects[1].x - (100 + gap / 2)) < 1 && Math.abs(ctx.rects[1].w - (100 - gap)) < 1)
+  ok('so there is space between two of them',
+    ctx.rects[1].x > ctx.rects[0].x + ctx.rects[0].w)
 }
 {
   // Only what is on screen, clipped to the edges.
   const ctx = stubCtx()
   const clips = [clip(0, 10, 'a'), clip(10, 10, 'b'), clip(20, 10, 'c')]
   drawClipBands(ctx, clips, 15, 25, 100, 50)
-  ok(`a piece off the left is clipped, not skipped — ${JSON.stringify(ctx.rects)}`, ctx.rects.length === 1)
-  ok('starting at the edge', ctx.rects[0].x === 0 && ctx.rects[0].w === 50)
+  ok(`the pieces on screen are drawn — ${JSON.stringify(ctx.rects)}`, ctx.rects.length === 2)
 }
