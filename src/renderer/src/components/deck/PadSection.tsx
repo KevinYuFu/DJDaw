@@ -232,7 +232,8 @@ export function PadSection({ deckId }: PadSectionProps): ReactElement {
   const deck = useDecks((s) => s.decks[deckId])
   const track = useLibrary((s) => (deck.trackId ? s.trackById(deck.trackId) : undefined))
 
-  const held = useRef<HeldPad | null>(null)
+  // Keyed by pointerId: two fingers can hold two pads, each with its own release.
+  const held = useRef(new Map<number, HeldPad>())
 
   const ready = deck.status === 'ready'
   const hasGrid = ready && track?.grid != null
@@ -248,8 +249,8 @@ export function PadSection({ deckId }: PadSectionProps): ReactElement {
   // every pad went disabled — takes its release with it. Nothing else would
   // ever end that preview, so end it here.
   useEffect(() => {
-    if (ready || !held.current) return
-    held.current = null
+    if (ready || held.current.size === 0) return
+    held.current.clear()
     useDecks.getState().endPreview(deckId)
   }, [ready, deckId])
 
@@ -257,8 +258,8 @@ export function PadSection({ deckId }: PadSectionProps): ReactElement {
   // pointerup, and a stuck preview outlives the component that started it.
   useEffect(
     () => () => {
-      if (!held.current) return
-      held.current = null
+      if (held.current.size === 0) return
+      held.current.clear()
       useDecks.getState().endPreview(deckId)
     },
     [deckId]
@@ -275,7 +276,7 @@ export function PadSection({ deckId }: PadSectionProps): ReactElement {
     // the pointer is still over the pad, and a release a few pixels away
     // leaves the preview running until the track hits its end.
     e.currentTarget.setPointerCapture(e.pointerId)
-    held.current = { pointerId: e.pointerId, index }
+    held.current.set(e.pointerId, { pointerId: e.pointerId, index })
     useDecks.getState().triggerHotCue(deckId, index)
   }
 
@@ -285,9 +286,9 @@ export function PadSection({ deckId }: PadSectionProps): ReactElement {
   // that never fire as either — a capture torn away by the browser, say.
   // Whichever arrives first clears the ref, so the rest are no-ops.
   const onPadEnd = (e: ReactPointerEvent<HTMLButtonElement>): void => {
-    const hold = held.current
-    if (!hold || hold.pointerId !== e.pointerId) return
-    held.current = null
+    const hold = held.current.get(e.pointerId)
+    if (!hold) return
+    held.current.delete(e.pointerId)
     useDecks.getState().releaseHotCue(deckId, hold.index)
   }
 
