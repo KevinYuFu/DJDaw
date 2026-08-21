@@ -26,7 +26,8 @@ const MODULES = [
   'src/shared/playlistTree.ts',
   'src/shared/clips.ts',
   'src/shared/eq.ts',
-  'src/shared/pointsOfInterest.ts'
+  'src/shared/pointsOfInterest.ts',
+  'src/shared/deckList.ts'
 ]
 
 /** The renderer's path aliases, which Vite supplies in the app. */

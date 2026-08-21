@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactElement } from 'react'
+import { DECK_IDS } from '@shared/types'
 import type { DeckId, Track } from '@shared/types'
+import { describeDecks } from '@shared/deckList'
 import { formatBpm, formatDuration } from '@renderer/core/format'
 import { makeGrid } from '@renderer/core/beatgrid'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
@@ -89,7 +91,6 @@ function messageOf(err: unknown): string {
   return String(err)
 }
 
-const DECK_IDS: readonly DeckId[] = ['A', 'B']
 
 /**
  * Track ids with an off-deck analysis running. The guard is module level
@@ -477,7 +478,7 @@ export function TrackTable({ onNotice }: TrackTableProps): ReactElement {
       const decks = useDecks.getState()
       const loaded = DECK_IDS.filter((id) => decks.decks[id].trackId === track.id)
       if (loaded.length > 0) {
-        const where = loaded.map((id) => `deck ${id}`).join(' and ')
+        const where = describeDecks(loaded)
         const held = loaded.some((id) => decks.decks[id].playing) ? 'playing on' : 'loaded on'
         const eject = loaded.length > 1 ? 'eject those decks' : 'eject that deck'
         if (!window.confirm(`"${track.title}" is ${held} ${where}.\n\nRemove it from the collection and ${eject}?`)) {
