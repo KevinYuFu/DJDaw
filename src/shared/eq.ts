@@ -1,15 +1,16 @@
 /**
  * Mixer channel maths: trim, three-band EQ and the filter knob.
  *
- * The EQ is a crossover-and-sum, not shelving filters. The signal is split into
- * three bands, each band gets its own gain, and they are summed. That is how
- * Ableton's EQ Three and every hardware isolator work, and it is the only
- * topology that can truly kill a band — a shelf can only ever lean on one.
- *
- * Two floors, because DJ hardware has two:
- *   EQ mode       cuts to -26 dB, which is what a Pioneer DJM channel EQ does
- *   ISOLATOR mode cuts to silence, which is what a DJM's isolator mode, an
- *                 Allen & Heath Xone, and EQ Three all do
+ * Two modes, and each uses the circuit hardware uses for that job:
+ *   EQ mode       shelving filters, cutting to -26 dB like a Pioneer DJM
+ *                 channel EQ. A shelf at 0 dB is an identity, so a centred
+ *                 channel is genuinely transparent.
+ *   ISOLATOR mode a crossover-and-sum, cutting to silence like a DJM's
+ *                 isolator mode, an Allen & Heath Xone, or EQ Three. Only a
+ *                 crossover can truly kill a band; the price is that it
+ *                 rotates phase between the bands whatever the knobs say,
+ *                 which is what an isolator is and is accepted because you
+ *                 reach for it to remove a band.
  * rekordbox exposes exactly this as a preference, and Kevin's DDJ-FLX10 has an
  * isolator mode on shift+CUE, so both belong here.
  *
@@ -42,6 +43,47 @@ export const CROSSOVER_HZ = { low: 250, high: 2500 } as const
  * EQ Three is measured to have.
  */
 export const CROSSOVER_Q = Math.SQRT1_2
+
+/**
+ * Shelf **corner** frequencies for EQ mode, in Hz.
+ *
+ * A corner is not a crossover point, and the two must never be swapped again:
+ * a crossover splits the signal in two, a shelf leans on everything past its
+ * corner while leaving the rest alone. That difference is the whole reason EQ
+ * mode exists — a shelf at 0 dB is mathematically an identity, so a centred
+ * channel passes the signal through untouched, while a crossover-and-sum
+ * rotates phase between its bands whatever the knobs say and grew a loud master
+ * by +7.3 dB with every knob centred.
+ *
+ * The numbers are deliberately {@link CROSSOVER_HZ}'s, so the low knob moves
+ * the same part of the spectrum in either mode. Pioneer quotes 70 Hz / 1 kHz /
+ * 13 kHz for a DJM channel EQ, but those come from a different split and 13 kHz
+ * leaves most of the highs unmoved, so they are not the numbers to copy.
+ */
+export const SHELF_CORNER_HZ = { low: CROSSOVER_HZ.low, high: CROSSOVER_HZ.high } as const
+
+/**
+ * Centre of the mid bell, in Hz.
+ *
+ * The geometric mean of the two corners, which is the middle of the mid band by
+ * ear: frequency is heard in ratios, so the point equidistant from 250 Hz and
+ * 2.5 kHz is 790 Hz, not 1375 Hz.
+ */
+export const MID_BELL_HZ = Math.sqrt(SHELF_CORNER_HZ.low * SHELF_CORNER_HZ.high)
+
+/**
+ * Q of the mid bell. A **real Q factor**, unlike {@link CROSSOVER_Q}, which a
+ * Web Audio low-pass reads in decibels.
+ *
+ * Q is centre frequency over bandwidth, so this is the Q whose half-gain points
+ * land exactly on the two shelf corners: the bell covers the band the shelves
+ * leave to it and no more. Much wider than a mixing EQ's mid, on purpose — a
+ * narrower bell leaves the octave either side of it barely touched, so a full
+ * cut on all three knobs measured -17 dB in the gaps instead of the -26 dB the
+ * knobs claim.
+ */
+export const MID_BELL_Q =
+  MID_BELL_HZ / (SHELF_CORNER_HZ.high - SHELF_CORNER_HZ.low)
 
 export type EqMode = 'eq' | 'isolator'
 
