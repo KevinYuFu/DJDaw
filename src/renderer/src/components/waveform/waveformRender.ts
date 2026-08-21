@@ -1044,6 +1044,16 @@ export interface ClipStyle {
   cardGap: number
   /** Corner radius of a piece, in CSS px. */
   cardRadius: number
+  /**
+   * Height of the bar across the top of a piece, in CSS px. Zero draws none.
+   *
+   * It is what a piece is picked up by. Dragging anywhere on the waveform is
+   * a scrub, so moving a piece needs somewhere of its own to be grabbed, and
+   * a bar along the top is where a DAW puts it.
+   */
+  handleHeight: number
+  handleFill: string
+  selectedHandleFill: string
   /** The selected piece's edges, drawn brighter and wider. */
   selectedEdgeColor: string
   selectedEdgeWidth: number
@@ -1058,6 +1068,9 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
   edgeWidth: 1.5,
   cardGap: 0,
   cardRadius: 3,
+  handleHeight: 11,
+  handleFill: 'rgba(255,255,255,0.3)',
+  selectedHandleFill: 'rgba(255,255,255,0.62)',
   selectedEdgeColor: '#ffffff',
   selectedEdgeWidth: 2.5,
   selectedFill: 'rgba(255,255,255,0.12)',
@@ -1077,6 +1090,9 @@ export const OVERVIEW_CLIP_STYLE: ClipStyle = {
   edgeWidth: 1,
   cardGap: 0,
   cardRadius: 2,
+  handleHeight: 0,
+  handleFill: 'rgba(255,255,255,0.3)',
+  selectedHandleFill: 'rgba(255,255,255,0.6)',
   selectedEdgeColor: '#ffffff',
   selectedEdgeWidth: 1.5,
   selectedFill: 'rgba(255,255,255,0.16)',
@@ -1207,6 +1223,19 @@ export function drawClipEdges(
     ctx.roundRect(r.x + inset, inset, r.w - w, height - w, style.cardRadius)
     if (selected) {
       ctx.fillStyle = style.selectedFill
+      ctx.fill()
+    }
+
+    // The grab bar, filling the top of the card.
+    if (style.handleHeight > 0) {
+      ctx.beginPath()
+      ctx.roundRect(r.x + inset, inset, r.w - w, style.handleHeight, [
+        style.cardRadius,
+        style.cardRadius,
+        0,
+        0
+      ])
+      ctx.fillStyle = selected ? style.selectedHandleFill : style.handleFill
       ctx.fill()
     }
     ctx.lineWidth = w
