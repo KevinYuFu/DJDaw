@@ -610,3 +610,63 @@
 .edit-export__go:not(:disabled):hover {
   filter: brightness(1.1);
 }
+
+/* Trim, as a horizontal slider rather than a knob: an edit row is an
+   arrangement track, and a level on one reads better as a bar than a dial. */
+.edit-trim {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 2px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.edit-trim.is-disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.edit-trim__track {
+  position: relative;
+  width: 100%;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  overflow: hidden;
+}
+
+.edit-trim__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--text-dim);
+  opacity: 0.55;
+}
+.edit-trim:not(.is-disabled):hover .edit-trim__fill {
+  opacity: 0.75;
+}
+.edit-trim.is-moved .edit-trim__fill {
+  background: var(--deck-color, var(--accent));
+  opacity: 0.85;
+}
+
+/* 0 dB. Trim cuts and boosts, so the slider needs the flat point marked. */
+.edit-trim__unity {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.edit-trim__cap {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 1px;
+  background: var(--text);
+}
