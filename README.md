@@ -43,6 +43,7 @@ Chromium refuses to decode (some AIFF and WMA files).
 | Hot cues | 8 pads A–H, set / jump / hold-to-preview / delete, saved with the track |
 | Beat jump | Grid-walking, quantised, `Q` back 16 and `W` forward 16 |
 | Waveforms | Full-track overview and a centre-locked scrolling detail view |
+| Editing | Four stacked tracks, cut at the playhead, per-channel EQ and filter |
 
 ## Importing your rekordbox collection
 
@@ -88,11 +89,9 @@ track. Analysis results never overwrite a grid you edited.
 
 ## What is deliberately not built yet
 
-EQ, filter, trim and the crossfader are drawn because the window should look
-like rekordbox, but only the channel faders and crossfader are wired — the EQ
-DSP is not implemented and those controls are disabled rather than faked.
-Key detection, master tempo (key lock), stem separation, the arrangement
-timeline and track export are the next milestones.
+Key detection, master tempo (key lock), stem separation and track export are
+the next milestones. The EQ cuts to -26 dB like a DJM's EQ rather than to
+silence; isolator-style full kill needs a crossover and is not built.
 
 ## Keyboard
 

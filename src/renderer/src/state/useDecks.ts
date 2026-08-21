@@ -10,6 +10,8 @@ import {
   wholeTrackClip
 } from '@shared/clips'
 import type { Clip } from '@shared/clips'
+import { CENTRE, flatChannel, isFlat } from '@shared/eq'
+import type { ChannelEq } from '@shared/eq'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
 import { decodeTrack } from '@renderer/audio/decode'
@@ -91,6 +93,14 @@ export interface DeckState {
   clips: Clip[]
   /** The clip the edit view has selected, or null. */
   selectedClipId: string | null
+  /**
+   * Trim, three-band EQ and filter positions for this channel, 0.5 flat.
+   *
+   * Session state belonging to the channel rather than to the track, so it
+   * outlives a track swap: a DJ sets a channel up and then changes what runs
+   * through it. Ejecting the deck is the channel going away, and does clear it.
+   */
+  eq: ChannelEq
 }
 
 /** Whether a cut happened, and if not, short plain text saying why. */
@@ -158,6 +168,12 @@ export interface DecksState {
   selectClip(deck: DeckId, clipId: string | null): void
   /** Delete the selected clip, leaving a gap, or closing it when `ripple`. */
   deleteSelectedClip(deck: DeckId, ripple: boolean): void
+  /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
+  setChannelKnob(deck: DeckId, knob: keyof ChannelEq, value: number): void
+  /** Put one knob back to centre. What a double-click on a knob does. */
+  resetChannelKnob(deck: DeckId, knob: keyof ChannelEq): void
+  /** Put the whole channel back to flat. */
+  resetChannelEq(deck: DeckId): void
 }
 
 /** Short, plain text for a cut that did nothing. */
@@ -257,7 +273,8 @@ function emptyDeck(): DeckState {
     waveform: null,
     buffer: null,
     clips: [],
-    selectedClipId: null
+    selectedClipId: null,
+    eq: flatChannel()
   }
 }
 
@@ -418,6 +435,37 @@ function setClips(ctx: DeckContext, clips: Clip[], patch: Partial<DeckState> = {
 }
 
 /**
+ * Store a channel's knob positions and hand the whole set to the engine.
+ *
+ * Like clips, EQ is per-deck session state and not track data, so nothing here
+ * goes through {@link writeTrack}: turning a knob must not fork a rekordbox
+ * mirrored track. There is nothing about the file to write down — the same
+ * track loaded on two decks is EQ'd differently on each — and a fork would
+ * split the cues and grid off from the record the browser is showing.
+ *
+ * The engine only hears about it once it has handed this deck out; `deck()`
+ * throws before that, so knobs moved on an empty deck are pushed by the next
+ * load instead.
+ */
+function setEq(id: DeckId, eq: ChannelEq): void {
+  patchDeck(id, { eq })
+  applyEq(id, eq)
+}
+
+/**
+ * Hand one channel's knobs to the engine at the current EQ mode.
+ *
+ * The mode is read here rather than stored per deck because it is a global
+ * preference: see {@link useSettings}'s `eqMode`. Nothing is written to the
+ * store, so this is also the way a mode change reaches a channel whose knobs
+ * have not moved.
+ */
+function applyEq(id: DeckId, eq: ChannelEq): void {
+  if (!runtime[id].watching) return
+  AudioEngine.shared().deck(id).setChannelEq(eq, useSettings.getState().eqMode)
+}
+
+/**
  * Mirror the engine's own view of playback into the store. The worklet is the
  * authority — it is what actually stops at the end of the file — so the
  * optimistic `playing` flags the actions set are corrected from here.
@@ -548,6 +596,10 @@ export const useDecks = create<DecksState>()(() => ({
 
       deck = engine.deck(id)
       watchDeck(id, deck)
+      // The channel keeps whatever it was set to, so a new track drops into an
+      // EQ'd channel rather than resetting it. This also lands knobs that were
+      // moved before the engine existed.
+      applyEq(id, useDecks.getState().decks[id].eq)
 
       // A deck that is still running must stop before its audio is replaced.
       if (deck.playing) deck.pause()
@@ -628,10 +680,14 @@ export const useDecks = create<DecksState>()(() => ({
 
     // `watching` is only set once the engine has handed this deck out, so it
     // doubles as "there is something to stop"; `deck()` throws before that.
+    // Ejecting is the channel going away, not a track swap, so the knobs go
+    // back to flat with it.
+    const eq = flatChannel()
     if (rt.watching) {
       const deck = AudioEngine.shared().deck(id)
       if (deck.playing) deck.pause()
       deck.setLoop(false, 0, 0)
+      applyEq(id, eq)
       deck.unload()
     }
     patchDeck(id, {
@@ -643,7 +699,8 @@ export const useDecks = create<DecksState>()(() => ({
       buffer: null,
       loop: null,
       clips: [],
-      selectedClipId: null
+      selectedClipId: null,
+      eq
     })
   },
 
@@ -966,6 +1023,28 @@ export const useDecks = create<DecksState>()(() => ({
     // plays nothing. The buffer, waveform and track stay put, so the row is a
     // silent piece of the edit rather than an empty slot.
     setClips(ctx, clips, { selectedClipId: null })
+  },
+
+  setChannelKnob(id, knob, value) {
+    if (!Number.isFinite(value)) return
+    const eq = useDecks.getState().decks[id].eq
+    const next = clamp(value, 0, 1)
+    // Knobs are dragged, so this runs at pointer-move rate and the same value
+    // arrives again and again. Dropping the repeats keeps a drag from waking
+    // every subscriber for a move that changes nothing.
+    if (eq[knob] === next) return
+    const updated: ChannelEq = { ...eq }
+    updated[knob] = next
+    setEq(id, updated)
+  },
+
+  resetChannelKnob(id, knob) {
+    useDecks.getState().setChannelKnob(id, knob, CENTRE)
+  },
+
+  resetChannelEq(id) {
+    if (isFlat(useDecks.getState().decks[id].eq)) return
+    setEq(id, flatChannel())
   }
 }))
 
@@ -989,4 +1068,19 @@ useLibrary.subscribe((state, prev) => {
     // left both — a deleted local track, or one dropped by a sync — ejects.
     if (!state.tracks[trackId] && !state.mirror[trackId]) useDecks.getState().unloadDeck(id)
   }
+})
+
+/**
+ * The EQ floor is one global preference, so changing it has to reach every
+ * channel at once.
+ *
+ * Without this a channel already held at full cut would keep the old floor
+ * until its knob moved again — switching to ISOLATOR would leave the one
+ * channel it matters most on still leaking at -26 dB. Only the engine is
+ * touched: the knob positions themselves do not change, so there is nothing
+ * to write to the store.
+ */
+useSettings.subscribe((state, prev) => {
+  if (state.eqMode === prev.eqMode) return
+  for (const id of DECK_IDS) applyEq(id, useDecks.getState().decks[id].eq)
 })

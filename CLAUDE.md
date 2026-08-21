@@ -33,6 +33,11 @@ launching subagents.** Subagents inherit whatever branch the tree is on. I have
 shipped work onto the wrong branch once by switching to test something and
 forgetting to switch back — verify, do not assume.
 
+**Check `git branch --show-current` before starting any work, and again before
+launching subagents.** Subagents inherit whatever branch the tree is on. I have
+already shipped work onto the wrong branch once by switching branches to test
+something and forgetting to switch back — verify, do not assume.
+
 After each code change, push the branch and open (or update) a pull request, so
 Kevin can review it on GitHub. He approves and merges — I do not merge.
 

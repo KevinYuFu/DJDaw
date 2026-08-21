@@ -5,8 +5,10 @@
  *
  * The whole sheet is a fight for vertical height. Four rows have to fit
  * without scrolling, so the row keeps only what a compact deck needs — badge,
- * artwork, titles, readouts, transport and pads — and gives the rest to the
- * waveform, which is the part an edit is actually read from.
+ * artwork, titles, readouts, transport, EQ and pads — and gives the rest to the
+ * waveform, which is the part an edit is actually read from. The controls
+ * column is beside the waveform, not above it, so the EQ strip costs the
+ * waveform no height at all.
  */
 
 .edit-view {
@@ -339,4 +341,108 @@
 }
 .edit-pad:not(:disabled):active {
   transform: translateY(1px);
+}
+
+/* ------------------------------------------------------------- channel EQ */
+
+/*
+ * Trim, three-band EQ and filter for the row, in one strip between the
+ * transport and the pads. Rotary rather than sliders: the arc filling out from
+ * 12 o'clock says how far from flat a knob is at a glance, which is the
+ * question this row has to answer, and it says it in 26px.
+ */
+.edit-eq {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  /* The anchor for the drag readout, which floats above the strip the way the
+     cut notice floats above the transport. There is no height for a line. */
+  position: relative;
+}
+
+/* The drag readout carries a name and a value — `Low KILL`, `Filter HPF 18.0k`
+   — and the widest of those must stay on one line: this note is anchored to the
+   bottom of the strip, so a second line would grow up over the waveform. */
+.edit-eq .edit-note {
+  white-space: nowrap;
+}
+
+/* A channel that is doing something is marked on the row itself, not just on
+   the knob: a killed bass on row 3 has to be visible without reading knobs. */
+.edit-track.is-eq-on .edit-eq {
+  border-color: var(--cue);
+  box-shadow: 0 0 8px var(--cue-glow);
+}
+
+.edit-knob {
+  flex: 0 0 auto;
+  width: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 0;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.edit-knob.is-disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.edit-knob:not(.is-disabled):hover .edit-knob__body {
+  fill: var(--bg-raised-hover);
+}
+
+.edit-knob__label {
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+.edit-knob.is-moved .edit-knob__label {
+  color: var(--text);
+}
+
+.edit-knob__body {
+  fill: var(--bg-raised);
+  stroke: var(--bg-waveform);
+  stroke-width: 1;
+}
+.edit-knob__track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.edit-knob__value {
+  fill: none;
+  stroke: var(--track-color);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.edit-knob__pointer {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+/* Tighter than the transport buttons: it holds four letters, and the five
+   knobs beside it have first call on the width. */
+.edit-btn--flat {
+  flex: 0 0 auto;
+  height: 22px;
+  margin-left: auto;
+  padding: 0 9px;
+  border-radius: 11px;
+  font-size: 9px;
+}
+.edit-btn--flat.is-lit,
+.edit-btn--flat.is-lit:hover:not(:disabled) {
+  background: var(--cue);
+  border-color: var(--cue);
+  color: var(--text-inverse);
 }
