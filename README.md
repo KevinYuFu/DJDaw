@@ -36,11 +36,12 @@ Chromium refuses to decode (some AIFF and WMA files).
 | | |
 | --- | --- |
 | Import | Native file dialog, tags and artwork via `music-metadata`, persistent collection |
-| rekordbox | Import a whole collection from a rekordbox XML export, with beat grids, hot cues and memory cues |
+| rekordbox | Import a whole collection from a rekordbox XML export, with beat grids, hot cues and locators |
 | Analysis | Three-band waveform + tempo and downbeat detection, cached to disk |
 | Beat grid | Editable: nudge, set downbeat, set BPM, tap tempo, ×2 / ÷2 |
 | Transport | Play/pause, CDJ cue semantics, tempo fader, scrub by waveform or jog wheel |
 | Hot cues | 8 pads A–H, set / jump / hold-to-preview / delete, saved with the track |
+| Locators | Drop a marker while listening, named or not, then jump between markers |
 | Beat jump | Grid-walking, quantised, `Q` back 16 and `W` forward 16 |
 | Waveforms | Full-track overview and a centre-locked scrolling detail view |
 | Editing | Four stacked tracks, cut at the playhead, per-channel EQ and filter |
@@ -50,8 +51,8 @@ Chromium refuses to decode (some AIFF and WMA files).
 `REKORDBOX XML` in the browser, or File > Import rekordbox Collection
 (`Cmd+Shift+O`). It reads a collection exported from rekordbox and brings over
 the analysis you already paid for: beat grids (including tracks with tempo
-changes), hot cues A-H with their colours and names, memory cues, the CUE
-point, key, rating, colour tag and genre. A track that arrives with a rekordbox
+changes), hot cues A-H with their colours and names, memory cues (locators
+here), the CUE point, key, rating, colour tag and genre. A track that arrives with a rekordbox
 grid is marked analysed, so the deck trusts it instead of re-detecting; only the
 waveform is generated locally on first load.
 
@@ -102,7 +103,11 @@ silence; isolator-style full kill needs a crossover and is not built.
 | `Shift+Q` / `Shift+W` | Halve / double the beat-jump size |
 | `1`–`8` | Hot cue A–H (set if empty, jump if set) |
 | `Shift+1`–`8` | Delete hot cue |
-| `C` | Cue |
+| `A` | Load the selected library track |
+| `Z` | Cue |
+| `X` | Drop a locator at the playhead |
+| `C` | Delete the locator at the playhead |
+| `D` / `F` | Jump to the next / previous point of interest |
 | `L`, `[`, `]` | Loop toggle, halve, double |
 | `,` / `.` | Nudge the grid |
 | `G` | Set downbeat at the playhead |
@@ -111,6 +116,14 @@ silence; isolator-style full kill needs a crossover and is not built.
 | `-` / `=` | Waveform zoom |
 | `←` / `→` | Nudge the playhead one beat |
 | `Tab` | Switch focused deck |
+
+A **point of interest** is a locator, a hot cue or the CUE point. `D` and `F`
+walk all of them in time order.
+
+**Locators** are markers you drop while a track plays, the way locators work in
+Ableton. Drop one with `X`, jump between them with `D` and `F`. They are drawn
+on both waveforms, with their name where there is room. They are the same thing
+rekordbox calls a memory cue, so an import brings yours over.
 
 ## Design
 

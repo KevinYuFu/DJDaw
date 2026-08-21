@@ -8,8 +8,7 @@ import {
   GRID_DOWNBEAT_COLOR,
   HOT_CUE_COLORS,
   HOT_CUE_LABELS,
-  LOOP_COLOR,
-  MEMORY_CUE_COLOR
+  LOOP_COLOR
 } from '@renderer/core/constants'
 
 /**
@@ -25,14 +24,21 @@ import {
 /** A peak too small to fill a pixel still draws a hairline rather than vanishing. */
 const MIN_BAR_HALF_PX = 0.5
 
-/** Memory cues sit behind the hot cues and must not compete with them. */
-const MEMORY_CUE_ALPHA = 0.55
-
 /**
  * Playhead colour. Deliberately not in `core/constants.ts`: it is a property of
  * these two views rather than of the palette, and both take it from here.
  */
 export const PLAYHEAD_COLOR = '#ffffff'
+
+/**
+ * Locator colour, here for the same reason {@link PLAYHEAD_COLOR} is.
+ *
+ * Neutral on purpose. Every hue on a waveform is already spoken for — the
+ * eight pad colours are hot cues and red is the CUE point — so a locator that
+ * picked a colour would read as one of those. Off-white belongs to none of
+ * them and still carries dark label text.
+ */
+export const LOCATOR_COLOR = '#dfe6f2'
 
 /** Waveform band colours, as `BAND_COLORS` / `BAND_COLORS_DIM` supply them. */
 export interface BandColors {
@@ -355,13 +361,199 @@ export function drawBeatGrid(
   ctx.restore()
 }
 
+export interface LocatorStyle {
+  color: string
+  /** Line width and opacity. The line marks the exact position. */
+  lineWidth: number
+  lineAlpha: number
+  /** Dash pattern for the line; empty draws it solid. */
+  dash: number[]
+  /** Top edge of the tag band, CSS pixels from the top of the strip. */
+  tagTop: number
+  tagHeight: number
+  /** Tag width when there is no name to show, or no room to show it. */
+  nubWidth: number
+  /** Length of the pointed end. Dropped on a tag too narrow to keep it. */
+  tailWidth: number
+  /** Names in the tags. Off in the MACRO view, where they will not fit. */
+  labels: boolean
+  font: string
+  labelColor: string
+  labelPadX: number
+  maxTagWidth: number
+  /** Markers closer together than this are thinned out. */
+  minGapPx: number
+}
+
+/** MICRO view: room for a name, so locators carry one. */
+export const DETAIL_LOCATOR_STYLE: LocatorStyle = {
+  color: LOCATOR_COLOR,
+  lineWidth: 1,
+  lineAlpha: 0.72,
+  // Dashed, because colour alone is not enough to separate a locator from a
+  // hot cue at a glance: a dashed guide line reads as a marker you navigate
+  // to, a solid one as a cue you fire.
+  dash: [5, 4],
+  // Below the hot cue flags, so the two bands never overlap and a locator name
+  // is never hidden behind a pad letter.
+  tagTop: 15,
+  tagHeight: 12,
+  nubWidth: 5,
+  tailWidth: 4,
+  labels: true,
+  font: "10px 'SF Mono', Menlo, Consolas, monospace",
+  labelColor: '#0e0e10',
+  labelPadX: 4,
+  maxTagWidth: 90,
+  minGapPx: 5
+}
+
+/** MACRO view: 38 px tall and the whole track wide, so a tab and nothing else. */
+export const OVERVIEW_LOCATOR_STYLE: LocatorStyle = {
+  ...DETAIL_LOCATOR_STYLE,
+  lineAlpha: 0.6,
+  dash: [],
+  tagTop: 0,
+  tagHeight: 6,
+  nubWidth: 3,
+  tailWidth: 0,
+  labels: false,
+  minGapPx: 3
+}
+
+/**
+ * Locators over `[from, to]`: a line at each one, with a tag carrying its name.
+ *
+ * Locators are markers dropped while listening and then walked between with
+ * `D` and `F`, so the job here is to make them aimable and to keep them
+ * separable from the other two things on a waveform. Hot cues are solid pad
+ * colours with a letter at the very top; the CUE point is red with a tab at
+ * the bottom; a locator is a neutral dashed line with a pointed tag in its own
+ * band. Nothing overlaps, so a locator on the same beat as a hot cue still
+ * reads as two markers.
+ *
+ * `locators` must be in time order — everything that writes `memoryCues` keeps
+ * them sorted — so that the thinning keeps the first marker of a crowd and
+ * measures the room a name has before its neighbour.
+ */
+export function drawLocators(
+  ctx: CanvasRenderingContext2D,
+  locators: readonly MemoryCue[],
+  from: number,
+  to: number,
+  width: number,
+  height: number,
+  style: LocatorStyle = DETAIL_LOCATOR_STYLE
+): void {
+  const span = to - from
+  if (!(span > 0) || width <= 0 || locators.length === 0) return
+  const scale = width / span
+
+  ctx.save()
+  ctx.font = style.font
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.strokeStyle = style.color
+  ctx.lineWidth = style.lineWidth
+  ctx.setLineDash(style.dash)
+
+  let lastX = Number.NEGATIVE_INFINITY
+  for (let i = 0; i < locators.length; i++) {
+    const x = (locators[i].time - from) * scale
+    if (x < -style.lineWidth || x > width) continue
+    // A cluster of locators drawn in full would merge into a solid block that
+    // none of them could be picked out of, so only the first of a crowd is
+    // drawn. Zooming in spreads them apart and brings the rest back.
+    if (x - lastX < style.minGapPx) continue
+    lastX = x
+
+    const lineX = Math.round(x)
+    ctx.globalAlpha = style.lineAlpha
+    ctx.beginPath()
+    // Half a pixel over, or a 1 px stroke straddles two columns and blurs.
+    ctx.moveTo(lineX + style.lineWidth / 2, 0)
+    ctx.lineTo(lineX + style.lineWidth / 2, height)
+    ctx.stroke()
+
+    // The tag is opaque, so the name stays readable over a loud waveform.
+    ctx.globalAlpha = 1
+    // The next locator caps how wide this one's name may be, so a tag never
+    // runs under its neighbour's line.
+    const next = locators[i + 1]
+    const room = (next ? (next.time - from) * scale : width) - x
+    drawLocatorTag(ctx, lineX, locators[i].name ?? '', room, width, style)
+  }
+
+  ctx.restore()
+}
+
+/**
+ * One locator's tag: a pointed flag holding the name, or a plain nub when
+ * there is no name or no room for one.
+ *
+ * An unnamed locator gets a nub rather than a number. The numbering would
+ * shift the moment a locator earlier in the track was deleted, so a printed
+ * number is a label that lies exactly when it is being relied on.
+ */
+function drawLocatorTag(
+  ctx: CanvasRenderingContext2D,
+  lineX: number,
+  name: string,
+  room: number,
+  width: number,
+  style: LocatorStyle
+): void {
+  const limit = Math.min(style.maxTagWidth, room - style.minGapPx)
+  const text =
+    style.labels && name !== ''
+      ? fitLabel(ctx, name, limit - style.labelPadX * 2 - style.tailWidth)
+      : ''
+  const tagWidth =
+    text === ''
+      ? style.nubWidth
+      : Math.min(limit, ctx.measureText(text).width + style.labelPadX * 2 + style.tailWidth)
+  const tagX = tagLeft(lineX, tagWidth, style.lineWidth, width)
+
+  ctx.fillStyle = style.color
+  // The point is dropped on a tag too small to show it, which is what turns
+  // the same shape into the nub.
+  const tail = tagWidth >= style.tailWidth * 2 ? style.tailWidth : 0
+  ctx.beginPath()
+  ctx.moveTo(tagX, style.tagTop)
+  ctx.lineTo(tagX + tagWidth - tail, style.tagTop)
+  ctx.lineTo(tagX + tagWidth, style.tagTop + style.tagHeight / 2)
+  ctx.lineTo(tagX + tagWidth - tail, style.tagTop + style.tagHeight)
+  ctx.lineTo(tagX, style.tagTop + style.tagHeight)
+  ctx.closePath()
+  ctx.fill()
+
+  if (text === '') return
+  ctx.fillStyle = style.labelColor
+  ctx.fillText(text, tagX + style.labelPadX, style.tagTop + style.tagHeight / 2)
+}
+
+/**
+ * The longest leading part of `text` that fits `maxWidth`, cut short with an
+ * ellipsis. Empty when not even one character fits.
+ *
+ * Cheap enough to run per frame: there are a handful of locators in view and
+ * the loop stops as soon as the string fits.
+ */
+function fitLabel(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (maxWidth <= 0) return ''
+  if (ctx.measureText(text).width <= maxWidth) return text
+  for (let n = text.length - 1; n > 0; n--) {
+    const cut = `${text.slice(0, n)}…`
+    if (ctx.measureText(cut).width <= maxWidth) return cut
+  }
+  return ''
+}
+
 export interface CueMarkerStyle {
   /** Colour of the CUE point. Hot cues use their own pad colour. */
   cueColor: string
-  memoryColor: string
   /** Hot cue and CUE line width, CSS pixels. */
   lineWidth: number
-  memoryLineWidth: number
   /** Pad letters in the flags. Off in the overview, where they will not fit. */
   labels: boolean
   flagWidth: number
@@ -373,9 +565,7 @@ export interface CueMarkerStyle {
 
 export const DETAIL_CUE_STYLE: CueMarkerStyle = {
   cueColor: CUE_COLOR,
-  memoryColor: MEMORY_CUE_COLOR,
   lineWidth: 2,
-  memoryLineWidth: 1,
   labels: true,
   flagWidth: 13,
   flagHeight: 12,
@@ -393,17 +583,17 @@ export const OVERVIEW_CUE_STYLE: CueMarkerStyle = {
 }
 
 /**
- * Hot cues, the CUE point and memory cues over `[from, to]`.
+ * Hot cues and the CUE point over `[from, to]`.
  *
  * Hot cues are a line in the pad's colour with a flag at the top carrying its
  * letter; the CUE point is a line with a tab at the bottom, so the two are
- * still distinguishable when they land on the same beat.
+ * still distinguishable when they land on the same beat. Locators are drawn
+ * separately, by {@link drawLocators}, and belong under these.
  */
 export function drawCueMarkers(
   ctx: CanvasRenderingContext2D,
   cues: readonly HotCue[],
   cuePoint: number | null,
-  memoryCues: readonly MemoryCue[],
   from: number,
   to: number,
   width: number,
@@ -415,15 +605,6 @@ export function drawCueMarkers(
   const scale = width / span
 
   ctx.save()
-
-  ctx.fillStyle = style.memoryColor
-  ctx.globalAlpha = MEMORY_CUE_ALPHA
-  for (const memory of memoryCues) {
-    const x = (memory.time - from) * scale
-    if (x < -style.memoryLineWidth || x > width) continue
-    ctx.fillRect(Math.round(x), 0, style.memoryLineWidth, height)
-  }
-  ctx.globalAlpha = 1
 
   if (cuePoint != null) {
     const x = (cuePoint - from) * scale
@@ -457,13 +638,17 @@ export function drawCueMarkers(
 }
 
 /**
- * Flags hang to the right of their line and flip to its left at the right-hand
- * edge, then stay inside the view: a letter half off the canvas is unreadable,
- * and the line itself already says exactly where the cue is.
+ * Flags and tags hang to the right of their line and flip to its left at the
+ * right-hand edge, then stay inside the view: a label half off the canvas is
+ * unreadable, and the line itself already says exactly where the marker is.
  */
+function tagLeft(lineX: number, tagWidth: number, lineWidth: number, width: number): number {
+  const x = lineX + tagWidth <= width ? lineX : lineX + lineWidth - tagWidth
+  return clamp(x, 0, Math.max(0, width - tagWidth))
+}
+
 function flagLeft(lineX: number, style: CueMarkerStyle, width: number): number {
-  const x = lineX + style.flagWidth <= width ? lineX : lineX + style.lineWidth - style.flagWidth
-  return clamp(x, 0, Math.max(0, width - style.flagWidth))
+  return tagLeft(lineX, style.flagWidth, style.lineWidth, width)
 }
 
 export interface LoopStyle {
