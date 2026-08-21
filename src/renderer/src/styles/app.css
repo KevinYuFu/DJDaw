@@ -648,3 +648,62 @@
   border-color: var(--border-strong);
   background: linear-gradient(#585864, #2c2c33);
 }
+
+/* Settings panel */
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings__group {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 12px 14px 14px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings__legend {
+  padding: 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.settings__choice {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.settings__choice:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings__choice.is-on {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings__choice input {
+  grid-row: 1 / span 2;
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.settings__choice-label {
+  font-weight: 600;
+}
+
+.settings__choice-note {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--text-dim);
+}

@@ -234,6 +234,10 @@ export interface WaveformDrawOptions {
   y?: number
   /** Collapse the bands into one envelope in this colour: the 'mono' mode. */
   mono?: string
+  /** Tint each column by its frequency balance instead of stacking the bands. */
+  rgb?: boolean
+  /** Opacity for the RGB pass, 1 full. The overview's played half uses this. */
+  dim?: number
   /** Vertical exaggeration. 1 means a full-scale peak exactly fills the strip. */
   gain?: number
 }
@@ -255,6 +259,14 @@ export function drawWaveform(
   const centre = (opts.y ?? 0) + half
   const gain = opts.gain ?? 1
 
+  if (opts.rgb && !opts.mono) {
+    ctx.save()
+    if (opts.dim != null && opts.dim < 1) ctx.globalAlpha = Math.max(0, opts.dim)
+    fillRgb(ctx, cols, x, centre, half, gain)
+    ctx.restore()
+    return
+  }
+
   // Mono mode paints all three bands in one colour rather than computing a
   // separate envelope: mirrored bars drawn from the centre union to exactly
   // the per-column maximum of the three.
@@ -265,6 +277,73 @@ export function drawWaveform(
   fillBand(ctx, cols.mid, cols.width, colors.mid, x, centre, half, gain)
   fillBand(ctx, cols.high, cols.width, colors.high, x, centre, half, gain)
   ctx.restore()
+}
+
+/**
+ * Above 1 deepens the tint of a column one band dominates; 1 would leave
+ * everything close to white.
+ */
+const RGB_SATURATION = 1.7
+
+/** Channel levels are rounded to this many steps so runs share one fill. */
+const RGB_STEPS = 16
+
+/**
+ * The RGB waveform: red lows, green mids, blue highs, white where all three
+ * are present.
+ *
+ * Height is the loudest band, so the silhouette matches the three-band stack;
+ * only the colour differs. Each channel is scaled against the loudest band in
+ * its own column, which is what makes the hue show the balance of the sound
+ * rather than how loud it is.
+ */
+function fillRgb(
+  ctx: CanvasRenderingContext2D,
+  cols: WaveformColumns,
+  x: number,
+  centre: number,
+  half: number,
+  gain: number
+): void {
+  let open = ''
+  for (let c = 0; c < cols.width; c++) {
+    const lo = cols.low[c]
+    const mid = cols.mid[c]
+    const hi = cols.high[c]
+    const peak = lo > mid ? (lo > hi ? lo : hi) : mid > hi ? mid : hi
+    if (peak <= 0) continue
+
+    const color = rgbColumnColor(lo, mid, hi)
+    if (color !== open) {
+      if (open) ctx.fill()
+      ctx.fillStyle = color
+      ctx.beginPath()
+      open = color
+    }
+
+    let h = peak * half * gain
+    if (h > half) h = half
+    else if (h < MIN_BAR_HALF_PX) h = MIN_BAR_HALF_PX
+    ctx.rect(x + c, centre - h, 1, h * 2)
+  }
+  if (open) ctx.fill()
+}
+
+/**
+ * The colour for one column of an RGB waveform, from its three band peaks.
+ *
+ * Each channel is scaled against the loudest band in the column, so the hue
+ * shows the balance of the sound rather than how loud it is. Silence is black.
+ */
+export function rgbColumnColor(low: number, mid: number, high: number): string {
+  const peak = low > mid ? (low > high ? low : high) : mid > high ? mid : high
+  if (!(peak > 0)) return 'rgb(0,0,0)'
+  return `rgb(${channel(low / peak)},${channel(mid / peak)},${channel(high / peak)})`
+}
+
+function channel(ratio: number): number {
+  const shaped = Math.pow(ratio <= 0 ? 0 : ratio > 1 ? 1 : ratio, RGB_SATURATION)
+  return Math.round((Math.round(shaped * RGB_STEPS) * 255) / RGB_STEPS)
 }
 
 /** One band as a single path of mirrored 1 px bars — far cheaper than a fill per column. */

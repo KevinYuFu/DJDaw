@@ -68,6 +68,9 @@ const WAVE_GAIN = 1.2
 const MONO_COLOR = BAND_COLORS.high
 const MONO_COLOR_DIM = BAND_COLORS_DIM.high
 
+/** Opacity of the already-played half in RGB mode. */
+const RGB_DIM = 0.42
+
 /** Playhead movement below this is invisible, so the frame can be skipped. */
 const MIN_PLAYHEAD_STEP_PX = 0.2
 
@@ -93,6 +96,7 @@ interface FrameState {
   /** Whether this strip draws its pieces and lets them be dragged. */
   draggable: boolean
   mono: boolean
+  rgb: boolean
 }
 
 /** The two static layers, and what they were last rasterised from. */
@@ -106,6 +110,7 @@ interface Layers {
   height: number
   dpr: number
   mono: boolean
+  rgb: boolean
 }
 
 /** A needle drop: it began on empty space, or on a strip that does not drag. */
@@ -172,6 +177,7 @@ export function OverviewWaveform({
   const selectedClipId = useDecks((s) => s.decks[deckId].selectedClipId)
   const track = useLibrary((s) => (trackId ? (s.trackById(trackId) ?? null) : null))
   const mono = useSettings((s) => s.waveformColorMode === 'mono')
+  const rgb = useSettings((s) => s.waveformColorMode === 'rgb')
 
   // The waveform's own bucket count is the most accurate length available; the
   // track's tag duration is only a fallback for the moments before it arrives.
@@ -197,7 +203,8 @@ export function OverviewWaveform({
     clips: NO_CLIPS,
     selectedClipId: null,
     draggable: false,
-    mono: false
+    mono: false,
+    rgb: false
   })
 
   // No dependency list: this is the one place the slow-changing store values
@@ -214,7 +221,8 @@ export function OverviewWaveform({
       clips: draggableClips ? clips : NO_CLIPS,
       selectedClipId: draggableClips ? selectedClipId : null,
       draggable: draggableClips,
-      mono
+      mono,
+      rgb
     }
     dirtyRef.current = true
   })
@@ -507,7 +515,8 @@ function rasterise(
     width: 0,
     height: 0,
     dpr: 0,
-    mono: false
+    mono: false,
+    rgb: false
   }
   const unchanged =
     current !== null &&
@@ -517,7 +526,8 @@ function rasterise(
     layers.width === width &&
     layers.height === height &&
     layers.dpr === dpr &&
-    layers.mono === state.mono
+    layers.mono === state.mono &&
+    layers.rgb === state.rgb
   if (unchanged) return layers
 
   layers.waveform = state.waveform && state.duration > 0 ? state.waveform : null
@@ -527,6 +537,7 @@ function rasterise(
   layers.height = height
   layers.dpr = dpr
   layers.mono = state.mono
+  layers.rgb = state.rgb
 
   // Once a row is cut, timeline seconds stop matching source seconds, so the
   // pieces are the only honest way to lay the envelope out. A row with no
@@ -544,11 +555,11 @@ function rasterise(
           layers.waveform.sampleRate
         )
       : buildColumns(layers.waveform, 0, state.duration, width, layers.waveform.sampleRate)
-  const passes: ReadonlyArray<[HTMLCanvasElement, BandColors, string]> = [
-    [layers.played, BAND_COLORS_DIM, MONO_COLOR_DIM],
-    [layers.live, BAND_COLORS, MONO_COLOR]
+  const passes: ReadonlyArray<[HTMLCanvasElement, BandColors, string, number]> = [
+    [layers.played, BAND_COLORS_DIM, MONO_COLOR_DIM, RGB_DIM],
+    [layers.live, BAND_COLORS, MONO_COLOR, 1]
   ]
-  for (const [canvas, colors, monoColor] of passes) {
+  for (const [canvas, colors, monoColor, dim] of passes) {
     const ctx = sizeCanvas(canvas, width, height, dpr)
     if (!ctx) continue
     // sizeCanvas only wipes the canvas when its dimensions change, so a
@@ -559,6 +570,8 @@ function rasterise(
         height,
         colors,
         mono: state.mono ? monoColor : undefined,
+        rgb: state.rgb,
+        dim,
         gain: WAVE_GAIN
       })
     }

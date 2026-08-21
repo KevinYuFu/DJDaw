@@ -6,11 +6,13 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { clamp } from '@renderer/core/format'
 
 /**
- * Detailed-waveform rendering style. `3band` is rekordbox's blue/orange/white
- * split; `mono` collapses the bands into a single envelope in the deck colour,
- * which is easier to read when scanning for arrangement rather than for drums.
+ * Waveform colouring.
+ *
+ * `3band` stacks blue lows, orange mids and white highs. `rgb` tints each
+ * column by its frequency balance — red lows, green mids, blue highs, white
+ * where all three are present. `mono` is a single envelope in the deck colour.
  */
-export type WaveformColorMode = '3band' | 'mono'
+export type WaveformColorMode = '3band' | 'rgb' | 'mono'
 
 /**
  * Which view is on screen. `performance` is the two-deck rekordbox layout;

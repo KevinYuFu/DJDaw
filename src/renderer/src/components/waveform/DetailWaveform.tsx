@@ -98,6 +98,7 @@ interface FrameState {
   /** Seconds of audio across the full width. */
   span: number
   mono: boolean
+  rgb: boolean
 }
 
 export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformProps): ReactElement {
@@ -123,6 +124,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const zoomIndex = useDecks((s) => s.decks[deckId].zoomIndex)
   const track = useLibrary((s) => (trackId ? (s.trackById(trackId) ?? null) : null))
   const mono = useSettings((s) => s.waveformColorMode === 'mono')
+  const rgb = useSettings((s) => s.waveformColorMode === 'rgb')
 
   const span = WAVE_ZOOM_LEVELS[clamp(Math.round(zoomIndex), 0, WAVE_ZOOM_LEVELS.length - 1)]
 
@@ -137,7 +139,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
     clips: NO_CLIPS,
     selectedClipId: null,
     span: WAVE_ZOOM_LEVELS[0],
-    mono: false
+    mono: false,
+    rgb: false
   })
 
   // No dependency list: this is the one place the slow-changing store values
@@ -155,7 +158,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       clips,
       selectedClipId,
       span,
-      mono
+      mono,
+      rgb
     }
     dirtyRef.current = true
   })
@@ -227,6 +231,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           height,
           colors: BAND_COLORS,
           mono: state.mono ? MONO_COLOR : undefined,
+          rgb: state.rgb,
           gain: WAVE_GAIN
         })
       }
