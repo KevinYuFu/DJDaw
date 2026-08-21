@@ -61,6 +61,19 @@ between tracks.
 
 ---
 
+## Master chain
+
+Kevin's idea, not scheduled. A master processing chain after the crossfader,
+with pluggable effects — a limiter first, since that is what stops the mix bus
+clipping the output.
+
+This matters more than it sounds. The channel crossover rotates phase between
+bands, which grows peaks: a real loud master measured **+7.3 dB of peak growth
+with every knob centred**, and +9.5 dB with the low boosted. Web Audio is float
+internally so nothing clips inside the graph, but it clips at the output device
+and again when an export is quantised. A master limiter is the standard answer
+and every DJ application has one.
+
 ## Export
 
 - **Exports can clip.** A loud master played through an interpolating engine
