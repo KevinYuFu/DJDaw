@@ -75,6 +75,18 @@ const start = 0
 The same goes for commit messages and PR descriptions. Say what changed and
 what it does now. Keep it short.
 
+## Matching a reference means matching it
+
+When Kevin points at something and says make it look like that, the job is to
+match it. Not to match it and add an improvement.
+
+If I think the reference is missing something useful, I say so and let him
+decide. Adding it because it seemed better is me making his decision for him,
+and it is still that even when the addition is genuinely good.
+
+The same goes for measuring: when I claim something matches, the measurement
+has to be of the thing itself, not of something that correlates with it.
+
 ## Save every rule Kevin gives me
 
 When Kevin gives me an instruction about how to work, I add it to this file
