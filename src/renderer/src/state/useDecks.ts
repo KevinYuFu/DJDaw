@@ -1,6 +1,17 @@
 import { create } from 'zustand'
 import { DECK_IDS } from '@shared/types'
 import type { BeatGrid, DeckId, HotCue, Track, WaveformData } from '@shared/types'
+import {
+  removeClip,
+  rippleRemoveClip,
+  splitAt,
+  timelineDuration,
+  toRegions,
+  wholeTrackClip
+} from '@shared/clips'
+import type { Clip } from '@shared/clips'
+import { CENTRE, flatChannel, isFlat } from '@shared/eq'
+import type { ChannelEq } from '@shared/eq'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
 import { decodeTrack } from '@renderer/audio/decode'
@@ -69,6 +80,33 @@ export interface DeckState {
   waveform: WaveformData | null
   /** The AudioBuffer stays here so analysis and export can reach it. */
   buffer: AudioBuffer | null
+  /**
+   * The pieces this deck plays, in timeline order.
+   *
+   * A freshly loaded deck is one clip covering the whole file. Cutting turns
+   * it into a timeline, and from then on a position along the deck is no
+   * longer a position in the source audio — `sourceTimeAt` does that
+   * conversion. Every deck carries one, the two performance decks included, so
+   * playback and drawing take a single path instead of special-casing the
+   * decks that happen never to be cut.
+   */
+  clips: Clip[]
+  /** The clip the edit view has selected, or null. */
+  selectedClipId: string | null
+  /**
+   * Trim, three-band EQ and filter positions for this channel, 0.5 flat.
+   *
+   * Session state belonging to the channel rather than to the track, so it
+   * outlives a track swap: a DJ sets a channel up and then changes what runs
+   * through it. Ejecting the deck is the channel going away, and does clear it.
+   */
+  eq: ChannelEq
+}
+
+/** Whether a cut happened, and if not, short plain text saying why. */
+export interface CutResult {
+  ok: boolean
+  reason?: string
 }
 
 export interface DecksState {
@@ -119,6 +157,29 @@ export interface DecksState {
   tapTempo(deck: DeckId): void
   toggleLoop(deck: DeckId): void
   setLoopBeats(deck: DeckId, beats: number): void
+  /**
+   * Cut the clip under the playhead in two, the way Ableton does. Snaps to the
+   * grid first when Quantize is on.
+   *
+   * A refusal comes back with its reason so the button can say why instead of
+   * looking broken.
+   */
+  cutAtPlayhead(deck: DeckId): CutResult
+  selectClip(deck: DeckId, clipId: string | null): void
+  /** Delete the selected clip, leaving a gap, or closing it when `ripple`. */
+  deleteSelectedClip(deck: DeckId, ripple: boolean): void
+  /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
+  setChannelKnob(deck: DeckId, knob: keyof ChannelEq, value: number): void
+  /** Put one knob back to centre. What a double-click on a knob does. */
+  resetChannelKnob(deck: DeckId, knob: keyof ChannelEq): void
+  /** Put the whole channel back to flat. */
+  resetChannelEq(deck: DeckId): void
+}
+
+/** Short, plain text for a cut that did nothing. */
+const CUT_REFUSALS: Record<'gap' | 'too-short', string> = {
+  gap: 'No clip here',
+  'too-short': 'Too close to a cut'
 }
 
 /**
@@ -210,7 +271,10 @@ function emptyDeck(): DeckState {
     loop: null,
     zoomIndex: DEFAULT_ZOOM_INDEX,
     waveform: null,
-    buffer: null
+    buffer: null,
+    clips: [],
+    selectedClipId: null,
+    eq: flatChannel()
   }
 }
 
@@ -357,6 +421,51 @@ function writeHotCues(ctx: DeckContext, cues: HotCue[]): void {
 }
 
 /**
+ * Store a new set of clips and hand the engine the regions they describe.
+ *
+ * Clips are per-deck session state, not track data, so nothing here goes
+ * through {@link writeTrack}: cutting must not fork a rekordbox mirror track.
+ * There is nothing about the file to write down — the same track loaded on two
+ * decks is cut differently on each — and a fork would split the cues and grid
+ * off from the record the browser is showing for no gain at all.
+ */
+function setClips(ctx: DeckContext, clips: Clip[], patch: Partial<DeckState> = {}): void {
+  patchDeck(ctx.id, { ...patch, clips })
+  ctx.deck.setRegions(toRegions(clips))
+}
+
+/**
+ * Store a channel's knob positions and hand the whole set to the engine.
+ *
+ * Like clips, EQ is per-deck session state and not track data, so nothing here
+ * goes through {@link writeTrack}: turning a knob must not fork a rekordbox
+ * mirrored track. There is nothing about the file to write down — the same
+ * track loaded on two decks is EQ'd differently on each — and a fork would
+ * split the cues and grid off from the record the browser is showing.
+ *
+ * The engine only hears about it once it has handed this deck out; `deck()`
+ * throws before that, so knobs moved on an empty deck are pushed by the next
+ * load instead.
+ */
+function setEq(id: DeckId, eq: ChannelEq): void {
+  patchDeck(id, { eq })
+  applyEq(id, eq)
+}
+
+/**
+ * Hand one channel's knobs to the engine at the current EQ mode.
+ *
+ * The mode is read here rather than stored per deck because it is a global
+ * preference: see {@link useSettings}'s `eqMode`. Nothing is written to the
+ * store, so this is also the way a mode change reaches a channel whose knobs
+ * have not moved.
+ */
+function applyEq(id: DeckId, eq: ChannelEq): void {
+  if (!runtime[id].watching) return
+  AudioEngine.shared().deck(id).setChannelEq(eq, useSettings.getState().eqMode)
+}
+
+/**
  * Mirror the engine's own view of playback into the store. The worklet is the
  * authority — it is what actually stops at the end of the file — so the
  * optimistic `playing` flags the actions set are corrected from here.
@@ -462,8 +571,17 @@ export const useDecks = create<DecksState>()(() => ({
     const token = ++runtime[id].loadToken
     clearPreview(id)
     runtime[id].commandedSec = null
-    patchDeck(id, { trackId, status: 'loading', playing: false,
-      previewing: false, waveform: null, buffer: null, loop: null })
+    patchDeck(id, {
+      trackId,
+      status: 'loading',
+      playing: false,
+      previewing: false,
+      waveform: null,
+      buffer: null,
+      loop: null,
+      clips: [],
+      selectedClipId: null
+    })
 
     let deck: Deck | null = null
     let audioLoaded = false
@@ -478,6 +596,10 @@ export const useDecks = create<DecksState>()(() => ({
 
       deck = engine.deck(id)
       watchDeck(id, deck)
+      // The channel keeps whatever it was set to, so a new track drops into an
+      // EQ'd channel rather than resetting it. This also lands knobs that were
+      // moved before the engine existed.
+      applyEq(id, useDecks.getState().decks[id].eq)
 
       // A deck that is still running must stop before its audio is replaced.
       if (deck.playing) deck.pause()
@@ -494,7 +616,12 @@ export const useDecks = create<DecksState>()(() => ({
       // A freshly loaded deck parks on its cue point, so CUE must read as a
       // preview rather than as "set the cue point here".
       runtime[id].commandedSec = start
-      patchDeck(id, { buffer })
+      // One clip covering the whole file. The engine is told about it like any
+      // other set of clips, so a never-cut deck and a cut one follow the same
+      // path from here on.
+      const clips = [wholeTrackClip(buffer.duration)]
+      patchDeck(id, { buffer, clips, selectedClipId: null })
+      deck.setRegions(toRegions(clips))
 
       const [waveform, grid] = await Promise.all([resolveWaveform(track, buffer), resolveGrid(id, track, buffer)])
       if (runtime[id].loadToken !== token) return
@@ -527,8 +654,17 @@ export const useDecks = create<DecksState>()(() => ({
         // that shows as empty.
         deck?.unload()
         // Clear the track but leave the fader, quantize and zoom settings alone.
-        patchDeck(id, { trackId: null, status: 'empty', playing: false,
-      previewing: false, waveform: null, buffer: null, loop: null })
+        patchDeck(id, {
+          trackId: null,
+          status: 'empty',
+          playing: false,
+      previewing: false,
+          waveform: null,
+          buffer: null,
+          loop: null,
+          clips: [],
+          selectedClipId: null
+        })
       }
     }
   },
@@ -544,14 +680,28 @@ export const useDecks = create<DecksState>()(() => ({
 
     // `watching` is only set once the engine has handed this deck out, so it
     // doubles as "there is something to stop"; `deck()` throws before that.
+    // Ejecting is the channel going away, not a track swap, so the knobs go
+    // back to flat with it.
+    const eq = flatChannel()
     if (rt.watching) {
       const deck = AudioEngine.shared().deck(id)
       if (deck.playing) deck.pause()
       deck.setLoop(false, 0, 0)
+      applyEq(id, eq)
       deck.unload()
     }
-    patchDeck(id, { trackId: null, status: 'empty', playing: false,
-      previewing: false, waveform: null, buffer: null, loop: null })
+    patchDeck(id, {
+      trackId: null,
+      status: 'empty',
+      playing: false,
+      previewing: false,
+      waveform: null,
+      buffer: null,
+      loop: null,
+      clips: [],
+      selectedClipId: null,
+      eq
+    })
   },
 
   togglePlay(id) {
@@ -830,6 +980,71 @@ export const useDecks = create<DecksState>()(() => ({
     const endSec = beatsAfter(ctx.grid, current.startSec, loopBeats)
     if (current.active) ctx.deck.setLoop(true, current.startSec, endSec)
     patchDeck(id, { loopBeats, loop: { ...current, endSec } })
+  },
+
+  cutAtPlayhead(id) {
+    const ctx = context(id)
+    if (!ctx) return { ok: false, reason: 'Nothing loaded' }
+    // Snap first, exactly as beat jump does: a cut half a beat off the grid is
+    // no use to a DJ. The grid is in source time, which is also timeline time
+    // as long as clips are only cut — a ripple delete moves later clips off
+    // it, and re-gridding an edited deck is a problem for the PR that lets
+    // clips move.
+    // Snapping can land just outside the timeline when the grid's first beat
+    // sits after zero, which would report the cut as falling in a gap rather
+    // than as being too close to an edge. Keep it inside.
+    const at = Math.max(0, Math.min(timelineDuration(ctx.state.clips), snapped(ctx, ctx.position)))
+    const result = splitAt(ctx.state.clips, at)
+    if (result.reason) return { ok: false, reason: CUT_REFUSALS[result.reason] }
+    setClips(ctx, result.clips)
+    return { ok: true }
+  },
+
+  selectClip(id, clipId) {
+    // Refuse ids that are not on this deck, so the selection can never point
+    // at a clip a delete or a reload has already taken away.
+    if (clipId !== null && !useDecks.getState().decks[id].clips.some((c) => c.id === clipId)) return
+    patchDeck(id, { selectedClipId: clipId })
+  },
+
+  deleteSelectedClip(id, ripple) {
+    const ctx = context(id)
+    if (!ctx) return
+    const selected = ctx.state.selectedClipId
+    if (selected == null) return
+    if (!ctx.state.clips.some((c) => c.id === selected)) {
+      patchDeck(id, { selectedClipId: null })
+      return
+    }
+    const clips = ripple
+      ? rippleRemoveClip(ctx.state.clips, selected)
+      : removeClip(ctx.state.clips, selected)
+    // Deleting the last clip leaves a deck that is still loaded and simply
+    // plays nothing. The buffer, waveform and track stay put, so the row is a
+    // silent piece of the edit rather than an empty slot.
+    setClips(ctx, clips, { selectedClipId: null })
+  },
+
+  setChannelKnob(id, knob, value) {
+    if (!Number.isFinite(value)) return
+    const eq = useDecks.getState().decks[id].eq
+    const next = clamp(value, 0, 1)
+    // Knobs are dragged, so this runs at pointer-move rate and the same value
+    // arrives again and again. Dropping the repeats keeps a drag from waking
+    // every subscriber for a move that changes nothing.
+    if (eq[knob] === next) return
+    const updated: ChannelEq = { ...eq }
+    updated[knob] = next
+    setEq(id, updated)
+  },
+
+  resetChannelKnob(id, knob) {
+    useDecks.getState().setChannelKnob(id, knob, CENTRE)
+  },
+
+  resetChannelEq(id) {
+    if (isFlat(useDecks.getState().decks[id].eq)) return
+    setEq(id, flatChannel())
   }
 }))
 
@@ -853,4 +1068,19 @@ useLibrary.subscribe((state, prev) => {
     // left both — a deleted local track, or one dropped by a sync — ejects.
     if (!state.tracks[trackId] && !state.mirror[trackId]) useDecks.getState().unloadDeck(id)
   }
+})
+
+/**
+ * The EQ floor is one global preference, so changing it has to reach every
+ * channel at once.
+ *
+ * Without this a channel already held at full cut would keep the old floor
+ * until its knob moved again — switching to ISOLATOR would leave the one
+ * channel it matters most on still leaking at -26 dB. Only the engine is
+ * touched: the knob positions themselves do not change, so there is nothing
+ * to write to the store.
+ */
+useSettings.subscribe((state, prev) => {
+  if (state.eqMode === prev.eqMode) return
+  for (const id of DECK_IDS) applyEq(id, useDecks.getState().decks[id].eq)
 })

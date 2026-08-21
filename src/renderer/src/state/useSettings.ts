@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { DECK_IDS, type DeckId } from '@shared/types'
+import type { EqMode } from '@shared/eq'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { clamp } from '@renderer/core/format'
 
@@ -37,6 +38,14 @@ export interface SettingsState {
   waveformColorMode: WaveformColorMode
   /** Whether the browser panel is at full height. */
   browserExpanded: boolean
+  /**
+   * How far a band EQ knob cuts. See {@link EqMode}.
+   *
+   * Global, not per deck, because that is how the hardware and rekordbox treat
+   * it: a DJM's isolator switch changes the whole mixer. Per deck would be a
+   * trap where one channel kills and the next one only drops 26 dB.
+   */
+  eqMode: EqMode
   setMasterVolume(linear: number): void
   setFocusedDeck(deck: DeckId): void
   setView(view: ViewName): void
@@ -49,6 +58,8 @@ export interface SettingsState {
   /** `Tab` — the next deck. Shorthand for `cycleFocusedDeck(1)`. */
   toggleFocusedDeck(): void
   setWaveformColorMode(mode: WaveformColorMode): void
+  /** Switch the EQ floor. Every deck's EQ is re-applied at once. */
+  setEqMode(mode: EqMode): void
   setBrowserExpanded(expanded: boolean): void
   toggleBrowserExpanded(): void
 }
@@ -77,6 +88,7 @@ export const useSettings = create<SettingsState>()(
       view: 'performance',
       waveformColorMode: '3band',
       browserExpanded: true,
+      eqMode: 'eq',
 
       setMasterVolume(linear) {
         const level = clamp(linear, 0, 1)
@@ -113,6 +125,10 @@ export const useSettings = create<SettingsState>()(
         set({ waveformColorMode: mode })
       },
 
+      setEqMode(mode) {
+        set({ eqMode: mode })
+      },
+
       setBrowserExpanded(expanded) {
         set({ browserExpanded: expanded })
       },
@@ -130,7 +146,8 @@ export const useSettings = create<SettingsState>()(
         focusedDeck: s.focusedDeck,
         view: s.view,
         waveformColorMode: s.waveformColorMode,
-        browserExpanded: s.browserExpanded
+        browserExpanded: s.browserExpanded,
+        eqMode: s.eqMode
       })
     }
   )

@@ -13,10 +13,15 @@ import { useSettings } from '@renderer/state/useSettings'
  * dispatched from a single window-level listener that reads the stores with
  * `getState()`, so the handler is installed once and can never go stale.
  *
- * The map is the same in both views. What changes is how many decks `Tab`
- * walks: the ring is owned by `useSettings.cycleFocusedDeck`, which knows the
- * performance view draws two decks and the editing view four, so nothing here
- * has to branch on the view.
+ * The transport map is the same in both views. What changes is how many decks
+ * `Tab` walks: the ring is owned by `useSettings.cycleFocusedDeck`, which knows
+ * the performance view draws two decks and the editing view four, so nothing
+ * here has to branch on the view.
+ *
+ * The clip keys — cut and delete — are the exception. They only exist in the
+ * editing view, because the performance view draws no clips to act on. There
+ * they are fully inert: not handled, not swallowed, so `Backspace` still means
+ * whatever the browser thinks it means.
  *
  * Bindings are matched on `event.code`, not `event.key`, for two reasons: the
  * map is positional the way a controller is, and `Shift+1` reports a key of
@@ -51,7 +56,10 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: '← / →', action: 'Nudge the playhead by one beat' },
   { keys: 'A', action: 'Load the track picked in the browser into the focused deck' },
   { keys: 'Tab', action: 'Move the focus to the next deck' },
-  { keys: 'Shift + Tab', action: 'Move the focus back one deck' }
+  { keys: 'Shift + Tab', action: 'Move the focus back one deck' },
+  { keys: 'Cmd / Ctrl + E', action: 'Edit view: cut the track at the playhead' },
+  { keys: 'Delete', action: 'Edit view: delete the picked clip, leaving a gap' },
+  { keys: 'Shift + Delete', action: 'Edit view: delete it and close the gap' }
 ] as const
 
 /**
@@ -118,6 +126,25 @@ function hotCueIndex(code: string): number | null {
 
 function focusedDeck(): DeckId {
   return useSettings.getState().focusedDeck
+}
+
+/** Whether the editing view is on screen, which is the only place clips exist. */
+function inEditView(): boolean {
+  return useSettings.getState().view === 'edit'
+}
+
+/**
+ * `Cmd+E` / `Ctrl+E` — cut the focused row in two at the playhead, the way
+ * Ableton does. Kevin is on a Mac and will reach for Cmd; Ctrl is here so the
+ * binding is the same on every platform.
+ *
+ * A refused cut — nothing loaded, or the playhead sitting on a clip edge — is
+ * not worth interrupting anyone for. The Cut button is where a reason belongs;
+ * from the keyboard it only goes to the log.
+ */
+function cutAtPlayhead(deck: DeckId): void {
+  const result = useDecks.getState().cutAtPlayhead(deck)
+  if (!result.ok) console.debug('[keyboard] cut refused', result.reason)
 }
 
 /** Halve or double a size, staying inside the offered range. */
@@ -202,6 +229,9 @@ function isRepeatable(event: KeyboardEvent): boolean {
 /** Whether a code is bound at all, so auto-repeat can be swallowed too. */
 function isBound(code: string): boolean {
   if (hotCueIndex(code) !== null) return true
+  // Held down in the performance view these are not ours, so they must reach
+  // the browser rather than being quietly eaten on every repeat.
+  if (code === 'Delete' || code === 'Backspace') return inEditView()
   return (
     REPEATABLE.has(code) ||
     code === 'Space' ||
@@ -247,6 +277,14 @@ export function useKeyboard(): void {
 
     const onKeyDown = (event: KeyboardEvent): void => {
       if (isTypingTarget(event.target)) return
+      // Cut is the one binding that wants a modifier, so it is matched ahead of
+      // the guard below, which hands every other Cmd/Ctrl chord to the menu.
+      if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey) && !event.altKey) {
+        if (!inEditView()) return
+        event.preventDefault()
+        if (!event.repeat) cutAtPlayhead(focusedDeck())
+        return
+      }
       // Cmd/Ctrl/Alt combinations belong to the application menu — Cmd+Q must
       // quit rather than beat jump.
       if (event.metaKey || event.ctrlKey || event.altKey) return
@@ -339,6 +377,14 @@ export function useKeyboard(): void {
 
         case 'ArrowRight':
           decks.beatJump(deck, 1)
+          break
+
+        case 'Delete':
+        case 'Backspace':
+          // Shift closes the gap the deleted clip leaves; on its own the gap
+          // stays and plays as silence.
+          if (inEditView()) decks.deleteSelectedClip(deck, shift)
+          else handled = false
           break
 
         default: {

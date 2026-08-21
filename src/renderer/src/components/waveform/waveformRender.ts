@@ -1,3 +1,4 @@
+import type { Clip } from '@shared/clips'
 import type { BeatGrid, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { DEFAULT_BEATS_PER_BAR, beatDurationAt, beatsInRange } from '@renderer/core/beatgrid'
 import { clamp } from '@renderer/core/format'
@@ -76,42 +77,72 @@ export function buildColumns(
   reuse?: WaveformColumns | null
 ): WaveformColumns {
   const count = Math.max(1, Math.floor(width))
-  const out: WaveformColumns =
-    reuse && reuse.width === count
-      ? reuse
-      : {
-          width: count,
-          low: new Float32Array(count),
-          mid: new Float32Array(count),
-          high: new Float32Array(count)
-        }
+  const out = columnsFor(count, reuse)
+  fillColumns(wave, fromSec, toSec, out, 0, count, sampleRate)
+  return out
+}
+
+/** A column set of `count` columns, reusing `reuse` when it is already that wide. */
+function columnsFor(count: number, reuse?: WaveformColumns | null): WaveformColumns {
+  if (reuse && reuse.width === count) return reuse
+  return {
+    width: count,
+    low: new Float32Array(count),
+    mid: new Float32Array(count),
+    high: new Float32Array(count)
+  }
+}
+
+/**
+ * Fill columns `[colFrom, colFrom + colCount)` with the peaks over `[fromSec,
+ * toSec]`, leaving every other column untouched.
+ *
+ * Split out of {@link buildColumns} so a row made of clips can be built one
+ * clip at a time into a single set of arrays: nothing is allocated per clip,
+ * per frame. Columns outside the array are skipped but still counted, so a
+ * clip running off either edge of the view keeps its scale.
+ */
+export function fillColumns(
+  wave: WaveformData,
+  fromSec: number,
+  toSec: number,
+  cols: WaveformColumns,
+  colFrom: number,
+  colCount: number,
+  sampleRate: number
+): void {
+  if (colCount <= 0) return
+  const first = Math.max(0, colFrom)
+  const last = Math.min(cols.width, colFrom + colCount)
+  if (last <= first) return
 
   const span = toSec - fromSec
   // A truncated cache file is readable but short; never index past what it holds.
   const buckets = Math.min(wave.bucketCount, wave.low.length, wave.mid.length, wave.high.length)
   const bucketsPerSec = wave.bucketSize > 0 ? sampleRate / wave.bucketSize : 0
   if (!(span > 0) || buckets <= 0 || !(bucketsPerSec > 0)) {
-    out.low.fill(0)
-    out.mid.fill(0)
-    out.high.fill(0)
-    return out
+    cols.low.fill(0, first, last)
+    cols.mid.fill(0, first, last)
+    cols.high.fill(0, first, last)
+    return
   }
 
   const { low, mid, high } = wave
-  for (let c = 0; c < count; c++) {
+  for (let c = first; c < last; c++) {
     // Recomputed from `fromSec` rather than accumulated: a per-column step
     // drifts audibly over a five-minute overview.
-    const b0 = (fromSec + (span * c) / count) * bucketsPerSec
-    const b1 = (fromSec + (span * (c + 1)) / count) * bucketsPerSec
+    const n = c - colFrom
+    const b0 = (fromSec + (span * n) / colCount) * bucketsPerSec
+    const b1 = (fromSec + (span * (n + 1)) / colCount) * bucketsPerSec
     let i0 = Math.floor(b0)
     let i1 = Math.ceil(b1) - 1
     // A bucket wider than the column: hold the value it covers.
     if (i1 < i0) i1 = i0
 
     if (i1 < 0 || i0 >= buckets) {
-      out.low[c] = 0
-      out.mid[c] = 0
-      out.high[c] = 0
+      cols.low[c] = 0
+      cols.mid[c] = 0
+      cols.high[c] = 0
       continue
     }
     if (i0 < 0) i0 = 0
@@ -125,11 +156,65 @@ export function buildColumns(
       if (mid[i] > m) m = mid[i]
       if (high[i] > h) h = high[i]
     }
-    out.low[c] = l / 255
-    out.mid[c] = m / 255
-    out.high[c] = h / 255
+    cols.low[c] = l / 255
+    cols.mid[c] = m / 255
+    cols.high[c] = h / 255
   }
-  return out
+}
+
+/**
+ * Columns for a row made of clips: every clip's own slice of the source drawn
+ * at its place on the timeline, and gaps left at zero so they draw as empty
+ * background rather than as audio.
+ *
+ * This is the only correct way to draw a row once it has been cut. Timeline
+ * seconds stop matching source seconds the moment a clip is rippled away or
+ * moved, and a clip's `sourceOffsetSec` is what puts the two back together.
+ * An uncut row is one whole-track clip and comes out identical to
+ * {@link buildColumns}, which is why every deck can go through here.
+ *
+ * `clips` must be in timeline order — everything in `shared/clips.ts` returns
+ * them that way — so this walks them once and stops at the right-hand edge
+ * instead of scanning the whole row for every pixel column.
+ */
+export function buildClipColumns(
+  wave: WaveformData,
+  clips: readonly Clip[],
+  fromSec: number,
+  toSec: number,
+  width: number,
+  sampleRate: number,
+  reuse?: WaveformColumns | null
+): WaveformColumns {
+  const count = Math.max(1, Math.floor(width))
+  const cols = columnsFor(count, reuse)
+  cols.low.fill(0)
+  cols.mid.fill(0)
+  cols.high.fill(0)
+
+  const span = toSec - fromSec
+  if (!(span > 0)) return cols
+  const scale = count / span
+
+  for (const clip of clips) {
+    if (clip.startSec >= toSec) break
+    const end = clip.startSec + clip.durationSec
+    if (end <= fromSec) continue
+
+    const t0 = clip.startSec > fromSec ? clip.startSec : fromSec
+    const t1 = end < toSec ? end : toSec
+    const c0 = Math.round((t0 - fromSec) * scale)
+    const c1 = Math.round((t1 - fromSec) * scale)
+    if (c1 <= c0) continue
+
+    // Take the source window from the rounded column edges, not from the clip
+    // edges: the peaks then line up with the pixels they are drawn into, so a
+    // cut does not shift the envelope by half a column.
+    const s0 = clip.sourceOffsetSec + fromSec + c0 / scale - clip.startSec
+    const s1 = clip.sourceOffsetSec + fromSec + c1 / scale - clip.startSec
+    fillColumns(wave, s0, s1, cols, c0, c1 - c0, sampleRate)
+  }
+  return cols
 }
 
 export interface WaveformDrawOptions {
@@ -448,6 +533,137 @@ export function drawPlayhead(
   }
   ctx.fillRect(Math.round(x) - style.width / 2, 0, style.width, height)
   ctx.restore()
+}
+
+/**
+ * How the pieces of a cut row are marked out.
+ *
+ * These colours live here rather than in `core/constants.ts` for the same
+ * reason {@link PLAYHEAD_COLOR} does: they are chrome belonging to this view,
+ * not part of the track palette.
+ */
+export interface ClipStyle {
+  /** Vertical division between two pieces. */
+  edgeColor: string
+  edgeWidth: number
+  /** The selected piece's edges, drawn brighter and wider. */
+  selectedEdgeColor: string
+  selectedEdgeWidth: number
+  /** Wash over the selected piece, painted under the waveform. */
+  selectedFill: string
+}
+
+export const DEFAULT_CLIP_STYLE: ClipStyle = {
+  edgeColor: 'rgba(255,255,255,0.5)',
+  edgeWidth: 1,
+  selectedEdgeColor: '#ffffff',
+  selectedEdgeWidth: 2,
+  selectedFill: 'rgba(255,255,255,0.09)'
+}
+
+/**
+ * The selected piece as a background wash over `[from, to]`.
+ *
+ * Drawn before the waveform so the envelope stays the brightest thing in the
+ * row: the selection lifts the piece off the background rather than veiling it.
+ * Nothing is drawn when no piece is selected, which is every performance deck.
+ */
+export function drawClipHighlight(
+  ctx: CanvasRenderingContext2D,
+  clips: readonly Clip[],
+  selectedId: string | null,
+  from: number,
+  to: number,
+  width: number,
+  height: number,
+  style: ClipStyle = DEFAULT_CLIP_STYLE
+): void {
+  const span = to - from
+  if (selectedId === null || !(span > 0) || width <= 0) return
+  const scale = width / span
+
+  for (const clip of clips) {
+    if (clip.id !== selectedId) continue
+    const x0 = Math.max((clip.startSec - from) * scale, 0)
+    const x1 = Math.min((clip.startSec + clip.durationSec - from) * scale, width)
+    if (x1 <= x0) return
+    ctx.save()
+    ctx.fillStyle = style.selectedFill
+    ctx.fillRect(x0, 0, x1 - x0, height)
+    ctx.restore()
+    return
+  }
+}
+
+/**
+ * The divisions between pieces, drawn over the waveform.
+ *
+ * Only real edits get a line. The start of the row and the end of the last
+ * piece are not cuts, and neither is the seam between two pieces that still
+ * touch — that seam is one line, drawn as the later piece's start. So an uncut
+ * row, which is one whole-track clip, draws nothing at all and the performance
+ * view is untouched.
+ *
+ * `clips` must be in timeline order.
+ */
+export function drawClipEdges(
+  ctx: CanvasRenderingContext2D,
+  clips: readonly Clip[],
+  selectedId: string | null,
+  from: number,
+  to: number,
+  width: number,
+  height: number,
+  style: ClipStyle = DEFAULT_CLIP_STYLE
+): void {
+  const span = to - from
+  if (!(span > 0) || width <= 0) return
+  const scale = width / span
+
+  ctx.save()
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i]
+    if (clip.startSec >= to) break
+    const end = clip.startSec + clip.durationSec
+    if (end <= from) continue
+
+    const selected = clip.id === selectedId
+    const prev = clips[i - 1]
+    const next = clips[i + 1]
+
+    // The seam between two touching pieces is one line, drawn as the later
+    // piece's start, and it belongs to the selection if either side is selected.
+    if (clip.startSec > 0) {
+      const afterSelected =
+        prev !== undefined &&
+        prev.id === selectedId &&
+        prev.startSec + prev.durationSec >= clip.startSec
+      edge(ctx, (clip.startSec - from) * scale, selected || afterSelected, style, width, height)
+    }
+
+    // A trailing edge only where the audio actually stops: a gap after this
+    // piece, or the selected piece sitting at the end of the row.
+    if (next !== undefined ? next.startSec > end : selected) {
+      const w = selected ? style.selectedEdgeWidth : style.edgeWidth
+      edge(ctx, (end - from) * scale - w, selected, style, width, height)
+    }
+  }
+  ctx.restore()
+}
+
+/** One division, skipped rather than half drawn when it falls outside the view. */
+function edge(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  strong: boolean,
+  style: ClipStyle,
+  width: number,
+  height: number
+): void {
+  const w = strong ? style.selectedEdgeWidth : style.edgeWidth
+  if (x < -w || x > width) return
+  ctx.fillStyle = strong ? style.selectedEdgeColor : style.edgeColor
+  ctx.fillRect(Math.round(x), 0, w, height)
 }
 
 /** Backing-store size a canvas of this CSS box needs at this pixel ratio. */

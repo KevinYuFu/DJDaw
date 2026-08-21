@@ -17,11 +17,21 @@ between tracks.
 - The view itself, four stacked tracks, focus and `Tab` switching
 - Per-track rekordbox navigation
 
+- **Cut / split.** `Ctrl+E` (or `Cmd+E`) splits at the playhead, plus a Cut
+  button. Delete leaves a gap that plays silent; Shift+Delete closes it. Cuts
+  snap to the beat grid when Quantize is on.
+
 **Next**
-- **Cut / split.** `Ctrl+E` splits the track at the playhead, the way Ableton
-  does. Plus a Cut button. Pieces can then be moved or deleted.
-- **EQ per track.** Real DSP. Today the EQ knobs in the mixer are drawn but
-  inert, so this is the first real filter work in the app.
+- **Moving clips.** Dragging a piece along the row, and onto another row.
+  Two things are deliberately unfinished until then:
+  - **Overlaps.** If clips ever overlap, the earliest one wins. Deterministic,
+    but a DAW would trim the one underneath instead.
+  - **The grid drifts after a ripple delete.** The beat grid is in source time,
+    which equals timeline time while a track is only cut. A ripple delete
+    shifts later clips off it, so quantised cuts after one snap to the
+    pre-ripple grid. Re-gridding an edited row belongs with clip moving.
+- **EQ per track.** Done. Trim, three-band EQ and a filter knob on all four
+  decks, in both the mixer and the editing rows.
 
 **Later**
 - **Automation.** Draw in fader, EQ and effect moves over time.
@@ -81,8 +91,10 @@ between tracks.
 
 ## Mixer
 
-- EQ, filter and trim DSP. Drawn but inert today.
-- Only the channel faders and crossfader are actually wired.
+- **Isolator-style full kill.** The EQ cuts to -26 dB, like a DJM's EQ. Going
+  to true silence needs a crossover rather than shelves, which is a different
+  piece of DSP.
+- Effects. There are none.
 
 ---
 
