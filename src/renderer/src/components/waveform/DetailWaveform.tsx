@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, WheelEvent as ReactWheelEvent } from 'react'
 import type { Clip } from '@shared/clips'
 import { clipAt } from '@shared/clips'
@@ -16,6 +16,7 @@ import {
   DETAIL_LOCATOR_STYLE,
   type WaveformColumns,
   buildClipColumns,
+  buildClipPeaks,
   canvasNeedsResize,
   drawBeatGrid,
   drawClipEdges,
@@ -53,6 +54,13 @@ export interface DetailWaveformProps {
 
 /** Matches the overview, so the same track reads at the same weight in both. */
 const WAVE_GAIN = 1.2
+
+/**
+ * Widest column, in source frames, still drawn from the samples themselves.
+ * Past this the band envelope already aggregates enough to look the same and
+ * the scan stops being free.
+ */
+const MAX_SAMPLES_PER_COLUMN = 600
 
 /** Mono mode collapses the bands into the high band's near-white. */
 const MONO_COLOR = BAND_COLORS.high
@@ -97,6 +105,8 @@ interface FrameState {
   selectedClipId: string | null
   /** Seconds of audio across the full width. */
   span: number
+  /** Decoded channels, for reading the true peak of a column. */
+  channels: readonly Float32Array[] | null
   mono: boolean
   rgb: boolean
 }
@@ -104,6 +114,7 @@ interface FrameState {
 export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef({ width: 0, height: 0 })
+  const peaksRef = useRef<Float32Array | null>(null)
   const columnsRef = useRef<WaveformColumns | null>(null)
   const dirtyRef = useRef(true)
   const dragRef = useRef<{
@@ -125,6 +136,15 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const track = useLibrary((s) => (trackId ? (s.trackById(trackId) ?? null) : null))
   const mono = useSettings((s) => s.waveformColorMode === 'mono')
   const rgb = useSettings((s) => s.waveformColorMode === 'rgb')
+  const buffer = useDecks((s) => s.decks[deckId].buffer)
+  // Held as plain arrays so the draw loop never touches the AudioBuffer, whose
+  // getChannelData is not free to call sixty times a second.
+  const channels = useMemo(() => {
+    if (!buffer) return null
+    const out: Float32Array[] = []
+    for (let c = 0; c < buffer.numberOfChannels; c++) out.push(buffer.getChannelData(c))
+    return out
+  }, [buffer])
 
   const span = WAVE_ZOOM_LEVELS[clamp(Math.round(zoomIndex), 0, WAVE_ZOOM_LEVELS.length - 1)]
 
@@ -139,6 +159,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
     clips: NO_CLIPS,
     selectedClipId: null,
     span: WAVE_ZOOM_LEVELS[0],
+    channels: null,
     mono: false,
     rgb: false
   })
@@ -158,6 +179,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       clips,
       selectedClipId,
       span,
+      channels,
       mono,
       rgb
     }
@@ -229,13 +251,31 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           columnsRef.current
         )
         columnsRef.current = cols
+        // Reading samples is only worth it while a column covers few enough of
+        // them to have a shape of its own; zoomed out it costs milliseconds and
+        // looks identical.
+        const perColumn = (state.span * state.waveform.sampleRate) / (width * dpr)
+        const peaks =
+          state.channels && perColumn <= MAX_SAMPLES_PER_COLUMN
+            ? buildClipPeaks(
+                state.channels,
+                state.clips,
+                from,
+                to,
+                width * dpr,
+                state.waveform.sampleRate,
+                peaksRef.current
+              )
+            : null
+        peaksRef.current = peaks
         drawWaveform(ctx, cols, {
           height,
           colors: BAND_COLORS,
           mono: state.mono ? MONO_COLOR : undefined,
           rgb: state.rgb,
           gain: WAVE_GAIN,
-          subpixel: dpr
+          subpixel: dpr,
+          heights: peaks
         })
       }
       if (state.loop?.active) {

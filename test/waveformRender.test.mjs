@@ -10,7 +10,7 @@ const chan = (c) => c.slice(4, -1).split(',').map(Number)
 eq('silence is black', rgbColumnColor(0, 0, 0), 'rgb(0,0,0)')
 
 const kick = chan(rgbColumnColor(1, 0.1, 0.15))
-ok(`a kick is pure red — ${kick}`, kick[0] === 255 && kick[1] === 0 && kick[2] === 0)
+ok(`a kick is red — ${kick}`, kick[0] === 255 && kick[1] < 32 && kick[2] < 32)
 
 const full = chan(rgbColumnColor(1, 0.95, 0.95))
 ok(`bass under a full mix still reads red — ${full}`, full[0] === 255 && full[0] > full[1] && full[0] > full[2])

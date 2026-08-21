@@ -223,6 +223,72 @@ export function buildClipColumns(
   return cols
 }
 
+/**
+ * Per-column peaks read straight from the decoded audio.
+ *
+ * The band envelope is a peak of a peak — one value per 128 frames, then the
+ * loudest of every bucket a column touches — so by the time it reaches the
+ * screen a drum hit has been flattened into a block. Reading the samples gives
+ * the column its own true peak and the shape gets its detail back.
+ *
+ * Clips are walked exactly as {@link buildClipColumns} walks them, so a cut row
+ * reads from the right part of the file.
+ */
+export function buildClipPeaks(
+  channels: readonly Float32Array[],
+  clips: readonly Clip[],
+  fromSec: number,
+  toSec: number,
+  width: number,
+  sampleRate: number,
+  reuse?: Float32Array | null
+): Float32Array {
+  const count = Math.max(1, Math.floor(width))
+  const out = reuse && reuse.length === count ? reuse : new Float32Array(count)
+  out.fill(0)
+
+  const span = toSec - fromSec
+  if (!(span > 0) || channels.length === 0 || !(sampleRate > 0)) return out
+  const scale = count / span
+  const frames = channels[0].length
+
+  for (const clip of clips) {
+    if (clip.startSec >= toSec) break
+    const end = clip.startSec + clip.durationSec
+    if (end <= fromSec) continue
+
+    const t0 = clip.startSec > fromSec ? clip.startSec : fromSec
+    const t1 = end < toSec ? end : toSec
+    const c0 = Math.round((t0 - fromSec) * scale)
+    const c1 = Math.round((t1 - fromSec) * scale)
+    if (c1 <= c0) continue
+
+    const sourceAt = (col: number): number =>
+      clip.sourceOffsetSec + fromSec + col / scale - clip.startSec
+
+    for (let c = c0; c < c1; c++) {
+      let i0 = Math.round(sourceAt(c) * sampleRate)
+      let i1 = Math.round(sourceAt(c + 1) * sampleRate)
+      if (i1 <= i0) i1 = i0 + 1
+      if (i1 <= 0 || i0 >= frames) continue
+      if (i0 < 0) i0 = 0
+      if (i1 > frames) i1 = frames
+
+      let peak = 0
+      for (let ch = 0; ch < channels.length; ch++) {
+        const data = channels[ch]
+        for (let i = i0; i < i1; i++) {
+          const v = data[i]
+          const a = v < 0 ? -v : v
+          if (a > peak) peak = a
+        }
+      }
+      out[c] = peak
+    }
+  }
+  return out
+}
+
 export interface WaveformDrawOptions {
   /** Strip height in CSS pixels. The mirror line sits halfway down it. */
   height: number
@@ -246,6 +312,11 @@ export interface WaveformDrawOptions {
    * it, which is what makes a transient read as a spike instead of a block.
    */
   subpixel?: number
+  /**
+   * Bar heights from {@link buildClipPeaks}, used instead of the band envelope.
+   * The bands still decide the colour; this only decides the shape.
+   */
+  heights?: Float32Array | null
 }
 
 /**
@@ -269,7 +340,7 @@ export function drawWaveform(
   if (opts.rgb && !opts.mono) {
     ctx.save()
     if (opts.dim != null && opts.dim < 1) ctx.globalAlpha = Math.max(0, opts.dim)
-    fillRgb(ctx, cols, x, centre, half, gain, step)
+    fillRgb(ctx, cols, x, centre, half, gain, step, opts.heights ?? null)
     ctx.restore()
     return
   }
@@ -311,6 +382,15 @@ const CHANNEL_GAMMA = { red: 2, green: 1.8, blue: 1.4 }
  */
 const MID_LIFTS_BLUE = 0.5
 
+/**
+ * How much of the grey in a colour is taken back out, 0 to 1.
+ *
+ * Three channels all sitting mid-way is a washed-out pastel. Pulling the
+ * common part out leaves the hue behind, which is what makes a busy section
+ * read as cyan or magenta rather than as pale mush.
+ */
+const SATURATION = 0.5
+
 /** Levels per channel. */
 const RGB_STEPS = 16
 
@@ -330,14 +410,17 @@ function fillRgb(
   centre: number,
   half: number,
   gain: number,
-  step: number
+  step: number,
+  heights: Float32Array | null
 ): void {
   let open = ''
   for (let c = 0; c < cols.width; c++) {
     const lo = cols.low[c]
     const mid = cols.mid[c]
     const hi = cols.high[c]
-    const peak = lo > mid ? (lo > hi ? lo : hi) : mid > hi ? mid : hi
+    const band = lo > mid ? (lo > hi ? lo : hi) : mid > hi ? mid : hi
+    if (band <= 0) continue
+    const peak = heights ? heights[c] : band
     if (peak <= 0) continue
 
     const color = rgbColumnColor(lo, mid, hi)
@@ -369,15 +452,31 @@ export function rgbColumnColor(low: number, mid: number, high: number): string {
   const h = high * BAND_WEIGHT.high
   const peak = l > m ? (l > h ? l : h) : m > h ? m : h
   if (!(peak > 0)) return 'rgb(0,0,0)'
-  const mid_ = m / peak
-  const blue = Math.max(h / peak, MID_LIFTS_BLUE * mid_)
-  return `rgb(${channel(l / peak, 'red')},${channel(mid_, 'green')},${channel(blue, 'blue')})`
+
+  const midRatio = m / peak
+  let r = shape(l / peak, 'red')
+  let g = shape(midRatio, 'green')
+  let b = shape(Math.max(h / peak, MID_LIFTS_BLUE * midRatio), 'blue')
+
+  const grey = r < g ? (r < b ? r : b) : g < b ? g : b
+  if (grey > 0) {
+    const k = SATURATION / (1 - SATURATION)
+    r = r * (1 + k) - grey * k
+    g = g * (1 + k) - grey * k
+    b = b * (1 + k) - grey * k
+  }
+  return `rgb(${step(r)},${step(g)},${step(b)})`
 }
 
-/** One channel, shaped by its own curve and ceiling, as a stepped byte. */
-function channel(ratio: number, id: 'red' | 'green' | 'blue'): number {
+/** One channel's own curve and ceiling, as a 0-1 level. */
+function shape(ratio: number, id: 'red' | 'green' | 'blue'): number {
   const r = ratio <= 0 ? 0 : ratio > 1 ? 1 : ratio
-  const v = Math.pow(r, CHANNEL_GAMMA[id]) * CHANNEL_CEILING[id]
+  return Math.pow(r, CHANNEL_GAMMA[id]) * CHANNEL_CEILING[id]
+}
+
+/** A 0-1 level, clamped and stepped, as a byte. */
+function step(value: number): number {
+  const v = value <= 0 ? 0 : value > 1 ? 1 : value
   return Math.round((Math.round(v * RGB_STEPS) * 255) / RGB_STEPS)
 }
 
