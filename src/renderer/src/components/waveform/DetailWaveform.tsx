@@ -20,6 +20,7 @@ import {
   buildClipExtents,
   canvasNeedsResize,
   drawBeatGrid,
+  drawClipBands,
   drawClipEdges,
   drawClipHighlight,
   drawCueMarkers,
@@ -234,6 +235,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       const from = position - state.span / 2
       const to = position + state.span / 2
 
+      drawClipBands(ctx, state.clips, from, to, width, height)
       drawClipHighlight(ctx, state.clips, state.selectedClipId, from, to, width, height)
 
       if (state.waveform) {

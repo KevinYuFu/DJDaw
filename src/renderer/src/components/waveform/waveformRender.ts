@@ -1035,19 +1035,42 @@ export interface ClipStyle {
   /** Vertical division between two pieces. */
   edgeColor: string
   edgeWidth: number
+  /**
+   * Width of the break punched through everything at a division, in CSS px.
+   *
+   * A line on its own is not enough. The beat grid draws full-height white
+   * lines too, so a cut drawn as one more of those is lost among the bars —
+   * and a cut is the one mark on the strip that has to be unmissable. Nothing
+   * else on the strip leaves a hole, so a hole reads as a cut immediately.
+   */
+  seamGap: number
+  /** Height of the block at each end of a division, in CSS px. */
+  seamCap: number
   /** The selected piece's edges, drawn brighter and wider. */
   selectedEdgeColor: string
   selectedEdgeWidth: number
   /** Wash over the selected piece, painted under the waveform. */
   selectedFill: string
+  /**
+   * Wash over every other piece, painted under the waveform.
+   *
+   * This is what actually makes a cut visible. A division on its own is a
+   * vertical line, and the beat grid is full of those; alternating the ground
+   * under the pieces turns them into blocks, and a block boundary is read
+   * at a glance without hunting for the line that made it.
+   */
+  bandFill: string
 }
 
 export const DEFAULT_CLIP_STYLE: ClipStyle = {
-  edgeColor: 'rgba(255,255,255,0.5)',
+  edgeColor: '#ffffff',
   edgeWidth: 1,
+  seamGap: 5,
+  seamCap: 7,
   selectedEdgeColor: '#ffffff',
   selectedEdgeWidth: 2,
-  selectedFill: 'rgba(255,255,255,0.09)'
+  selectedFill: 'rgba(255,255,255,0.09)',
+  bandFill: 'rgba(255,255,255,0.10)'
 }
 
 /**
@@ -1059,11 +1082,14 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
  * the audio instead of as a cut.
  */
 export const OVERVIEW_CLIP_STYLE: ClipStyle = {
-  edgeColor: 'rgba(255,255,255,0.4)',
+  edgeColor: '#ffffff',
   edgeWidth: 1,
+  seamGap: 3,
+  seamCap: 4,
   selectedEdgeColor: '#ffffff',
   selectedEdgeWidth: 1,
-  selectedFill: 'rgba(255,255,255,0.13)'
+  selectedFill: 'rgba(255,255,255,0.13)',
+  bandFill: 'rgba(255,255,255,0.11)'
 }
 
 /**
@@ -1111,6 +1137,40 @@ export function drawClipHighlight(
  *
  * `clips` must be in timeline order.
  */
+/**
+ * A wash under every other piece, so a cut row reads as blocks rather than as
+ * a run of audio with lines through it.
+ *
+ * Nothing is drawn for a row that has never been cut: one piece covering the
+ * whole track would just tint the strip for no reason.
+ */
+export function drawClipBands(
+  ctx: CanvasRenderingContext2D,
+  clips: readonly Clip[],
+  from: number,
+  to: number,
+  width: number,
+  height: number,
+  style: ClipStyle = DEFAULT_CLIP_STYLE
+): void {
+  const span = to - from
+  if (clips.length < 2 || !(span > 0) || width <= 0) return
+  const scale = width / span
+
+  ctx.save()
+  ctx.fillStyle = style.bandFill
+  for (let i = 1; i < clips.length; i += 2) {
+    const clip = clips[i]
+    if (clip.startSec >= to) break
+    const end = clip.startSec + clip.durationSec
+    if (end <= from) continue
+    const x0 = Math.max(0, (clip.startSec - from) * scale)
+    const x1 = Math.min(width, (end - from) * scale)
+    if (x1 > x0) ctx.fillRect(x0, 0, x1 - x0, height)
+  }
+  ctx.restore()
+}
+
 export function drawClipEdges(
   ctx: CanvasRenderingContext2D,
   clips: readonly Clip[],
@@ -1166,9 +1226,23 @@ function edge(
   height: number
 ): void {
   const w = strong ? style.selectedEdgeWidth : style.edgeWidth
-  if (x < -w || x > width) return
+  const gap = style.seamGap
+  if (x < -gap || x > width + gap) return
+
+  const left = Math.round(x) - Math.floor((gap - w) / 2)
+  // Punch through the waveform and the beat grid alike. A break is the part
+  // that reads as a cut; the line and the blocks only say where exactly.
+  if (gap > 0) ctx.clearRect(left, 0, gap, height)
+
   ctx.fillStyle = strong ? style.selectedEdgeColor : style.edgeColor
   ctx.fillRect(Math.round(x), 0, w, height)
+  // A block at each end, so the cut is still obvious across a quiet passage
+  // where there is no waveform for the break to interrupt.
+  const cap = style.seamCap
+  if (cap > 0) {
+    ctx.fillRect(left, 0, gap, cap)
+    ctx.fillRect(left, height - cap, gap, cap)
+  }
 }
 
 /**
