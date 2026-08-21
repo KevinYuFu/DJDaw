@@ -1069,10 +1069,10 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
   cardRadius: 2,
   handleHeight: 8,
   handleFill: 'rgba(255,255,255,0.3)',
-  selectedHandleFill: 'rgba(255,255,255,0.62)',
+  selectedHandleFill: 'rgba(255,255,255,0.31)',
   selectedEdgeColor: '#ffffff',
   selectedEdgeWidth: 2.5,
-  selectedFill: 'rgba(255,255,255,0.12)',
+  selectedFill: 'rgba(255,255,255,0.035)',
   bandFill: 'rgba(255,255,255,0.07)'
 }
 
