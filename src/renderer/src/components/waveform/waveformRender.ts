@@ -1053,7 +1053,13 @@ export interface ClipStyle {
   handleHeight: number
   handleFill: string
   selectedHandleFill: string
-  /** The selected piece's edges, drawn brighter and wider. */
+  /**
+   * The selected piece's outline: brighter, and wider by one device pixel.
+   *
+   * One is the smallest step there is, and it is enough. Any more and the
+   * selection stops being a mark on the piece and starts being the loudest
+   * thing on a row that is already busy.
+   */
   selectedEdgeColor: string
   selectedEdgeWidth: number
   /** Wash over the selected piece, painted under the waveform. */
@@ -1071,7 +1077,7 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
   handleFill: 'rgba(255,255,255,0.3)',
   selectedHandleFill: 'rgba(255,255,255,0.31)',
   selectedEdgeColor: '#ffffff',
-  selectedEdgeWidth: 2.5,
+  selectedEdgeWidth: 2,
   selectedFill: 'rgba(255,255,255,0.035)',
   bandFill: 'rgba(255,255,255,0.07)'
 }
