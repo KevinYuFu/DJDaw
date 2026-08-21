@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, RefObject } from 'react'
 import type { DeckId } from '@shared/types'
 import type { ChannelEq, EqMode } from '@shared/eq'
@@ -320,31 +320,17 @@ function Crossfader({ value, onChange, ariaLabel }: FaderProps): ReactElement {
   )
 }
 
-/**
- * Constant-power crossfade: each deck sits at -3 dB in the centre, so a blend
- * of two tracks does not read as a dip in level the way a linear fade does.
- */
-function crossfadeGains(position: number): { A: number; B: number } {
-  const t = clamp(position, 0, 1) * (Math.PI / 2)
-  return { A: Math.cos(t), B: Math.sin(t) }
-}
 
-/**
- * Push a level at the deck. The engine throws until `init()` has resolved, and
- * a fader moved during startup is not worth an exception at the UI — the
- * effect below re-pushes once the engine is up.
- */
-function applyDeckGain(id: DeckId, gain: number): void {
-  try {
-    AudioEngine.shared().deck(id).setGain(gain)
-  } catch {
-    // Engine not ready yet; the post-init push covers it.
-  }
-}
 
 export function Mixer(): ReactElement {
-  const [levels, setLevels] = useState<Record<MixerChannel, number>>({ A: 1, B: 1 })
-  const [crossfade, setCrossfade] = useState(0.5)
+  // The store holds these, not the mixer. The editing view has faders for the
+  // same decks, and this panel is unmounted while that view is open — kept
+  // locally, whichever mounted last would overwrite the other.
+  const faderA = useDecks((s) => s.decks.A.fader)
+  const faderB = useDecks((s) => s.decks.B.fader)
+  const crossfade = useDecks((s) => s.crossfade)
+  const setFader = useDecks((s) => s.setFader)
+  const setCrossfade = useDecks((s) => s.setCrossfade)
   const eqA = useDecks((s) => s.decks.A.eq)
   const eqB = useDecks((s) => s.decks.B.eq)
   const setChannelKnob = useDecks((s) => s.setChannelKnob)
@@ -352,34 +338,21 @@ export function Mixer(): ReactElement {
   const eqMode = useSettings((s) => s.eqMode)
   const setEqMode = useSettings((s) => s.setEqMode)
 
-  const cross = crossfadeGains(crossfade)
-  const gainA = levels.A * cross.A
-  const gainB = levels.B * cross.B
 
+  // The store pushes a level as it changes, but a value restored before the
+  // engine existed has nothing to push to; re-apply once it is up.
   useEffect(() => {
-    let live = true
-    const push = (): void => {
-      if (!live) return
-      applyDeckGain('A', gainA)
-      applyDeckGain('B', gainB)
-    }
-    push()
-    // The opening -3 dB centre position has to reach the decks even though
-    // nothing has been touched, so re-push as soon as the engine exists.
     void AudioEngine.shared()
       .init()
-      .then(push)
+      .then(() => {
+        const s = useDecks.getState()
+        s.setCrossfade(s.crossfade)
+      })
       .catch(() => {
         // Startup failures are reported by the app shell, not by a fader.
       })
-    return () => {
-      live = false
-    }
-  }, [gainA, gainB])
-
-  const setLevel = useCallback((id: DeckId, value: number) => {
-    setLevels((prev) => (prev[id] === value ? prev : { ...prev, [id]: value }))
   }, [])
+
 
   const eq: Record<MixerChannel, ChannelEq> = { A: eqA, B: eqB }
 
@@ -443,9 +416,9 @@ export function Mixer(): ReactElement {
         {DECKS.map((id) => (
           <ChannelFader
             key={id}
-            value={levels[id]}
+            value={id === 'A' ? faderA : faderB}
             ariaLabel={`Deck ${id} channel fader`}
-            onChange={(value) => setLevel(id, value)}
+            onChange={(value) => setFader(id, value)}
           />
         ))}
       </div>

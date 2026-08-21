@@ -7,6 +7,7 @@ import type {
 import type { DeckId, HotCue } from '@shared/types'
 import type { ChannelEq, EqMode } from '@shared/eq'
 import { CENTRE, eqGainDb, formatDb, formatFilter, isFlat, trimGainDb } from '@shared/eq'
+import { FADER_UNITY, formatFaderDb } from '@shared/fader'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { bpmAt } from '@renderer/core/beatgrid'
 import { HOT_CUE_COUNT, HOT_CUE_LABELS } from '@renderer/core/constants'
@@ -86,9 +87,6 @@ const KNOB_RADIUS = 10
 /** Sweep of a rotary control, -135 to +135 degrees, as on the hardware. */
 const KNOB_SWEEP = 270
 
-/** Width of the trim slider in px. The drag is 1:1 with the pointer across it. */
-const TRIM_SLIDER_W = 60
-
 interface EqKnobSpec {
   id: keyof ChannelEq
   /** One or two characters: the strip only has 26px per knob. */
@@ -146,6 +144,68 @@ interface EqDrag extends EqKnobSpec {
   startValue: number
 }
 
+/** Pointer travel, in px, for the whole of the fader. */
+const FADER_TRAVEL_PX = 150
+
+interface ChannelFaderProps {
+  deckId: DeckId
+  disabled: boolean
+}
+
+/**
+ * The channel fader for one row.
+ *
+ * Vertical, and tapered like a DAW fader rather than a mixer's trim: silent at
+ * the bottom, 0 dB near the top and a little headroom over it. Sits between the
+ * waveform and the rest of the controls because it is the one thing on the row
+ * that is about the level of the track rather than about editing it.
+ */
+function ChannelFader({ deckId, disabled }: ChannelFaderProps): ReactElement {
+  const position = useDecks((s) => s.decks[deckId].fader)
+  const drag = useRef<{ pointerId: number; startY: number; startValue: number } | null>(null)
+
+  const onDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    if (disabled || e.button !== 0) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    drag.current = { pointerId: e.pointerId, startY: e.clientY, startValue: position }
+  }
+  const onMove = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    const d = drag.current
+    if (!d || e.pointerId !== d.pointerId) return
+    useDecks.getState().setFader(deckId, d.startValue + (d.startY - e.clientY) / FADER_TRAVEL_PX)
+  }
+  const onUp = (): void => {
+    drag.current = null
+  }
+
+  const db = formatFaderDb(position)
+  const pct = clamp(position, 0, 1) * 100
+  return (
+    <div className={`edit-fader${disabled ? ' is-disabled' : ''}`}>
+      <div
+        className="edit-fader__track"
+        role="slider"
+        aria-label={`Deck ${deckId} fader`}
+        aria-disabled={disabled}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
+        aria-valuetext={`${db} dB`}
+        title={`Level ${db} dB — drag to set, double-click for 0 dB`}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onDoubleClick={() => !disabled && useDecks.getState().setFader(deckId, FADER_UNITY)}
+      >
+        <div className="edit-fader__slot" />
+        <div className="edit-fader__fill" style={{ height: `${pct}%` }} />
+      </div>
+      <span className="edit-fader__value mono">{db}</span>
+    </div>
+  )
+}
+
 interface ChannelEqProps {
   deckId: DeckId
   disabled: boolean
@@ -194,28 +254,6 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
     setReadout(null)
   }
 
-  const onTrimDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
-    if (disabled || e.button !== 0) return
-    e.currentTarget.setPointerCapture(e.pointerId)
-    const startValue = eq.trim
-    drag.current = {
-      id: 'trim',
-      label: 'T',
-      name: 'Trim',
-      pointerId: e.pointerId,
-      start: e.clientX,
-      startValue
-    }
-    setReadout(`Trim ${knobReadout('trim', startValue, eqMode)}`)
-  }
-
-  const onTrimMove = (e: ReactPointerEvent<HTMLDivElement>): void => {
-    const d = drag.current
-    if (!d || d.id !== 'trim' || e.pointerId !== d.pointerId) return
-    const value = clamp(d.startValue + (e.clientX - d.start) / TRIM_SLIDER_W, 0, 1)
-    useDecks.getState().setChannelKnob(deckId, 'trim', value)
-    setReadout(`Trim ${knobReadout('trim', value, eqMode)}`)
-  }
 
   const onKnobReset = (spec: EqKnobSpec): void => {
     if (disabled) return
@@ -228,30 +266,6 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
   return (
     <div className="edit-eq">
       {readout !== null ? <span className="edit-note mono">{readout}</span> : null}
-
-      <div
-        className={`edit-trim${Math.abs(eq.trim - CENTRE) > 0.001 ? ' is-moved' : ''}${disabled ? ' is-disabled' : ''}`}
-        style={{ width: TRIM_SLIDER_W }}
-        role="slider"
-        aria-label={`Deck ${deckId} Trim`}
-        aria-disabled={disabled}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(eq.trim * 100)}
-        aria-valuetext={knobReadout('trim', eq.trim, eqMode)}
-        title={`Trim ${knobReadout('trim', eq.trim, eqMode)} — drag to set, double-click for 0 dB`}
-        onPointerDown={onTrimDown}
-        onPointerMove={onTrimMove}
-        onPointerUp={onKnobUp}
-        onPointerCancel={onKnobUp}
-        onDoubleClick={() => onKnobReset({ id: 'trim', label: 'T', name: 'Trim' })}
-      >
-        <div className="edit-trim__track">
-          <div className="edit-trim__fill" style={{ width: `${clamp(eq.trim, 0, 1) * 100}%` }} />
-          <div className="edit-trim__unity" />
-          <div className="edit-trim__cap" style={{ left: `${clamp(eq.trim, 0, 1) * 100}%` }} />
-        </div>
-      </div>
 
       {EQ_KNOBS.map((spec) => {
         const value = eq[spec.id]
@@ -551,6 +565,8 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
           </div>
         )}
       </div>
+
+      <ChannelFader deckId={deckId} disabled={!ready} />
 
       <div className="edit-track__controls" onMouseDown={preventFocus}>
         <div className="edit-transport">

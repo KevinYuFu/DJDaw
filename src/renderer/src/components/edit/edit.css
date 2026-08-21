@@ -675,3 +675,65 @@
   border-radius: 1px;
   background: var(--text);
 }
+
+/* Channel fader: level, kept apart from the EQ because it is not part of it. */
+.edit-fader {
+  flex: 0 0 auto;
+  width: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+  min-height: 0;
+}
+.edit-fader.is-disabled {
+  opacity: 0.4;
+}
+
+.edit-fader__track {
+  position: relative;
+  flex: 1 1 auto;
+  width: 14px;
+  min-height: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.edit-fader.is-disabled .edit-fader__track {
+  cursor: default;
+}
+
+/* The empty part of the bar. Dark, but plainly a lit surface rather than the
+   panel behind it: the room left above the level is what says the level can
+   still go up. */
+.edit-fader__slot {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--deck-color, var(--accent)) 30%, #0a0a0e);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.edit-fader:not(.is-disabled) .edit-fader__track:hover .edit-fader__slot {
+  background: color-mix(in srgb, var(--deck-color, var(--accent)) 40%, #0a0a0e);
+}
+
+/* The level is the top of the fill. No cap: a bar that fills is what a screen
+   does, and a moulded grip is what a mixer does. */
+.edit-fader__fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 0 0 3px 3px;
+  background: var(--deck-color, var(--accent));
+}
+
+
+.edit-fader__value {
+  flex: 0 0 auto;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-dim);
+}
