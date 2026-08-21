@@ -64,6 +64,42 @@ ok('the high crossover is in the presence region',
 ok('and they are a long way apart', E.CROSSOVER_HZ.high / E.CROSSOVER_HZ.low > 5)
 eq('crossover Q is Butterworth, for a Linkwitz-Riley pair', E.CROSSOVER_Q, Math.SQRT1_2)
 
+// Shelf corners, which are a different thing from crossover points and were
+// once confused with them. EQ mode is built from these.
+{
+  ok('the low shelf corner is audible bass, not sub',
+    E.SHELF_CORNER_HZ.low >= 60 && E.SHELF_CORNER_HZ.low <= 400)
+  ok('the high shelf corner is in the presence region, not the air band',
+    E.SHELF_CORNER_HZ.high >= 1500 && E.SHELF_CORNER_HZ.high <= 5000)
+  ok('the mid bell is inside the audible range',
+    E.MID_BELL_HZ > 20 && E.MID_BELL_HZ < 20000)
+
+  // Both modes have to act on the same three bands, or the low knob would move
+  // a different part of the spectrum depending on which mode was selected.
+  eq('the low shelf sits on the low crossover', E.SHELF_CORNER_HZ.low, E.CROSSOVER_HZ.low)
+  eq('the high shelf sits on the high crossover', E.SHELF_CORNER_HZ.high, E.CROSSOVER_HZ.high)
+
+  ok('the mid bell sits between the two crossovers',
+    E.MID_BELL_HZ > E.CROSSOVER_HZ.low && E.MID_BELL_HZ < E.CROSSOVER_HZ.high)
+  // Between them by ratio, not by hertz: pitch is heard logarithmically, so the
+  // middle of the mid band is the geometric mean, around 790 Hz and not 1375.
+  eq('and dead centre of them by ratio',
+    E.MID_BELL_HZ / E.CROSSOVER_HZ.low,
+    E.CROSSOVER_HZ.high / E.MID_BELL_HZ,
+    1e-9)
+
+  // Q is centre over bandwidth, so this Q puts the bell's half-gain points on
+  // the two corners: the bell covers what the shelves leave it, and no more.
+  ok('the mid bell is wide, as a three-band mid has to be', E.MID_BELL_Q < 0.5)
+  ok('but not so wide it stops being a bell', E.MID_BELL_Q > 0.2)
+  eq('its bandwidth spans exactly the two shelf corners',
+    E.MID_BELL_Q * (E.SHELF_CORNER_HZ.high - E.SHELF_CORNER_HZ.low),
+    E.MID_BELL_HZ,
+    1e-9)
+  ok('and it is a real Q factor, not the decibels a low-pass wants',
+    E.MID_BELL_Q !== E.CROSSOVER_Q)
+}
+
 // The filter knob.
 {
   const centre = E.filterSetting(0.5)

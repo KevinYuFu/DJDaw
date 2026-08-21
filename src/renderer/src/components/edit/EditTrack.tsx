@@ -97,9 +97,11 @@ interface EqKnobSpec {
 /**
  * Low to high, left to right.
  *
- * A mixer stacks HI at the top and LOW at the bottom, which is why the mixer
- * strip is in that order — but that is a vertical convention. Laid out
- * horizontally it has to read the way frequency does, low on the left.
+ * The mixer stacks HI at the top and LOW at the bottom, which is the layout of
+ * every DJ mixer, and it stays that way. That is a vertical convention though.
+ * Laid out horizontally these have to read the way frequency does, low on the
+ * left, the way a spectrum or a piano runs. The two orders disagree on
+ * purpose; do not make one match the other.
  */
 const EQ_KNOBS: readonly EqKnobSpec[] = [
   { id: 'trim', label: 'T', name: 'Trim' },
