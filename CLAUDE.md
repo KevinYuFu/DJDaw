@@ -28,6 +28,16 @@ to merge, then branch from `main`.
 Stacking to avoid merge conflicts is the wrong reason. Conflicts are normal and
 resolvable; a stack makes every PR harder to review and forces a merge order.
 
+**Once Kevin merges a PR, that branch is finished.** The next change branches
+from `main` again, even when it is more of the same work. Pushing to a merged
+branch puts the commits nowhere: they are not on `main` and there is no open PR
+to review them.
+
+**After every push, check there is an open PR containing it.** `gh pr list`.
+
+**Before deleting a branch, check it is merged**, not just that a PR existed
+for it. `git rev-list --count main..<branch>` must be 0.
+
 **Check `git branch --show-current` before starting any work, and again before
 launching subagents.** Subagents inherit whatever branch the tree is on. I have
 shipped work onto the wrong branch once by switching to test something and
