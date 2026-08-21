@@ -322,7 +322,7 @@
 }
 .edit-btn__key {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -415,11 +415,11 @@
 
 .edit-knob {
   flex: 0 0 auto;
-  width: 26px;
+  width: 30px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   line-height: 0;
   cursor: ns-resize;
   touch-action: none;
@@ -433,10 +433,10 @@
 }
 
 .edit-knob__label {
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: var(--text-faint);
 }
 .edit-knob.is-moved .edit-knob__label {
@@ -450,19 +450,19 @@
 }
 .edit-knob__track {
   fill: none;
-  stroke: var(--border);
-  stroke-width: 2;
+  stroke: var(--border-strong);
+  stroke-width: 2.5;
   stroke-linecap: round;
 }
 .edit-knob__value {
   fill: none;
   stroke: var(--track-color);
-  stroke-width: 2;
+  stroke-width: 2.5;
   stroke-linecap: round;
 }
 .edit-knob__pointer {
-  stroke: var(--text);
-  stroke-width: 1.5;
+  stroke: #ffffff;
+  stroke-width: 2;
   stroke-linecap: round;
 }
 
@@ -474,7 +474,7 @@
   margin-left: auto;
   padding: 0 9px;
   border-radius: 11px;
-  font-size: 9px;
+  font-size: 10px;
 }
 .edit-btn--flat.is-lit,
 .edit-btn--flat.is-lit:hover:not(:disabled) {
