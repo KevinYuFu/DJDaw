@@ -1057,14 +1057,14 @@ export interface ClipStyle {
 }
 
 export const DEFAULT_CLIP_STYLE: ClipStyle = {
-  edgeColor: 'rgba(255,255,255,0.22)',
-  edgeWidth: 1,
-  cardGap: 5,
+  edgeColor: 'rgba(255,255,255,0.72)',
+  edgeWidth: 1.5,
+  cardGap: 7,
   cardRadius: 4,
-  selectedEdgeColor: 'rgba(255,255,255,0.85)',
-  selectedEdgeWidth: 1.5,
-  selectedFill: 'rgba(255,255,255,0.10)',
-  bandFill: 'rgba(255,255,255,0.045)'
+  selectedEdgeColor: '#ffffff',
+  selectedEdgeWidth: 2.5,
+  selectedFill: 'rgba(255,255,255,0.12)',
+  bandFill: 'rgba(255,255,255,0.07)'
 }
 
 /**
@@ -1076,14 +1076,14 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
  * the audio instead of as a cut.
  */
 export const OVERVIEW_CLIP_STYLE: ClipStyle = {
-  edgeColor: 'rgba(255,255,255,0.28)',
+  edgeColor: 'rgba(255,255,255,0.7)',
   edgeWidth: 1,
-  cardGap: 3,
+  cardGap: 4,
   cardRadius: 2,
-  selectedEdgeColor: 'rgba(255,255,255,0.9)',
-  selectedEdgeWidth: 1,
-  selectedFill: 'rgba(255,255,255,0.14)',
-  bandFill: 'rgba(255,255,255,0.06)'
+  selectedEdgeColor: '#ffffff',
+  selectedEdgeWidth: 1.5,
+  selectedFill: 'rgba(255,255,255,0.16)',
+  bandFill: 'rgba(255,255,255,0.08)'
 }
 
 /**
@@ -1195,6 +1195,19 @@ export function drawClipEdges(
   const scale = width / span
 
   ctx.save()
+
+  // Clear the gaps first. Without this the waveform runs straight across them
+  // and the pieces are only outlined, not separated — which is most of why a
+  // cut was still hard to find. A card has to be an island.
+  for (const clip of clips) {
+    if (clip.startSec >= to) break
+    if (clip.startSec + clip.durationSec <= from) continue
+    const r = cardRect(clip, from, scale, width, style)
+    if (!r) continue
+    ctx.clearRect(r.x - style.cardGap, 0, style.cardGap, height)
+    ctx.clearRect(r.x + r.w, 0, style.cardGap, height)
+  }
+
   for (const clip of clips) {
     if (clip.startSec >= to) break
     if (clip.startSec + clip.durationSec <= from) continue
@@ -1203,7 +1216,6 @@ export function drawClipEdges(
 
     const selected = clip.id === selectedId
     const w = selected ? style.selectedEdgeWidth : style.edgeWidth
-    // Half a line in, so a 1px outline lands on a pixel instead of across two.
     const inset = w / 2
     ctx.beginPath()
     ctx.roundRect(r.x + inset, inset, r.w - w, height - w, style.cardRadius)
