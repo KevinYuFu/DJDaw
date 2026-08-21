@@ -15,6 +15,18 @@ import { EditTrack } from '@renderer/components/edit/EditTrack'
 import './edit.css'
 
 /**
+ * The row the one transport drives, for now. An arrangement has a single
+ * playhead; wiring the other three to follow it is the next step.
+ */
+const TRANSPORT_DECK: DeckId = 'A'
+
+/** Shown when a cut is refused and no reason came back with it. */
+const CUT_FAILED = 'Cannot cut here'
+
+/** How long a refusal stays on the bar. */
+const NOTICE_MS = 1800
+
+/**
  * 24-bit, always. An export is the master Kevin takes back into rekordbox, so
  * the bounce is the last place to lose depth; MP3 is encoded from these bytes
  * in main, and giving ffmpeg the better input costs nothing.
@@ -403,10 +415,62 @@ function ExportPanel({ loaded, onClose }: ExportPanelProps): ReactElement {
 export function EditView(): ReactElement {
   const [exportOpen, setExportOpen] = useState(false)
   const loaded = useExportableDecks()
+  const focused = useSettings((s) => s.focusedDeck)
+  // Transport for the whole edit rather than for a row: an arrangement has one
+  // playhead, and the rows are parts of one piece rather than four decks.
+  const playing = useDecks((s) => s.decks[TRANSPORT_DECK].playing)
+  const canPlay = useDecks((s) => s.decks[TRANSPORT_DECK].status === 'ready')
+  const canCut = useDecks((s) => s.decks[focused].status === 'ready')
+  const [notice, setNotice] = useState<string | null>(null)
+  const noticeTimer = useRef(0)
+
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
+
+  // A cut on a clip boundary or in a gap is an ordinary thing to ask for by
+  // accident, so `cutAtPlayhead` refuses with a reason rather than throwing,
+  // and the bar shows it for a moment instead of looking broken.
+  const onCut = (): void => {
+    const result = useDecks.getState().cutAtPlayhead(focused)
+    window.clearTimeout(noticeTimer.current)
+    if (result.ok) {
+      setNotice(null)
+      return
+    }
+    setNotice(result.reason ?? CUT_FAILED)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
+  }
 
   return (
     <div className="edit-view">
       <header className="edit-view__bar">
+        <div className="edit-view__left" />
+
+        {notice !== null ? <span className="edit-note">{notice}</span> : null}
+
+        <button
+          type="button"
+          className={`edit-btn edit-btn--play${playing ? ' is-lit' : ''}`}
+          disabled={!canPlay}
+          onClick={() => useDecks.getState().togglePlay(TRANSPORT_DECK)}
+          title="Play / pause (Space)"
+        >
+          <svg className="edit-btn__icon" viewBox="0 0 12 12" aria-hidden="true">
+            {playing ? <path d="M2 1h3v10H2zM7 1h3v10H7z" /> : <path d="M2.5 1L10.5 6L2.5 11z" />}
+          </svg>
+          <span>{playing ? 'Pause' : 'Play'}</span>
+        </button>
+
+        <button
+          type="button"
+          className="edit-btn edit-btn--cut"
+          disabled={!canCut}
+          onClick={onCut}
+          title={`Cut row ${focused} in two at the playhead (Ctrl+E)`}
+        >
+          <span>Cut</span>
+          <span className="edit-btn__key">Ctrl+E</span>
+        </button>
+
         <button
           type="button"
           className="edit-btn edit-btn--export"

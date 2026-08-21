@@ -31,10 +31,21 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
   padding: 4px 10px;
   background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* Empty for now: the transport is on the right, and this side is spare. */
+.edit-view__left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.edit-view__bar .edit-btn {
+  flex: 0 0 auto;
+  padding: 0 14px;
 }
 
 .edit-btn--export {

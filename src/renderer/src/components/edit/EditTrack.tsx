@@ -25,12 +25,6 @@ export interface EditTrackProps {
 
 const EMPTY_TIME = '0:00.0'
 
-/** How long a refused cut explains itself for, in ms. */
-const NOTICE_MS = 1800
-
-/** Fallback for a refusal that arrived without a reason. */
-const CUT_FAILED = 'Cannot cut here'
-
 const PAD_INDICES = Array.from({ length: HOT_CUE_COUNT }, (_, i) => i)
 
 /**
@@ -46,16 +40,6 @@ interface HeldPad {
   index: number
 }
 
-/**
- * A preview is sounding, but it is not playback: PLAY stays dark and the
- * button only gets a faint green rim, so "something is coming out of this row"
- * is still readable at a glance without the transport claiming to be rolling.
- * The held CUE button or the held pad says which preview it is.
- */
-const PREVIEW_HINT = {
-  borderColor: 'var(--play)',
-  boxShadow: 'inset 0 0 0 1px var(--play-glow)'
-} as const
 
 /**
  * Buttons that keep focus swallow the Space shortcut, so the row hands it
@@ -348,16 +332,11 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
 export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   const status = useDecks((s) => s.decks[deckId].status)
   const trackId = useDecks((s) => s.decks[deckId].trackId)
-  const playing = useDecks((s) => s.decks[deckId].playing)
-  const previewing = useDecks((s) => s.decks[deckId].previewing)
   const track = useLibrary((s) => (trackId ? s.trackById(trackId) : undefined))
   const focused = useSettings((s) => s.focusedDeck === deckId)
   // A boolean, not the knobs themselves: this only has to re-render the row
   // when the channel crosses between flat and not, which is rare.
   const eqOn = useDecks((s) => !isFlat(s.decks[deckId].eq))
-  const [cueHeld, setCueHeld] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
-  const noticeTimer = useRef(0)
   // The pointers holding CUE and a pad down. Only the pointer that started a
   // hold may end it, so a second pointer cannot release someone else's press.
   const heldCue = useRef<number | null>(null)
@@ -374,7 +353,6 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   // reads as stopped: PLAY unlit, and still offering to play. Pressing it
   // there latches the preview into real playback, which is what the store's
   // togglePlay already does.
-  const rolling = playing && !previewing
 
   useRaf(() => {
     if (!deck) return
@@ -399,30 +377,13 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
     setBpm(formatBpm(null))
   }, [deck, setBpm, setElapsed, setRemaining])
 
-  // A row emptied or unmounted mid-notice must not fire into a dead component.
-  useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
 
-  // A cut on a clip boundary or in a gap is an ordinary thing to ask for by
-  // accident, so `cutAtPlayhead` refuses with a reason rather than throwing,
-  // and the row shows it for a moment instead of looking broken.
-  const onCut = (): void => {
-    const result = useDecks.getState().cutAtPlayhead(deckId)
-    window.clearTimeout(noticeTimer.current)
-    if (result.ok) {
-      setNotice(null)
-      return
-    }
-    setNotice(result.reason ?? CUT_FAILED)
-    noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
-  }
   // A control that stops taking pointer events mid-hold — the row emptied, so
   // its buttons went disabled — never sees its own release. Nothing else would
   // ever end that preview, so end it here.
   useEffect(() => {
-    if (ready || (heldCue.current === null && heldPad.current === null)) return
-    heldCue.current = null
+    if (ready || heldPad.current === null) return
     heldPad.current = null
-    setCueHeld(false)
     useDecks.getState().endPreview(deckId)
   }, [ready, deckId])
 
@@ -442,26 +403,11 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   const title = track?.title ?? (status === 'loading' ? 'Loading' : 'Empty')
   const artist = track?.artist ?? ''
 
-  const onCueDown = (e: ReactPointerEvent<HTMLButtonElement>): void => {
-    if (e.button !== 0) return
-    // Capture, so the release still lands here if the pointer slides off the
-    // button mid-preview; letting go anywhere must stop the preview.
-    e.currentTarget.setPointerCapture(e.pointerId)
-    heldCue.current = e.pointerId
-    setCueHeld(true)
-    useDecks.getState().cuePress(deckId)
-  }
 
   // pointerup, pointercancel and lostpointercapture all mean the hold is over.
   // Capture puts the first two on this button wherever the pointer has gone;
   // the third catches a capture torn away without either. Whichever arrives
   // first clears the ref, so the rest are no-ops.
-  const onCueEnd = (e: ReactPointerEvent<HTMLButtonElement>): void => {
-    if (heldCue.current !== e.pointerId) return
-    heldCue.current = null
-    setCueHeld(false)
-    useDecks.getState().cueRelease(deckId)
-  }
 
   const onPadDown = (
     e: ReactPointerEvent<HTMLButtonElement>,
@@ -569,52 +515,6 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
       <ChannelFader deckId={deckId} disabled={!ready} />
 
       <div className="edit-track__controls" onMouseDown={preventFocus}>
-        <div className="edit-transport">
-          <button
-            type="button"
-            className={`edit-btn edit-btn--play${rolling ? ' is-lit' : ''}${
-              previewing ? ' is-previewing' : ''
-            }`}
-            style={previewing ? PREVIEW_HINT : undefined}
-            disabled={!ready}
-            onClick={() => useDecks.getState().togglePlay(deckId)}
-            title={previewing ? 'Play: keep playing from here (Space)' : 'Play / pause (Space)'}
-          >
-            <svg className="edit-btn__icon" viewBox="0 0 12 12" aria-hidden="true">
-              {rolling ? <path d="M2 1h3v10H2zM7 1h3v10H7z" /> : <path d="M2.5 1L10.5 6L2.5 11z" />}
-            </svg>
-            <span>{rolling ? 'Pause' : 'Play'}</span>
-          </button>
-
-          <button
-            type="button"
-            className={`edit-btn edit-btn--cue${cueHeld ? ' is-lit' : ''}`}
-            disabled={!ready}
-            onPointerDown={onCueDown}
-            onPointerUp={onCueEnd}
-            onPointerCancel={onCueEnd}
-            onLostPointerCapture={onCueEnd}
-            title="Cue: back to cue while playing, hold to preview from the cue point, or set it here (C)"
-          >
-            <svg className="edit-btn__icon" viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M1 1h2v10H1zM4.5 6L11 1.5v9z" />
-            </svg>
-            <span>Cue</span>
-          </button>
-
-          <button
-            type="button"
-            className="edit-btn edit-btn--cut"
-            disabled={!ready}
-            onClick={onCut}
-            title="Cut the track in two at the playhead (Ctrl+E)"
-          >
-            <span>Cut</span>
-            <span className="edit-btn__key">Ctrl+E</span>
-          </button>
-
-          {notice !== null ? <span className="edit-note">{notice}</span> : null}
-        </div>
 
         <ChannelEqStrip deckId={deckId} disabled={!ready} />
 
