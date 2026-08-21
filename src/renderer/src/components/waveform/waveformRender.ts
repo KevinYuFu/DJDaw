@@ -1044,14 +1044,11 @@ export interface ClipStyle {
   cardGap: number
   /** Corner radius of a piece, in CSS px. */
   cardRadius: number
-/**
-   * Height of the bars across the top and bottom of a piece, in CSS px. Zero
-   * draws none.
+  /**
+   * Height of the bar across the top of a piece, in CSS px. Zero draws none.
    *
-   * They are what a piece is picked up by. Dragging anywhere on the waveform
-   * is a scrub, so moving a piece needs somewhere of its own to be grabbed.
-   * Two bars rather than one: at this height a row's waveform sits between
-   * them, and whichever is nearer the hand is the one it reaches for.
+   * It is what a piece is picked up by. Dragging anywhere on the waveform is a
+   * scrub, so moving a piece needs somewhere of its own to be grabbed.
    */
   handleHeight: number
   handleFill: string
@@ -1228,25 +1225,13 @@ export function drawClipEdges(
       ctx.fill()
     }
 
-    // The grab bars, one along each edge of the card.
+    // The grab bar, rounded all the way round so it reads as its own thing
+    // sitting on the piece rather than as the top of the card.
     const h = style.handleHeight
     if (h > 0) {
+      ctx.beginPath()
+      ctx.roundRect(r.x + inset, inset, r.w - w, h, style.cardRadius)
       ctx.fillStyle = selected ? style.selectedHandleFill : style.handleFill
-      ctx.beginPath()
-      ctx.roundRect(r.x + inset, inset, r.w - w, h, [
-        style.cardRadius,
-        style.cardRadius,
-        0,
-        0
-      ])
-      ctx.fill()
-      ctx.beginPath()
-      ctx.roundRect(r.x + inset, height - inset - h, r.w - w, h, [
-        0,
-        0,
-        style.cardRadius,
-        style.cardRadius
-      ])
       ctx.fill()
     }
     ctx.lineWidth = w
