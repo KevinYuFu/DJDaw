@@ -86,6 +86,9 @@ const KNOB_RADIUS = 8.5
 /** Sweep of a rotary control, -135 to +135 degrees, as on the hardware. */
 const KNOB_SWEEP = 270
 
+/** Width of the trim slider in px. The drag is 1:1 with the pointer across it. */
+const TRIM_SLIDER_W = 66
+
 interface EqKnobSpec {
   id: keyof ChannelEq
   /** One or two characters: the strip only has 26px per knob. */
@@ -104,7 +107,6 @@ interface EqKnobSpec {
  * purpose; do not make one match the other.
  */
 const EQ_KNOBS: readonly EqKnobSpec[] = [
-  { id: 'trim', label: 'T', name: 'Trim' },
   { id: 'low', label: 'LO', name: 'Low' },
   { id: 'mid', label: 'MID', name: 'Mid' },
   { id: 'high', label: 'HI', name: 'High' },
@@ -139,7 +141,8 @@ function knobReadout(id: keyof ChannelEq, value: number, mode: EqMode): string {
 
 interface EqDrag extends EqKnobSpec {
   pointerId: number
-  startY: number
+  /** Pointer position where the drag began: clientY for a knob, clientX for the slider. */
+  start: number
   startValue: number
 }
 
@@ -174,14 +177,14 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
     // feeding this knob until the button comes up.
     e.currentTarget.setPointerCapture(e.pointerId)
     const startValue = eq[spec.id]
-    drag.current = { ...spec, pointerId: e.pointerId, startY: e.clientY, startValue }
+    drag.current = { ...spec, pointerId: e.pointerId, start: e.clientY, startValue }
     setReadout(`${spec.name} ${knobReadout(spec.id, startValue, eqMode)}`)
   }
 
   const onKnobMove = (e: ReactPointerEvent<HTMLDivElement>): void => {
     const d = drag.current
     if (!d || e.pointerId !== d.pointerId) return
-    const value = clamp(d.startValue + (d.startY - e.clientY) / KNOB_TRAVEL_PX, 0, 1)
+    const value = clamp(d.startValue + (d.start - e.clientY) / KNOB_TRAVEL_PX, 0, 1)
     useDecks.getState().setChannelKnob(deckId, d.id, value)
     setReadout(`${d.name} ${knobReadout(d.id, value, eqMode)}`)
   }
@@ -189,6 +192,29 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
   const onKnobUp = (): void => {
     drag.current = null
     setReadout(null)
+  }
+
+  const onTrimDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    if (disabled || e.button !== 0) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const startValue = eq.trim
+    drag.current = {
+      id: 'trim',
+      label: 'T',
+      name: 'Trim',
+      pointerId: e.pointerId,
+      start: e.clientX,
+      startValue
+    }
+    setReadout(`Trim ${knobReadout('trim', startValue, eqMode)}`)
+  }
+
+  const onTrimMove = (e: ReactPointerEvent<HTMLDivElement>): void => {
+    const d = drag.current
+    if (!d || d.id !== 'trim' || e.pointerId !== d.pointerId) return
+    const value = clamp(d.startValue + (e.clientX - d.start) / TRIM_SLIDER_W, 0, 1)
+    useDecks.getState().setChannelKnob(deckId, 'trim', value)
+    setReadout(`Trim ${knobReadout('trim', value, eqMode)}`)
   }
 
   const onKnobReset = (spec: EqKnobSpec): void => {
@@ -202,6 +228,30 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
   return (
     <div className="edit-eq">
       {readout !== null ? <span className="edit-note mono">{readout}</span> : null}
+
+      <div
+        className={`edit-trim${Math.abs(eq.trim - CENTRE) > 0.001 ? ' is-moved' : ''}${disabled ? ' is-disabled' : ''}`}
+        style={{ width: TRIM_SLIDER_W }}
+        role="slider"
+        aria-label={`Deck ${deckId} Trim`}
+        aria-disabled={disabled}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(eq.trim * 100)}
+        aria-valuetext={knobReadout('trim', eq.trim, eqMode)}
+        title={`Trim ${knobReadout('trim', eq.trim, eqMode)} — drag to set, double-click for 0 dB`}
+        onPointerDown={onTrimDown}
+        onPointerMove={onTrimMove}
+        onPointerUp={onKnobUp}
+        onPointerCancel={onKnobUp}
+        onDoubleClick={() => onKnobReset({ id: 'trim', label: 'T', name: 'Trim' })}
+      >
+        <div className="edit-trim__track">
+          <div className="edit-trim__fill" style={{ width: `${clamp(eq.trim, 0, 1) * 100}%` }} />
+          <div className="edit-trim__unity" />
+          <div className="edit-trim__cap" style={{ left: `${clamp(eq.trim, 0, 1) * 100}%` }} />
+        </div>
+      </div>
 
       {EQ_KNOBS.map((spec) => {
         const value = eq[spec.id]
