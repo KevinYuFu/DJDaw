@@ -296,17 +296,20 @@ export function drawWaveform(
  */
 const BAND_WEIGHT = { low: 1, mid: 0.4, high: 0.55 }
 
-/**
- * How bright each channel can get, in the same order of priority.
- *
- * Green stops well short of full: mids are the least useful thing to pick out
- * of a waveform, and a green that reached full would wash every busy section
- * out to white.
- */
-const CHANNEL_CEILING = { red: 1, green: 0.62, blue: 0.95 }
+/** How bright each channel can get. */
+const CHANNEL_CEILING = { red: 1, green: 0.88, blue: 0.95 }
 
 /** Above 1 tightens a channel around the band that dominates its column. */
 const CHANNEL_GAMMA = { red: 2, green: 1.8, blue: 1.4 }
+
+/**
+ * How far the mids lift blue on their own.
+ *
+ * A column of pure mids on the green channel alone is a flat, dark green.
+ * Lifting blue with it lands on the emerald rekordbox shows for the same
+ * sound. Highs still own the channel: this only ever raises it.
+ */
+const MID_LIFTS_BLUE = 0.5
 
 /** Levels per channel. */
 const RGB_STEPS = 16
@@ -366,7 +369,9 @@ export function rgbColumnColor(low: number, mid: number, high: number): string {
   const h = high * BAND_WEIGHT.high
   const peak = l > m ? (l > h ? l : h) : m > h ? m : h
   if (!(peak > 0)) return 'rgb(0,0,0)'
-  return `rgb(${channel(l / peak, 'red')},${channel(m / peak, 'green')},${channel(h / peak, 'blue')})`
+  const mid_ = m / peak
+  const blue = Math.max(h / peak, MID_LIFTS_BLUE * mid_)
+  return `rgb(${channel(l / peak, 'red')},${channel(mid_, 'green')},${channel(blue, 'blue')})`
 }
 
 /** One channel, shaped by its own curve and ceiling, as a stepped byte. */
