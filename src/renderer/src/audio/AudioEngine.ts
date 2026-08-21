@@ -11,6 +11,10 @@ import { Deck } from '@renderer/audio/Deck'
  *   ...     ├─> master ─> destination
  *   Deck D ─┘
  *
+ * Each deck is its own channel strip — worklet, trim, three EQ bands, the
+ * filter knob, then its output gain — so a deck arrives here already mixed and
+ * the master node only sets the overall level. See `Deck`.
+ *
  * A singleton because there is exactly one output device and the worklet
  * module is registered per context; every module that needs audio reaches it
  * through `AudioEngine.shared()`.
