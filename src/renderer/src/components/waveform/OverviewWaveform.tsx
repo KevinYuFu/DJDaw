@@ -551,10 +551,10 @@ function rasterise(
           layers.clips,
           0,
           state.duration,
-          width,
+          width * dpr,
           layers.waveform.sampleRate
         )
-      : buildColumns(layers.waveform, 0, state.duration, width, layers.waveform.sampleRate)
+      : buildColumns(layers.waveform, 0, state.duration, width * dpr, layers.waveform.sampleRate)
   const passes: ReadonlyArray<[HTMLCanvasElement, BandColors, string, number]> = [
     [layers.played, BAND_COLORS_DIM, MONO_COLOR_DIM, RGB_DIM],
     [layers.live, BAND_COLORS, MONO_COLOR, 1]
@@ -572,7 +572,8 @@ function rasterise(
         mono: state.mono ? monoColor : undefined,
         rgb: state.rgb,
         dim,
-        gain: WAVE_GAIN
+        gain: WAVE_GAIN,
+        subpixel: dpr
       })
     }
   }
