@@ -69,12 +69,18 @@ interface EqKnobSpec {
   name: string
 }
 
-/** Left to right in DJM order, so the muscle memory carries over. */
+/**
+ * Low to high, left to right.
+ *
+ * A mixer stacks HI at the top and LOW at the bottom, which is why the mixer
+ * strip is in that order — but that is a vertical convention. Laid out
+ * horizontally it has to read the way frequency does, low on the left.
+ */
 const EQ_KNOBS: readonly EqKnobSpec[] = [
   { id: 'trim', label: 'T', name: 'Trim' },
-  { id: 'high', label: 'HI', name: 'High' },
-  { id: 'mid', label: 'MID', name: 'Mid' },
   { id: 'low', label: 'LO', name: 'Low' },
+  { id: 'mid', label: 'MID', name: 'Mid' },
+  { id: 'high', label: 'HI', name: 'High' },
   { id: 'filter', label: 'F', name: 'Filter' }
 ]
 
