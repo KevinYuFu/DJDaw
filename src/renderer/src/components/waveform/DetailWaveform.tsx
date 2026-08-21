@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, WheelEvent as ReactWheelEvent } from 'react'
 import type { Clip } from '@shared/clips'
+import type { ColumnExtents } from '@renderer/components/waveform/waveformRender'
 import { clipAt } from '@shared/clips'
 import type { BeatGrid, DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
@@ -16,7 +17,7 @@ import {
   DETAIL_LOCATOR_STYLE,
   type WaveformColumns,
   buildClipColumns,
-  buildClipPeaks,
+  buildClipExtents,
   canvasNeedsResize,
   drawBeatGrid,
   drawClipEdges,
@@ -53,7 +54,7 @@ export interface DetailWaveformProps {
 }
 
 /** Matches the overview, so the same track reads at the same weight in both. */
-const WAVE_GAIN = 1.2
+const WAVE_GAIN = 0.8
 
 /**
  * Widest column, in source frames, still drawn from the samples themselves.
@@ -114,7 +115,7 @@ interface FrameState {
 export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef({ width: 0, height: 0 })
-  const peaksRef = useRef<Float32Array | null>(null)
+  const extentsRef = useRef<ColumnExtents | null>(null)
   const columnsRef = useRef<WaveformColumns | null>(null)
   const dirtyRef = useRef(true)
   const dragRef = useRef<{
@@ -255,19 +256,19 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         // them to have a shape of its own; zoomed out it costs milliseconds and
         // looks identical.
         const perColumn = (state.span * state.waveform.sampleRate) / (width * dpr)
-        const peaks =
+        const extents =
           state.channels && perColumn <= MAX_SAMPLES_PER_COLUMN
-            ? buildClipPeaks(
+            ? buildClipExtents(
                 state.channels,
                 state.clips,
                 from,
                 to,
                 width * dpr,
                 state.waveform.sampleRate,
-                peaksRef.current
+                extentsRef.current
               )
             : null
-        peaksRef.current = peaks
+        extentsRef.current = extents
         drawWaveform(ctx, cols, {
           height,
           colors: BAND_COLORS,
@@ -275,7 +276,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           rgb: state.rgb,
           gain: WAVE_GAIN,
           subpixel: dpr,
-          heights: peaks
+          extents
         })
       }
       if (state.loop?.active) {
