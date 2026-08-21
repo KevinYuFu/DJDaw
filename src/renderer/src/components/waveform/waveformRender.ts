@@ -223,29 +223,49 @@ export function buildClipColumns(
   return cols
 }
 
+/** What the signal does under each column. */
+export interface ColumnExtents {
+  /** Lowest sample, -1 to 0. */
+  min: Float32Array
+  /** Highest sample, 0 to 1. */
+  max: Float32Array
+  /** Root mean square, 0 to 1: the body of the sound rather than its tips. */
+  rms: Float32Array
+}
+
 /**
- * Per-column peaks read straight from the decoded audio.
+ * The lowest and highest sample under each column, read from the decoded audio.
  *
- * The band envelope is a peak of a peak — one value per 128 frames, then the
- * loudest of every bucket a column touches — so by the time it reaches the
- * screen a drum hit has been flattened into a block. Reading the samples gives
- * the column its own true peak and the shape gets its detail back.
+ * Not an envelope of absolute peaks: the two edges are tracked separately, so
+ * what gets drawn is the shape of the signal rather than a symmetrical block.
+ * On a loud master that is the whole difference between a readable waveform and
+ * a solid bar, because a limited mix peaks near full scale almost everywhere
+ * while the signal itself still swings through zero.
  *
  * Clips are walked exactly as {@link buildClipColumns} walks them, so a cut row
  * reads from the right part of the file.
  */
-export function buildClipPeaks(
+export function buildClipExtents(
   channels: readonly Float32Array[],
   clips: readonly Clip[],
   fromSec: number,
   toSec: number,
   width: number,
   sampleRate: number,
-  reuse?: Float32Array | null
-): Float32Array {
+  reuse?: ColumnExtents | null
+): ColumnExtents {
   const count = Math.max(1, Math.floor(width))
-  const out = reuse && reuse.length === count ? reuse : new Float32Array(count)
-  out.fill(0)
+  const out =
+    reuse && reuse.min.length === count && reuse.rms && reuse.rms.length === count
+      ? reuse
+      : {
+          min: new Float32Array(count),
+          max: new Float32Array(count),
+          rms: new Float32Array(count)
+        }
+  out.min.fill(0)
+  out.max.fill(0)
+  out.rms.fill(0)
 
   const span = toSec - fromSec
   if (!(span > 0) || channels.length === 0 || !(sampleRate > 0)) return out
@@ -274,16 +294,21 @@ export function buildClipPeaks(
       if (i0 < 0) i0 = 0
       if (i1 > frames) i1 = frames
 
-      let peak = 0
+      let lo = 0
+      let hi = 0
+      let sum = 0
       for (let ch = 0; ch < channels.length; ch++) {
         const data = channels[ch]
         for (let i = i0; i < i1; i++) {
           const v = data[i]
-          const a = v < 0 ? -v : v
-          if (a > peak) peak = a
+          if (v < lo) lo = v
+          else if (v > hi) hi = v
+          sum += v * v
         }
       }
-      out[c] = peak
+      out.min[c] = lo
+      out.max[c] = hi
+      out.rms[c] = Math.sqrt(sum / ((i1 - i0) * channels.length))
     }
   }
   return out
@@ -313,10 +338,10 @@ export interface WaveformDrawOptions {
    */
   subpixel?: number
   /**
-   * Bar heights from {@link buildClipPeaks}, used instead of the band envelope.
-   * The bands still decide the colour; this only decides the shape.
+   * Signal edges from {@link buildClipExtents}, drawn instead of the band
+   * envelope. The bands still decide the colour; this only decides the shape.
    */
-  heights?: Float32Array | null
+  extents?: ColumnExtents | null
 }
 
 /**
@@ -340,7 +365,7 @@ export function drawWaveform(
   if (opts.rgb && !opts.mono) {
     ctx.save()
     if (opts.dim != null && opts.dim < 1) ctx.globalAlpha = Math.max(0, opts.dim)
-    fillRgb(ctx, cols, x, centre, half, gain, step, opts.heights ?? null)
+    fillRgb(ctx, cols, x, centre, half, gain, step, opts.extents ?? null)
     ctx.restore()
     return
   }
@@ -383,13 +408,27 @@ const CHANNEL_GAMMA = { red: 2, green: 1.8, blue: 1.4 }
 const MID_LIFTS_BLUE = 0.5
 
 /**
- * How much of the grey in a colour is taken back out, 0 to 1.
+ * How far a colour is lifted towards white when one band owns the column.
  *
- * Three channels all sitting mid-way is a washed-out pastel. Pulling the
- * common part out leaves the hue behind, which is what makes a busy section
- * read as cyan or magenta rather than as pale mush.
+ * A fully saturated hue on black is a neon stripe and it is hard to read a
+ * shape through. Lifting keeps the hue but puts the light back in, which is
+ * what a meter looks like: salmon and mint rather than red and green.
  */
-const SATURATION = 0.5
+const WHITE_LIFT = 0.05
+
+/**
+ * Extra lift for a column whose three bands are all about as loud.
+ *
+ * This is what gives the strip its contrast. A kick is bass and nothing else,
+ * so it stays a deep salmon; a snare or a crash is the whole spectrum at once
+ * and goes almost white. Without it every loud column comes out the same pink
+ * and the detail is lost in a blob.
+ */
+const BROADBAND_LIFT = 0.72
+
+/** Trim off the top so a lifted colour still has somewhere to go. */
+const LEVEL = 0.94
+
 
 /** Levels per channel. */
 const RGB_STEPS = 16
@@ -411,7 +450,7 @@ function fillRgb(
   half: number,
   gain: number,
   step: number,
-  heights: Float32Array | null
+  extents: ColumnExtents | null
 ): void {
   let open = ''
   for (let c = 0; c < cols.width; c++) {
@@ -420,8 +459,15 @@ function fillRgb(
     const hi = cols.high[c]
     const band = lo > mid ? (lo > hi ? lo : hi) : mid > hi ? mid : hi
     if (band <= 0) continue
-    const peak = heights ? heights[c] : band
-    if (peak <= 0) continue
+
+    // The RMS, not the peak: on a limited master the tips sit at full scale
+    // almost everywhere, and this is the part that still moves. One flat tone
+    // per column, top to bottom.
+    let r = extents ? extents.rms[c] * half * gain : band * half * gain
+    if (r > half) r = half
+    if (r < MIN_BAR_HALF_PX) r = MIN_BAR_HALF_PX
+    const top = r
+    const bottom = -r
 
     const color = rgbColumnColor(lo, mid, hi)
     if (color !== open) {
@@ -430,11 +476,7 @@ function fillRgb(
       ctx.beginPath()
       open = color
     }
-
-    let h = peak * half * gain
-    if (h > half) h = half
-    else if (h < MIN_BAR_HALF_PX) h = MIN_BAR_HALF_PX
-    ctx.rect(x + c * step, centre - h, step, h * 2)
+    ctx.rect(x + c * step, centre - top, step, top - bottom)
   }
   if (open) ctx.fill()
 }
@@ -458,20 +500,25 @@ export function rgbColumnColor(low: number, mid: number, high: number): string {
   let g = shape(midRatio, 'green')
   let b = shape(Math.max(h / peak, MID_LIFTS_BLUE * midRatio), 'blue')
 
-  const grey = r < g ? (r < b ? r : b) : g < b ? g : b
-  if (grey > 0) {
-    const k = SATURATION / (1 - SATURATION)
-    r = r * (1 + k) - grey * k
-    g = g * (1 + k) - grey * k
-    b = b * (1 + k) - grey * k
-  }
-  return `rgb(${step(r)},${step(g)},${step(b)})`
+  // How evenly the three share the column, before the weighting above tilts
+  // them: 0 when one band owns it, 1 when they are all equal.
+  const loud = low > mid ? (low > high ? low : high) : mid > high ? mid : high
+  const quiet = low < mid ? (low < high ? low : high) : mid < high ? mid : high
+  const even = loud > 0 ? quiet / loud : 0
+  const towardsWhite = WHITE_LIFT + BROADBAND_LIFT * even
+
+  return `rgb(${step(lift(r, towardsWhite))},${step(lift(g, towardsWhite))},${step(lift(b, towardsWhite))})`
 }
 
 /** One channel's own curve and ceiling, as a 0-1 level. */
 function shape(ratio: number, id: 'red' | 'green' | 'blue'): number {
   const r = ratio <= 0 ? 0 : ratio > 1 ? 1 : ratio
   return Math.pow(r, CHANNEL_GAMMA[id]) * CHANNEL_CEILING[id]
+}
+
+/** Towards white by `amount`, then down a touch so the lift has headroom. */
+function lift(level: number, amount: number): number {
+  return (level + (1 - level) * amount) * LEVEL
 }
 
 /** A 0-1 level, clamped and stepped, as a byte. */
