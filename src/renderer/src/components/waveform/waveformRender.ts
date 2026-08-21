@@ -1076,7 +1076,7 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
   handleHeight: 8,
   handleFill: 'rgba(255,255,255,0.3)',
   selectedHandleFill: 'rgba(255,255,255,0.31)',
-  selectedEdgeColor: '#ffffff',
+  selectedEdgeColor: 'rgba(255,255,255,0.88)',
   selectedEdgeWidth: 2,
   selectedFill: 'rgba(255,255,255,0.035)',
   bandFill: 'rgba(255,255,255,0.07)'
