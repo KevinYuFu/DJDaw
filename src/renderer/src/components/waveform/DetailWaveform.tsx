@@ -247,7 +247,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         // every frame, and each column's height would change under it — the
         // whole strip pulses instead of scrolling. One extra column covers the
         // gap the shift opens on the right.
-        const gridFrom = Math.floor(from / columnSec) * columnSec
+        const columnIndex = Math.floor(from / columnSec)
+        const gridFrom = columnIndex * columnSec
         const shift = (from - gridFrom) / columnSec
         const gridTo = gridFrom + (columns + 1) * columnSec
 
@@ -261,7 +262,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           gridTo,
           columns + 1,
           state.waveform.sampleRate,
-          columnsRef.current
+          columnsRef.current,
+          { index: columnIndex, columnSec }
         )
         columnsRef.current = cols
         // Reading samples is only worth it while a column covers few enough of
@@ -277,7 +279,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
                 gridTo,
                 columns + 1,
                 state.waveform.sampleRate,
-                extentsRef.current
+                extentsRef.current,
+                { index: columnIndex, columnSec }
               )
             : null
         extentsRef.current = extents
