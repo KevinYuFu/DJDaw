@@ -45,7 +45,10 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Shift + Q / W', action: 'Halve / double the beat-jump size' },
   { keys: '1 – 8', action: 'Hot cue A–H: set if empty, jump if set, hold to preview' },
   { keys: 'Shift + 1 – 8', action: 'Delete hot cue A–H' },
-  { keys: 'C', action: 'CUE — back to cue, or hold to preview from it' },
+  { keys: 'Z', action: 'CUE — back to cue, or hold to preview from it' },
+  { keys: 'X', action: 'Drop a locator at the playhead' },
+  { keys: 'C', action: 'Delete the locator at the playhead' },
+  { keys: 'D / F', action: 'Jump to the next / previous cue or locator' },
   { keys: 'L', action: 'Toggle the loop' },
   { keys: '[ / ]', action: 'Loop length halve / double' },
   { keys: ', / .', action: 'Nudge the beat grid back / forward 1/32 beat' },
@@ -204,6 +207,11 @@ function loadSelection(deck: DeckId): void {
 const REPEATABLE = new Set([
   'KeyQ',
   'KeyW',
+  // Held down, these walk forward or back through the markers, which is a
+  // reasonable way to find a spot. Dropping and deleting locators are not:
+  // held, they would spray markers or clear a run of them.
+  'KeyD',
+  'KeyF',
   'ArrowLeft',
   'ArrowRight',
   'BracketLeft',
@@ -238,6 +246,8 @@ function isBound(code: string): boolean {
     code === 'Tab' ||
     code === 'KeyA' ||
     code === 'KeyC' ||
+    code === 'KeyX' ||
+    code === 'KeyZ' ||
     code === 'KeyL' ||
     code === 'KeyG' ||
     code === 'KeyT' ||
@@ -248,8 +258,8 @@ function isBound(code: string): boolean {
 /**
  * Install the global key map. Call once, from the app shell.
  *
- * Press-and-hold bindings — the hot cue pads and CUE — need the keyup as well,
- * so the deck knows to stop previewing. The deck each held key was pressed on
+ * Press-and-hold bindings — the hot cue pads and `Z`, which is CUE — need the
+ * keyup as well, so the deck knows to stop previewing. The deck each held key was pressed on
  * is remembered, because `Tab` can move the focus while a pad is down, and the
  * release has to go back to the deck that actually started playing, not to
  * whichever one is focused by the time the DJ lets go.
@@ -267,7 +277,7 @@ export function useKeyboard(): void {
       if (deck === undefined) return
       held.delete(code)
       const decks = useDecks.getState()
-      if (code === 'KeyC') {
+      if (code === 'KeyZ') {
         decks.cueRelease(deck)
         return
       }
@@ -326,9 +336,25 @@ export function useKeyboard(): void {
           else beatJump(deck, 1)
           break
 
-        case 'KeyC':
+        case 'KeyZ':
           decks.cuePress(deck)
           held.set(event.code, deck)
+          break
+
+        case 'KeyX':
+          decks.addMemoryCue(deck)
+          break
+
+        case 'KeyC':
+          decks.deleteMemoryCueAt(deck)
+          break
+
+        case 'KeyD':
+          decks.jumpToPoint(deck, 1)
+          break
+
+        case 'KeyF':
+          decks.jumpToPoint(deck, -1)
           break
 
         case 'KeyL':

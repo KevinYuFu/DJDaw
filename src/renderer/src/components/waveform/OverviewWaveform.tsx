@@ -15,6 +15,7 @@ import { useSettings } from '@renderer/state/useSettings'
 import {
   OVERVIEW_CLIP_STYLE,
   OVERVIEW_CUE_STYLE,
+  OVERVIEW_LOCATOR_STYLE,
   type BandColors,
   buildClipColumns,
   buildColumns,
@@ -23,6 +24,7 @@ import {
   drawClipGhost,
   drawClipHighlight,
   drawCueMarkers,
+  drawLocators,
   drawPlayhead,
   drawWaveform,
   sizeCanvas
@@ -74,7 +76,7 @@ const DRAG_SLOP_PX = 3
 
 const NO_CLIPS: readonly Clip[] = []
 const NO_HOT_CUES: readonly HotCue[] = []
-const NO_MEMORY_CUES: readonly MemoryCue[] = []
+const NO_LOCATORS: readonly MemoryCue[] = []
 
 /** Everything a frame draws, kept in a ref so the rAF loop never re-subscribes. */
 interface FrameState {
@@ -83,7 +85,8 @@ interface FrameState {
   duration: number
   hotCues: readonly HotCue[]
   cuePoint: number | null
-  memoryCues: readonly MemoryCue[]
+  /** Locators. Stored on the track as `memoryCues`, the rekordbox name. */
+  locators: readonly MemoryCue[]
   /** The pieces the row is made of, in timeline order. Empty when not an edit row. */
   clips: readonly Clip[]
   selectedClipId: string | null
@@ -190,7 +193,7 @@ export function OverviewWaveform({
     duration: 0,
     hotCues: NO_HOT_CUES,
     cuePoint: null,
-    memoryCues: NO_MEMORY_CUES,
+    locators: NO_LOCATORS,
     clips: NO_CLIPS,
     selectedClipId: null,
     draggable: false,
@@ -207,7 +210,7 @@ export function OverviewWaveform({
       duration,
       hotCues: track?.hotCues ?? NO_HOT_CUES,
       cuePoint: track?.cuePoint ?? null,
-      memoryCues: track?.memoryCues ?? NO_MEMORY_CUES,
+      locators: track?.memoryCues ?? NO_LOCATORS,
       clips: draggableClips ? clips : NO_CLIPS,
       selectedClipId: draggableClips ? selectedClipId : null,
       draggable: draggableClips,
@@ -299,6 +302,9 @@ export function OverviewWaveform({
         }
       }
 
+      // The MACRO view is the whole track in 38 px, so locators are a tab and
+      // a line here; the names belong to the MICRO view, which has the room.
+      drawLocators(ctx, state.locators, 0, state.duration, width, height, OVERVIEW_LOCATOR_STYLE)
       // Hairlines where the row was cut. An uncut row draws none of them, so a
       // freshly loaded edit row looks exactly like a performance deck's strip.
       if (state.draggable) {
@@ -313,13 +319,11 @@ export function OverviewWaveform({
           OVERVIEW_CLIP_STYLE
         )
       }
-
       // a line here; the names belong to the MICRO view, which has the room.
       drawCueMarkers(
         ctx,
         state.hotCues,
         state.cuePoint,
-        state.memoryCues,
         0,
         state.duration,
         width,

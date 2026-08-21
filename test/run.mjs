@@ -26,6 +26,7 @@ const MODULES = [
   'src/shared/playlistTree.ts',
   'src/shared/clips.ts',
   'src/shared/eq.ts',
+  'src/shared/pointsOfInterest.ts',
   'src/shared/wav.ts'
 ]
 
