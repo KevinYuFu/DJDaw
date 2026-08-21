@@ -217,12 +217,14 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         // Per clip, not per pixel: each piece draws the slice of the file its
         // `sourceOffsetSec` points at, so a cut row shows what it plays and a
         // deleted piece leaves the background bare.
+        // One column per device pixel, not per CSS pixel: on a retina panel
+        // that is twice the detail, and it is what keeps a drum hit a spike.
         const cols = buildClipColumns(
           state.waveform,
           state.clips,
           from,
           to,
-          width,
+          width * dpr,
           state.waveform.sampleRate,
           columnsRef.current
         )
@@ -232,7 +234,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           colors: BAND_COLORS,
           mono: state.mono ? MONO_COLOR : undefined,
           rgb: state.rgb,
-          gain: WAVE_GAIN
+          gain: WAVE_GAIN,
+          subpixel: dpr
         })
       }
       if (state.loop?.active) {

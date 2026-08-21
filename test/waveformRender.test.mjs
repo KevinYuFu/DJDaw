@@ -28,7 +28,7 @@ const midsAndHighs = chan(rgbColumnColor(0.1, 1, 1))
 ok(`highs beat mids of the same level — ${midsAndHighs}`, midsAndHighs[2] > midsAndHighs[1])
 
 const hat = chan(rgbColumnColor(0.15, 0.2, 1))
-ok(`a hat with no bass is blue — ${hat}`, hat[2] === 255 && hat[2] > hat[0] * 4 && hat[2] > hat[1] * 4)
+ok(`a hat with no bass is blue — ${hat}`, hat[2] > 220 && hat[2] > hat[0] * 4 && hat[2] > hat[1] * 4)
 
 ok('green never reaches full', chan(rgbColumnColor(0, 1, 0))[1] < 255)
 

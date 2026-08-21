@@ -240,6 +240,12 @@ export interface WaveformDrawOptions {
   dim?: number
   /** Vertical exaggeration. 1 means a full-scale peak exactly fills the strip. */
   gain?: number
+  /**
+   * Columns per CSS pixel. Pass the device pixel ratio and build that many
+   * more columns to draw at the panel's real resolution rather than at half of
+   * it, which is what makes a transient read as a spike instead of a block.
+   */
+  subpixel?: number
 }
 
 /**
@@ -258,11 +264,12 @@ export function drawWaveform(
   const x = opts.x ?? 0
   const centre = (opts.y ?? 0) + half
   const gain = opts.gain ?? 1
+  const step = 1 / (opts.subpixel && opts.subpixel > 0 ? opts.subpixel : 1)
 
   if (opts.rgb && !opts.mono) {
     ctx.save()
     if (opts.dim != null && opts.dim < 1) ctx.globalAlpha = Math.max(0, opts.dim)
-    fillRgb(ctx, cols, x, centre, half, gain)
+    fillRgb(ctx, cols, x, centre, half, gain, step)
     ctx.restore()
     return
   }
@@ -273,9 +280,9 @@ export function drawWaveform(
   const colors = opts.mono ? { low: opts.mono, mid: opts.mono, high: opts.mono } : opts.colors
 
   ctx.save()
-  fillBand(ctx, cols.low, cols.width, colors.low, x, centre, half, gain)
-  fillBand(ctx, cols.mid, cols.width, colors.mid, x, centre, half, gain)
-  fillBand(ctx, cols.high, cols.width, colors.high, x, centre, half, gain)
+  fillBand(ctx, cols.low, cols.width, colors.low, x, centre, half, gain, step)
+  fillBand(ctx, cols.mid, cols.width, colors.mid, x, centre, half, gain, step)
+  fillBand(ctx, cols.high, cols.width, colors.high, x, centre, half, gain, step)
   ctx.restore()
 }
 
@@ -301,8 +308,8 @@ const CHANNEL_CEILING = { red: 1, green: 0.62, blue: 0.95 }
 /** Above 1 tightens a channel around the band that dominates its column. */
 const CHANNEL_GAMMA = { red: 2, green: 1.8, blue: 1.4 }
 
-/** Levels per channel. Eight, as the hardware stores them. */
-const RGB_STEPS = 8
+/** Levels per channel. */
+const RGB_STEPS = 16
 
 /**
  * The RGB waveform: red lows, green mids, blue highs, white where all three
@@ -319,7 +326,8 @@ function fillRgb(
   x: number,
   centre: number,
   half: number,
-  gain: number
+  gain: number,
+  step: number
 ): void {
   let open = ''
   for (let c = 0; c < cols.width; c++) {
@@ -340,7 +348,7 @@ function fillRgb(
     let h = peak * half * gain
     if (h > half) h = half
     else if (h < MIN_BAR_HALF_PX) h = MIN_BAR_HALF_PX
-    ctx.rect(x + c, centre - h, 1, h * 2)
+    ctx.rect(x + c * step, centre - h, step, h * 2)
   }
   if (open) ctx.fill()
 }
@@ -377,7 +385,8 @@ function fillBand(
   x: number,
   centre: number,
   half: number,
-  gain: number
+  gain: number,
+  step: number
 ): void {
   ctx.fillStyle = color
   ctx.beginPath()
@@ -387,7 +396,7 @@ function fillBand(
     let h = v * half * gain
     if (h > half) h = half
     else if (h < MIN_BAR_HALF_PX) h = MIN_BAR_HALF_PX
-    ctx.rect(x + c, centre - h, 1, h * 2)
+    ctx.rect(x + c * step, centre - h, step, h * 2)
   }
   ctx.fill()
 }
