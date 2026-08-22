@@ -2,11 +2,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import type { Clip } from '@shared/clips'
-import { clipAt, timelineDuration } from '@shared/clips'
+import { clipAt, dropStartSec, timelineDuration } from '@shared/clips'
+import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
+import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
-import { nearestBeatTime } from '@renderer/core/beatgrid'
 import { BAND_COLORS, BAND_COLORS_DIM } from '@renderer/core/constants'
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
@@ -146,19 +147,6 @@ interface Ghost {
   durationSec: number
 }
 
-/**
- * Nearest beat while Quantize is on: the rule the store applies when the drop
- * commits, so the ghost can promise what the release will do.
- *
- * Read from the stores rather than captured at press time, because Quantize
- * can be toggled with the pointer still down.
- */
-function snapToGrid(deckId: DeckId, sec: number): number {
-  const state = useDecks.getState().decks[deckId]
-  if (!state.quantize || !state.trackId) return sec
-  const grid = useLibrary.getState().trackById(state.trackId)?.grid ?? null
-  return grid ? nearestBeatTime(grid, sec) : sec
-}
 
 export function OverviewWaveform({
   deckId,
@@ -169,6 +157,7 @@ export function OverviewWaveform({
   const layersRef = useRef<Layers | null>(null)
   const dirtyRef = useRef(true)
   const gestureRef = useRef<Gesture | null>(null)
+  const slideRef = useRef<Slide | null>(null)
   const ghostRef = useRef<Ghost | null>(null)
 
   const status = useDecks((s) => s.decks[deckId].status)
@@ -211,6 +200,12 @@ export function OverviewWaveform({
   // No dependency list: this is the one place the slow-changing store values
   // cross into the render loop, and it must run after every render.
   useEffect(() => {
+    const before = frameRef.current.clips
+    const nextClips = draggableClips ? clips : NO_CLIPS
+    if (before !== nextClips) {
+      const slide = beginSlide(before, nextClips, performance.now())
+      if (slide) slideRef.current = slide
+    }
     frameRef.current = {
       // `deck()` throws until the engine has initialised, which `ready` implies.
       deck: status === 'ready' ? AudioEngine.shared().deck(deckId) : null,
@@ -256,7 +251,20 @@ export function OverviewWaveform({
       const { width, height } = boxRef.current
       if (width <= 0 || height <= 0) return
       const dpr = window.devicePixelRatio || 1
-      const state = frameRef.current
+      const settled = frameRef.current
+      let state = settled
+      if (slideRef.current) {
+        const { clips: sliding, done } = slideClips(
+          settled.clips,
+          slideRef.current,
+          performance.now()
+        )
+        if (done) slideRef.current = null
+        else {
+          state = { ...settled, clips: sliding }
+          dirtyRef.current = true
+        }
+      }
       const ghost = ghostRef.current
 
       const position = state.deck ? state.deck.positionSeconds() : 0
@@ -369,8 +377,12 @@ export function OverviewWaveform({
         gesture.clip.startSec + ((clientX - gesture.startX) * gesture.duration) / gesture.width
       // Keep the piece on the strip: past either edge there is nothing to draw
       // the ghost against and nothing to aim at.
+      // Where it will come to rest, not where the pointer is: the drop is a
+      // reordering, so the ghost has to promise the place in the order the
+      // pointer has picked out.
       const room = Math.max(0, gesture.duration - gesture.clip.durationSec)
-      return Math.max(0, snapToGrid(deckId, clamp(raw, 0, room)))
+      const clips = useDecks.getState().decks[deckId].clips
+      return dropStartSec(clips, gesture.clip.id, clamp(raw, 0, room))
     },
     [deckId]
   )

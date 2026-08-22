@@ -1,0 +1,71 @@
+import type { Clip } from '@shared/clips'
+
+/**
+ * The slide a row does when its pieces change places.
+ *
+ * Reordering is instant in the store — the audio has to be right on the next
+ * buffer — so the movement is drawn rather than modelled: the row remembers
+ * where each piece used to be and walks it to where it is now. Without it a
+ * piece and its neighbour trade places between two frames and there is nothing
+ * to say which one moved.
+ */
+
+/** How long a piece takes to reach its new place, in ms. */
+export const SLIDE_MS = 170
+
+export interface Slide {
+  /** Where each piece was before the change. */
+  from: Map<string, number>
+  startedAt: number
+}
+
+/**
+ * A slide to run, or null when the change was not a reordering — a cut, a
+ * delete or a fresh track all rearrange the row, and sliding those would be
+ * pieces flying in from nowhere.
+ */
+export function beginSlide(
+  before: readonly Clip[],
+  after: readonly Clip[],
+  now: number
+): Slide | null {
+  if (before.length !== after.length || before.length === 0) return null
+  const from = new Map<string, number>()
+  for (const clip of before) from.set(clip.id, clip.startSec)
+  let moved = false
+  for (const clip of after) {
+    const was = from.get(clip.id)
+    if (was === undefined) return null
+    if (was !== clip.startSec) moved = true
+  }
+  return moved ? { from, startedAt: now } : null
+}
+
+/** Ease out: quick to leave, gentle to arrive. */
+function ease(t: number): number {
+  return 1 - Math.pow(1 - t, 3)
+}
+
+/**
+ * The row part-way through a slide, and whether it has arrived.
+ *
+ * Only `startSec` moves. A piece's length and the audio it plays are settled
+ * the moment the drop commits; this is the eye catching up.
+ */
+export function slideClips(
+  clips: readonly Clip[],
+  slide: Slide,
+  now: number
+): { clips: Clip[]; done: boolean } {
+  const t = Math.min(1, Math.max(0, (now - slide.startedAt) / SLIDE_MS))
+  if (t >= 1) return { clips: clips.slice(), done: true }
+  const k = ease(t)
+  return {
+    clips: clips.map((clip) => {
+      const was = slide.from.get(clip.id)
+      if (was === undefined || was === clip.startSec) return clip
+      return { ...clip, startSec: was + (clip.startSec - was) * k }
+    }),
+    done: false
+  }
+}

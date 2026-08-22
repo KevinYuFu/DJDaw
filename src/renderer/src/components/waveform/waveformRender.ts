@@ -232,6 +232,9 @@ export function buildClipColumns(
     if (clip.startSec >= toSec) break
     const end = clip.startSec + clip.durationSec
     if (end <= fromSec) continue
+    // A hole has no audio to draw, and its source offset is zero — drawn like
+    // any other piece it would show the top of the file.
+    if (clip.silent) continue
 
     const t0 = clip.startSec > fromSec ? clip.startSec : fromSec
     const t1 = end < toSec ? end : toSec
@@ -317,6 +320,9 @@ export function buildClipExtents(
     if (clip.startSec >= toSec) break
     const end = clip.startSec + clip.durationSec
     if (end <= fromSec) continue
+    // A hole has no audio to draw, and its source offset is zero — drawn like
+    // any other piece it would show the top of the file.
+    if (clip.silent) continue
 
     const t0 = clip.startSec > fromSec ? clip.startSec : fromSec
     const t1 = end < toSec ? end : toSec

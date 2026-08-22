@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, WheelEvent as ReactWheelEvent } from 'react'
 import type { Clip } from '@shared/clips'
 import type { ColumnExtents } from '@renderer/components/waveform/waveformRender'
-import { clipAt } from '@shared/clips'
-import { nearestBeatTime } from '@renderer/core/beatgrid'
+import { clipAt, dropStartSec } from '@shared/clips'
+import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
+import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { BeatGrid, DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
@@ -110,16 +111,6 @@ interface Ghost {
   durationSec: number
 }
 
-/**
- * Nearest beat while Quantize is on: the rule the store applies when the drop
- * commits, so the ghost can promise what the release will do.
- */
-function snapToGrid(deckId: DeckId, sec: number): number {
-  const state = useDecks.getState().decks[deckId]
-  if (!state.quantize || !state.trackId) return sec
-  const grid = useLibrary.getState().trackById(state.trackId)?.grid ?? null
-  return grid ? nearestBeatTime(grid, sec) : sec
-}
 
 /** Pointer travel below this is a click, above it a scrub. */
 const CLICK_SLOP_PX = 3
@@ -157,6 +148,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const extentsRef = useRef<ColumnExtents | null>(null)
   const clipDragRef = useRef<ClipDrag | null>(null)
   const ghostRef = useRef<Ghost | null>(null)
+  const slideRef = useRef<Slide | null>(null)
   const columnsRef = useRef<WaveformColumns | null>(null)
   const dirtyRef = useRef(true)
   const dragRef = useRef<{
@@ -209,6 +201,11 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   // No dependency list: this is the one place the slow-changing store values
   // cross into the render loop, and it must run after every render.
   useEffect(() => {
+    const before = frameRef.current.clips
+    if (before !== clips) {
+      const slide = beginSlide(before, clips, performance.now())
+      if (slide) slideRef.current = slide
+    }
     frameRef.current = {
       // `deck()` throws until the engine has initialised, which `ready` implies.
       deck: status === 'ready' ? AudioEngine.shared().deck(deckId) : null,
@@ -256,7 +253,20 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       const { width, height } = boxRef.current
       if (width <= 0 || height <= 0) return
       const dpr = window.devicePixelRatio || 1
-      const state = frameRef.current
+      const settled = frameRef.current
+      let state = settled
+      if (slideRef.current) {
+        const { clips: sliding, done } = slideClips(
+          settled.clips,
+          slideRef.current,
+          performance.now()
+        )
+        if (done) slideRef.current = null
+        else {
+          state = { ...settled, clips: sliding }
+          dirtyRef.current = true
+        }
+      }
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const pxPerSecond = width / state.span
@@ -416,9 +426,13 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         }
         const moved =
           held.clip.startSec + ((event.clientX - held.startX) * held.span) / held.width
+        // Where it will come to rest, not where the pointer is: the drop is a
+        // reordering, so the ghost has to promise the place in the order the
+        // pointer has picked out.
+        const clips = useDecks.getState().decks[deckId].clips
         ghostRef.current = {
           clipId: held.clip.id,
-          startSec: Math.max(0, snapToGrid(deckId, Math.max(0, moved))),
+          startSec: dropStartSec(clips, held.clip.id, Math.max(0, moved)),
           durationSec: held.clip.durationSec
         }
         dirtyRef.current = true
