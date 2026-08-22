@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent, ReactElement, WheelEvent as Rea
 import type { Clip } from '@shared/clips'
 import type { ColumnExtents } from '@renderer/components/waveform/waveformRender'
 import { clipAt } from '@shared/clips'
+import { nearestBeatTime } from '@renderer/core/beatgrid'
 import type { BeatGrid, DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
@@ -20,7 +21,10 @@ import {
   buildClipExtents,
   canvasNeedsResize,
   drawBeatGrid,
+  drawClipBands,
   drawClipEdges,
+  DEFAULT_CLIP_STYLE,
+  drawClipGhost,
   drawClipHighlight,
   drawCueMarkers,
   drawLocators,
@@ -82,6 +86,41 @@ const NO_CLIPS: readonly Clip[] = []
 const NO_HOT_CUES: readonly HotCue[] = []
 const NO_LOCATORS: readonly MemoryCue[] = []
 
+/**
+ * A press on a piece's handle that has not travelled yet. Below
+ * {@link CLICK_SLOP_PX} it is still a click, so nothing has moved and the
+ * release can still select instead.
+ */
+interface ClipDrag {
+  pointerId: number
+  startX: number
+  clip: Clip
+  /** Geometry at press time, so a resize mid-drag cannot skew the maths. */
+  width: number
+  span: number
+  dragging: boolean
+  /** Escape gives the drag up but keeps the gesture, so the release tidies up. */
+  cancelled: boolean
+}
+
+/** Where a dragged piece would land if it were dropped now. */
+interface Ghost {
+  clipId: string
+  startSec: number
+  durationSec: number
+}
+
+/**
+ * Nearest beat while Quantize is on: the rule the store applies when the drop
+ * commits, so the ghost can promise what the release will do.
+ */
+function snapToGrid(deckId: DeckId, sec: number): number {
+  const state = useDecks.getState().decks[deckId]
+  if (!state.quantize || !state.trackId) return sec
+  const grid = useLibrary.getState().trackById(state.trackId)?.grid ?? null
+  return grid ? nearestBeatTime(grid, sec) : sec
+}
+
 /** Pointer travel below this is a click, above it a scrub. */
 const CLICK_SLOP_PX = 3
 
@@ -116,6 +155,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef({ width: 0, height: 0 })
   const extentsRef = useRef<ColumnExtents | null>(null)
+  const clipDragRef = useRef<ClipDrag | null>(null)
+  const ghostRef = useRef<Ghost | null>(null)
   const columnsRef = useRef<WaveformColumns | null>(null)
   const dirtyRef = useRef(true)
   const dragRef = useRef<{
@@ -234,6 +275,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       const from = position - state.span / 2
       const to = position + state.span / 2
 
+      drawClipBands(ctx, state.clips, from, to, width, height)
       drawClipHighlight(ctx, state.clips, state.selectedClipId, from, to, width, height)
 
       if (state.waveform) {
@@ -306,6 +348,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       drawLocators(ctx, state.locators, from, to, width, height, DETAIL_LOCATOR_STYLE)
       drawCueMarkers(ctx, state.hotCues, state.cuePoint, from, to, width, height, DETAIL_CUE_STYLE)
       drawClipEdges(ctx, state.clips, state.selectedClipId, from, to, width, height)
+      const ghost = ghostRef.current
+      if (ghost) drawClipGhost(ctx, ghost.startSec, ghost.durationSec, from, to, width, height)
       drawPlayhead(ctx, width / 2, height)
     }
 
@@ -313,23 +357,79 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
-    if (event.button !== 0) return
-    const { deck } = frameRef.current
-    if (!deck) return
-    event.currentTarget.setPointerCapture(event.pointerId)
-    // The deck is captured with the gesture: a track loaded mid-drag must not
-    // leave the old one stuck in scrub mode.
-    dragRef.current = {
-      deck,
-      startX: event.clientX,
-      startTime: deck.positionSeconds(),
-      canvasLeft: event.currentTarget.getBoundingClientRect().left
-    }
-    deck.beginScrub()
-  }, [])
+  const onPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>): void => {
+      if (event.button !== 0) return
+      const state = frameRef.current
+      const { deck } = state
+      if (!deck) return
+      const rect = event.currentTarget.getBoundingClientRect()
+      const { width } = boxRef.current
 
-  const onPointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
+      // A press on a piece's handle picks the piece up. Anywhere else on the
+      // row is a scrub, which is why the handle exists: the waveform itself is
+      // already spoken for.
+      if (selectClips && width > 0 && state.clips.length > 1) {
+        const y = event.clientY - rect.top
+        if (y <= DEFAULT_CLIP_STYLE.handleHeight) {
+          const centre = deck.positionSeconds()
+          const at = centre + (event.clientX - rect.left - width / 2) * (state.span / width)
+          const grabbed = clipAt(state.clips, at)
+          if (grabbed) {
+            event.currentTarget.setPointerCapture(event.pointerId)
+            clipDragRef.current = {
+              pointerId: event.pointerId,
+              startX: event.clientX,
+              clip: grabbed,
+              width,
+              span: state.span,
+              dragging: false,
+              cancelled: false
+            }
+            return
+          }
+        }
+      }
+
+      event.currentTarget.setPointerCapture(event.pointerId)
+      // The deck is captured with the gesture: a track loaded mid-drag must not
+      // leave the old one stuck in scrub mode.
+      dragRef.current = {
+        deck,
+        startX: event.clientX,
+        startTime: deck.positionSeconds(),
+        canvasLeft: rect.left
+      }
+      deck.beginScrub()
+    },
+    [selectClips]
+  )
+
+  const onPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLCanvasElement>): void => {
+      const held = clipDragRef.current
+      if (held && held.pointerId === event.pointerId) {
+        if (held.cancelled) return
+        if (!held.dragging) {
+          if (Math.abs(event.clientX - held.startX) <= CLICK_SLOP_PX) return
+          held.dragging = true
+        }
+        const moved =
+          held.clip.startSec + ((event.clientX - held.startX) * held.span) / held.width
+        ghostRef.current = {
+          clipId: held.clip.id,
+          startSec: Math.max(0, snapToGrid(deckId, Math.max(0, moved))),
+          durationSec: held.clip.durationSec
+        }
+        dirtyRef.current = true
+        return
+      }
+      onScrubMove(event)
+    },
+    [deckId]
+  )
+
+  const onScrubMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
     const drag = dragRef.current
     const { width } = boxRef.current
     if (!drag || width <= 0) return
@@ -341,6 +441,25 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
 
   const endScrub = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>): void => {
+      const held = clipDragRef.current
+      if (held && held.pointerId === event.pointerId) {
+        clipDragRef.current = null
+        const ghost = ghostRef.current
+        ghostRef.current = null
+        dirtyRef.current = true
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+        // A press that went nowhere is a click on the handle, which picks the
+        // piece rather than moving it.
+        if (!held.dragging || held.cancelled) {
+          if (!held.cancelled) useDecks.getState().selectClip(deckId, held.clip.id)
+          return
+        }
+        if (ghost) useDecks.getState().moveClipTo(deckId, ghost.clipId, ghost.startSec)
+        return
+      }
+
       const drag = dragRef.current
       if (!drag) return
       dragRef.current = null
@@ -365,6 +484,22 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
     },
     [deckId, selectClips]
   )
+
+  // Escape abandons a move. The gesture stays until the pointer comes up, so
+  // the capture is still released there and the same press cannot pick it back
+  // up halfway through.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      const held = clipDragRef.current
+      if (!held || !held.dragging) return
+      held.cancelled = true
+      ghostRef.current = null
+      dirtyRef.current = true
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const onWheel = useCallback(
     (event: ReactWheelEvent<HTMLCanvasElement>): void => {

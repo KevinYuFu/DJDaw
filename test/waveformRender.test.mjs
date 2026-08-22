@@ -48,3 +48,68 @@ ok('green never reaches full', chan(rgbColumnColor(0, 1, 0))[1] < 255)
 
 eq('hue ignores level', rgbColumnColor(0.8, 0.4, 0.2), rgbColumnColor(0.2, 0.1, 0.05))
 ok('every channel is a byte', chan(rgbColumnColor(1, 0.5, 0.25)).every((v) => Number.isInteger(v) && v >= 0 && v <= 255))
+
+/**
+ * Clip bands: the wash that turns a cut row into blocks.
+ *
+ * Drawn against a stub context, so this is about what gets painted rather than
+ * about what a screenshot happens to look like.
+ */
+import { drawClipBands, DEFAULT_CLIP_STYLE } from './.build/waveformRender.mjs'
+
+function stubCtx() {
+  const rects = []
+  return {
+    rects,
+    fillStyle: '',
+    save() {},
+    restore() {},
+    fillRect(x, y, w, h) {
+      rects.push({ x: Math.round(x), w: Math.round(w), fill: this.fillStyle })
+    },
+    beginPath() {
+      this.pending = null
+    },
+    roundRect(x, y, w) {
+      this.pending = { x: Math.round(x), w: Math.round(w) }
+    },
+    fill() {
+      if (this.pending) rects.push({ ...this.pending, fill: this.fillStyle })
+    },
+    stroke() {}
+  }
+}
+const clip = (startSec, durationSec, id) => ({ id, startSec, durationSec, sourceOffsetSec: 0 })
+
+{
+  const ctx = stubCtx()
+  drawClipBands(ctx, [clip(0, 100, 'c1')], 0, 100, 1000, 50)
+  ok(`an uncut row is never tinted — ${ctx.rects.length} rects`, ctx.rects.length === 0)
+}
+{
+  const ctx = stubCtx()
+  drawClipBands(ctx, [], 0, 100, 1000, 50)
+  ok('an empty row is never tinted', ctx.rects.length === 0)
+}
+{
+  // Four pieces across the view: the second and the fourth get the wash.
+  const ctx = stubCtx()
+  const clips = [clip(0, 10, 'a'), clip(10, 10, 'b'), clip(20, 10, 'c'), clip(30, 10, 'd')]
+  drawClipBands(ctx, clips, 0, 40, 400, 50)
+  ok(`every piece gets a card — ${ctx.rects.length}`, ctx.rects.length === 4)
+  ok('in the band colour', ctx.rects.every((r) => r.fill === DEFAULT_CLIP_STYLE.bandFill))
+  const gap = DEFAULT_CLIP_STYLE.cardGap
+  ok(`a card covers its piece — ${JSON.stringify(ctx.rects[1])}`,
+    Math.abs(ctx.rects[1].x - (100 + gap / 2)) < 1 && Math.abs(ctx.rects[1].w - (100 - gap)) < 1)
+  // The audio either side of a cut is continuous, so the cards meet: what
+  // marks the cut is their two outlines, not a hole in the waveform.
+  ok(`two cards meet rather than leaving a hole — ${ctx.rects[0].x + ctx.rects[0].w} then ${ctx.rects[1].x}`,
+    Math.abs(ctx.rects[1].x - (ctx.rects[0].x + ctx.rects[0].w)) <= 1)
+}
+{
+  // Only what is on screen, clipped to the edges.
+  const ctx = stubCtx()
+  const clips = [clip(0, 10, 'a'), clip(10, 10, 'b'), clip(20, 10, 'c')]
+  drawClipBands(ctx, clips, 15, 25, 100, 50)
+  ok(`the pieces on screen are drawn — ${JSON.stringify(ctx.rects)}`, ctx.rects.length === 2)
+}

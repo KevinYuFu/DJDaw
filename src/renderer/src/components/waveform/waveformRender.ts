@@ -1035,35 +1035,64 @@ export interface ClipStyle {
   /** Vertical division between two pieces. */
   edgeColor: string
   edgeWidth: number
-  /** The selected piece's edges, drawn brighter and wider. */
+  /**
+   * Space left between two pieces, in CSS px. Zero: the pieces meet.
+   *
+   * The audio either side of a cut is continuous and the waveform should look
+   * it. What marks the cut is the two outlines meeting, not a hole.
+   */
+  cardGap: number
+  /** Corner radius of a piece, in CSS px. */
+  cardRadius: number
+  /**
+   * Height of the bar across the top of a piece, in CSS px. Zero draws none.
+   *
+   * It is what a piece is picked up by. Dragging anywhere on the waveform is a
+   * scrub, so moving a piece needs somewhere of its own to be grabbed.
+   */
+  handleHeight: number
+  handleFill: string
+  selectedHandleFill: string
+  /**
+   * The selected piece's outline: brighter, and wider by one device pixel.
+   *
+   * One is the smallest step there is, and it is enough. Any more and the
+   * selection stops being a mark on the piece and starts being the loudest
+   * thing on a row that is already busy.
+   */
   selectedEdgeColor: string
   selectedEdgeWidth: number
   /** Wash over the selected piece, painted under the waveform. */
   selectedFill: string
+  /** Ground under a piece, painted below the waveform. */
+  bandFill: string
 }
 
 export const DEFAULT_CLIP_STYLE: ClipStyle = {
-  edgeColor: 'rgba(255,255,255,0.5)',
-  edgeWidth: 1,
-  selectedEdgeColor: '#ffffff',
+  edgeColor: 'rgba(255,255,255,0.72)',
+  edgeWidth: 1.5,
+  cardGap: 0,
+  cardRadius: 2,
+  handleHeight: 8,
+  handleFill: 'rgba(255,255,255,0.3)',
+  selectedHandleFill: 'rgba(255,255,255,0.31)',
+  selectedEdgeColor: 'rgba(255,255,255,0.8)',
   selectedEdgeWidth: 2,
-  selectedFill: 'rgba(255,255,255,0.09)'
+  selectedFill: 'rgba(255,255,255,0.025)',
+  bandFill: 'rgba(255,255,255,0.07)'
 }
 
 /**
- * The same chrome for the MACRO view, where the whole track is a few hundred
- * pixels wide and 38 tall.
- *
- * Everything is a hairline here, and a selected piece is marked by its wash
- * rather than by fatter edges: at this size a 2px division reads as a spike in
- * the audio instead of as a cut.
+ * The MACRO view uses the same numbers, so a piece is marked the same amount
+ * whichever strip it is looked at on. Spread rather than copied: two lists of
+ * the same values drift the moment one of them is tuned.
  */
 export const OVERVIEW_CLIP_STYLE: ClipStyle = {
-  edgeColor: 'rgba(255,255,255,0.4)',
-  edgeWidth: 1,
-  selectedEdgeColor: '#ffffff',
-  selectedEdgeWidth: 1,
-  selectedFill: 'rgba(255,255,255,0.13)'
+  ...DEFAULT_CLIP_STYLE,
+  // No handle here. The strip is thirty pixels tall, and a press anywhere on a
+  // piece already picks it up — the handle exists in the zoomed view only
+  // because a press there means scrub.
+  handleHeight: 0
 }
 
 /**
@@ -1111,6 +1140,55 @@ export function drawClipHighlight(
  *
  * `clips` must be in timeline order.
  */
+/**
+ * A wash under every other piece, so a cut row reads as blocks rather than as
+ * a run of audio with lines through it.
+ *
+ * Nothing is drawn for a row that has never been cut: one piece covering the
+ * whole track would just tint the strip for no reason.
+ */
+/** A piece's rectangle on screen, with the gap between pieces taken out. */
+function cardRect(
+  clip: Clip,
+  from: number,
+  scale: number,
+  width: number,
+  style: ClipStyle
+): { x: number; w: number } | null {
+  const half = style.cardGap / 2
+  const x = (clip.startSec - from) * scale + half
+  const right = (clip.startSec + clip.durationSec - from) * scale - half
+  if (right <= 0 || x >= width) return null
+  return { x, w: right - x }
+}
+
+export function drawClipBands(
+  ctx: CanvasRenderingContext2D,
+  clips: readonly Clip[],
+  from: number,
+  to: number,
+  width: number,
+  height: number,
+  style: ClipStyle = DEFAULT_CLIP_STYLE
+): void {
+  const span = to - from
+  if (clips.length < 2 || !(span > 0) || width <= 0) return
+  const scale = width / span
+
+  ctx.save()
+  ctx.fillStyle = style.bandFill
+  for (const clip of clips) {
+    if (clip.startSec >= to) break
+    if (clip.startSec + clip.durationSec <= from) continue
+    const r = cardRect(clip, from, scale, width, style)
+    if (!r) continue
+    ctx.beginPath()
+    ctx.roundRect(r.x, 0.5, r.w, height - 1, style.cardRadius)
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
 export function drawClipEdges(
   ctx: CanvasRenderingContext2D,
   clips: readonly Clip[],
@@ -1122,54 +1200,45 @@ export function drawClipEdges(
   style: ClipStyle = DEFAULT_CLIP_STYLE
 ): void {
   const span = to - from
-  if (!(span > 0) || width <= 0) return
+  if (clips.length < 2 || !(span > 0) || width <= 0) return
   const scale = width / span
 
   ctx.save()
-  for (let i = 0; i < clips.length; i++) {
-    const clip = clips[i]
+
+
+  for (const clip of clips) {
     if (clip.startSec >= to) break
-    const end = clip.startSec + clip.durationSec
-    if (end <= from) continue
+    if (clip.startSec + clip.durationSec <= from) continue
+    const r = cardRect(clip, from, scale, width, style)
+    if (!r) continue
 
     const selected = clip.id === selectedId
-    const prev = clips[i - 1]
-    const next = clips[i + 1]
-
-    // The seam between two touching pieces is one line, drawn as the later
-    // piece's start, and it belongs to the selection if either side is selected.
-    if (clip.startSec > 0) {
-      const afterSelected =
-        prev !== undefined &&
-        prev.id === selectedId &&
-        prev.startSec + prev.durationSec >= clip.startSec
-      edge(ctx, (clip.startSec - from) * scale, selected || afterSelected, style, width, height)
+    const w = selected ? style.selectedEdgeWidth : style.edgeWidth
+    const inset = w / 2
+    ctx.beginPath()
+    ctx.roundRect(r.x + inset, inset, r.w - w, height - w, style.cardRadius)
+    if (selected) {
+      ctx.fillStyle = style.selectedFill
+      ctx.fill()
     }
 
-    // A trailing edge only where the audio actually stops: a gap after this
-    // piece, or the selected piece sitting at the end of the row.
-    if (next !== undefined ? next.startSec > end : selected) {
-      const w = selected ? style.selectedEdgeWidth : style.edgeWidth
-      edge(ctx, (end - from) * scale - w, selected, style, width, height)
+    // The grab bar, rounded all the way round so it reads as its own thing
+    // sitting on the piece rather than as the top of the card.
+    const h = style.handleHeight
+    if (h > 0) {
+      ctx.beginPath()
+      ctx.roundRect(r.x + inset, inset, r.w - w, h, style.cardRadius)
+      ctx.fillStyle = selected ? style.selectedHandleFill : style.handleFill
+      ctx.fill()
     }
+    ctx.lineWidth = w
+    ctx.strokeStyle = selected ? style.selectedEdgeColor : style.edgeColor
+    ctx.stroke()
   }
   ctx.restore()
 }
 
 /** One division, skipped rather than half drawn when it falls outside the view. */
-function edge(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  strong: boolean,
-  style: ClipStyle,
-  width: number,
-  height: number
-): void {
-  const w = strong ? style.selectedEdgeWidth : style.edgeWidth
-  if (x < -w || x > width) return
-  ctx.fillStyle = strong ? style.selectedEdgeColor : style.edgeColor
-  ctx.fillRect(Math.round(x), 0, w, height)
-}
 
 /**
  * How a piece being dragged is previewed at the place it would land.
