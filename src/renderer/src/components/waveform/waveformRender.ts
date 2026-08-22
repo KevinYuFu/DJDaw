@@ -1178,7 +1178,7 @@ export function drawClipBands(
   style: ClipStyle = DEFAULT_CLIP_STYLE
 ): void {
   const span = to - from
-  if (clips.length < 2 || !(span > 0) || width <= 0) return
+  if (clips.length === 0 || !(span > 0) || width <= 0) return
   const scale = width / span
 
   ctx.save()
@@ -1206,7 +1206,7 @@ export function drawClipEdges(
   style: ClipStyle = DEFAULT_CLIP_STYLE
 ): void {
   const span = to - from
-  if (clips.length < 2 || !(span > 0) || width <= 0) return
+  if (clips.length === 0 || !(span > 0) || width <= 0) return
   const scale = width / span
 
   ctx.save()

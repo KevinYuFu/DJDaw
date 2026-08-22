@@ -19,6 +19,10 @@ import { CURSOR_END_EDGE, CURSOR_START_EDGE, edgeAt } from './clipCursor'
 import { useSettings } from '@renderer/state/useSettings'
 import {
   canvasNeedsResize,
+  DEFAULT_CLIP_STYLE,
+  drawClipBands,
+  drawClipEdges,
+  drawClipHighlight,
   drawWaveform,
   fillColumns,
   sizeCanvas
@@ -33,11 +37,17 @@ import type { WaveformColumns } from '@renderer/components/waveform/waveformRend
  * next. A track dragged in from the browser lands where it was dropped.
  */
 
-/** How the outline round a clip is drawn. */
-const CLIP_EDGE = 'rgba(255,255,255,0.55)'
-const CLIP_EDGE_PICKED = 'rgba(255,255,255,0.9)'
-const CLIP_BODY = 'rgba(255,255,255,0.05)'
-const CLIP_HEADER_H = 11
+/** The clips are drawn exactly as the editing view draws them. */
+const CLIP_STYLE = DEFAULT_CLIP_STYLE
+
+/**
+ * The grid, over the near-black lane rather than over a panel.
+ *
+ * Drawn under the clips, so it only shows in the empty stretches and behind
+ * the quiet parts and can be strong enough to actually read.
+ */
+const GRID_LINE = 'rgba(255,255,255,0.26)'
+const PLAYHEAD = '#ff4d4d'
 
 /** Peaks are lifted a little, as the deck strips do. */
 const WAVE_GAIN = 0.9
@@ -107,12 +117,13 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
       const state = frameRef.current
       const pxPerSec = ZOOM_LEVELS[state.zoomIndex]
       const from = state.scrollSec
+      const to = from + width / pxPerSec
 
       // The same grid the ruler draws, so a lane lines up with the times above
       // it and with every other lane.
       ctx.save()
-      ctx.fillStyle = 'rgba(255,255,255,0.06)'
-      for (const sec of gridLines(from, from + width / pxPerSec, gridStepSec(pxPerSec))) {
+      ctx.fillStyle = GRID_LINE
+      for (const sec of gridLines(from, to, gridStepSec(pxPerSec))) {
         ctx.fillRect(Math.round((sec - from) * pxPerSec), 0, 1, height)
       }
       ctx.restore()
@@ -125,7 +136,10 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
       cols.mid.fill(0)
       cols.high.fill(0)
 
-      const body = height - CLIP_HEADER_H
+      const clips = state.clips ?? []
+      drawClipBands(ctx, clips, from, to, width, height, CLIP_STYLE)
+      drawClipHighlight(ctx, clips, state.selectedClipId, from, to, width, height, CLIP_STYLE)
+
       for (const clip of state.clips ?? []) {
         const x0 = (clip.startSec - from) * pxPerSec
         const x1 = (clip.startSec + clip.durationSec - from) * pxPerSec
@@ -154,8 +168,8 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
       }
 
       drawWaveform(ctx, cols, {
-        height: body,
-        y: CLIP_HEADER_H,
+        height: height - CLIP_STYLE.handleHeight,
+        y: CLIP_STYLE.handleHeight,
         colors: BAND_COLORS,
         mono: mono ? BAND_COLORS.high : undefined,
         rgb,
@@ -163,32 +177,12 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
         subpixel: dpr
       })
 
-      // The outline and its grab bar go over the audio, so the edges of a clip
-      // stay readable however loud it is.
-      for (const clip of state.clips ?? []) {
-        const x0 = (clip.startSec - from) * pxPerSec
-        const x1 = (clip.startSec + clip.durationSec - from) * pxPerSec
-        if (x1 <= 0 || x0 >= width) continue
-        const picked = clip.id === state.selectedClipId
-        const left = Math.max(x0, 0)
-        const right = Math.min(x1, width)
-        ctx.save()
-        ctx.fillStyle = picked ? 'rgba(255,255,255,0.13)' : CLIP_BODY
-        ctx.fillRect(left, 0, right - left, CLIP_HEADER_H)
-        ctx.strokeStyle = picked ? CLIP_EDGE_PICKED : CLIP_EDGE
-        ctx.lineWidth = picked ? 2 : 1
-        ctx.strokeRect(
-          left + ctx.lineWidth / 2,
-          ctx.lineWidth / 2,
-          right - left - ctx.lineWidth,
-          height - ctx.lineWidth
-        )
-        ctx.restore()
-      }
+      // Over the audio, so the edges of a clip stay readable however loud it is.
+      drawClipEdges(ctx, clips, state.selectedClipId, from, to, width, height, CLIP_STYLE)
 
       const headX = (arrangementPlayhead() - from) * pxPerSec
       if (headX >= 0 && headX <= width) {
-        ctx.fillStyle = '#ff5a5a'
+        ctx.fillStyle = PLAYHEAD
         ctx.fillRect(Math.round(headX), 0, 1, height)
       }
     }

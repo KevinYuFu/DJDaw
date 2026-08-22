@@ -82,9 +82,11 @@ function stubCtx() {
 const clip = (startSec, durationSec, id) => ({ id, startSec, durationSec, sourceOffsetSec: 0 })
 
 {
+  // Whatever it is given gets a card. Whether a row that has never been cut
+  // should show one is the view's call, not this function's.
   const ctx = stubCtx()
   drawClipBands(ctx, [clip(0, 100, 'c1')], 0, 100, 1000, 50)
-  ok(`an uncut row is never tinted — ${ctx.rects.length} rects`, ctx.rects.length === 0)
+  ok(`one piece gets one card — ${ctx.rects.length} rects`, ctx.rects.length === 1)
 }
 {
   const ctx = stubCtx()

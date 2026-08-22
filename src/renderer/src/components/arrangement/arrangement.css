@@ -1,44 +1,113 @@
-/* The arrangement view: a stack of lanes over one shared timeline. */
+/* The arrangement view: a stack of lanes over one shared timeline.
+   Three surfaces, each a step apart so the eye can tell them apart at a
+   glance: the lanes are the sunken near-black the waveforms use, the track
+   headers and channel strips are panel, and the bars above them are panel too
+   with a hard border between. */
 .arrangement {
-  --arrange-head-w: 150px;
-  --arrange-side-w: 264px;
+  --arrange-head-w: 160px;
+  --arrange-side-w: 272px;
   --arrange-lane-h: 74px;
-  --arrange-ruler-h: 22px;
+  --arrange-ruler-h: 24px;
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  background: var(--panel, #0d0f13);
+  background: var(--bg-app);
 }
+
+/* ------------------------------------------------------------------- bar */
 
 .arrangement__bar {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-bottom: 1px solid var(--line, #1e222a);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-soft);
 }
 
-.arrangement__add {
+.arrangement__add,
+.arrangement__play,
+.arrangement__zoom button {
   font: inherit;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  padding: 4px 10px;
-  color: var(--text, #e6e8ec);
-  background: #171b22;
-  border: 1px solid #2a3039;
-  border-radius: 3px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
-.arrangement__add:hover:not(:disabled) {
-  background: #1e232c;
+.arrangement__add:hover:not(:disabled),
+.arrangement__play:hover,
+.arrangement__zoom button:hover {
+  background: var(--bg-raised-hover);
+}
+
+.arrangement__add {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
 }
 
 .arrangement__add:disabled {
   opacity: 0.4;
   cursor: default;
 }
+
+.arrangement__play {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 4px 16px;
+}
+
+.arrangement__play.is-lit {
+  color: var(--text-inverse);
+  background: var(--play);
+  border-color: var(--play);
+}
+
+.arrangement__zoom {
+  display: flex;
+  gap: 3px;
+}
+
+.arrangement__zoom button {
+  font-size: 12px;
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  color: var(--text-dim);
+}
+
+/* ----------------------------------------------------------------- ruler */
+
+.arrange-ruler {
+  display: grid;
+  grid-template-columns: var(--arrange-head-w) 1fr var(--arrange-side-w);
+  height: var(--arrange-ruler-h);
+  flex: 0 0 auto;
+  background: var(--bg-panel-2);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.arrange-ruler__spacer {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border-strong);
+}
+
+.arrange-ruler__spacer:last-child {
+  border-right: 0;
+  border-left: 1px solid var(--border-strong);
+}
+
+.arrange-ruler__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: text;
+}
+
+/* ----------------------------------------------------------------- lanes */
 
 .arrangement__lanes {
   display: flex;
@@ -52,11 +121,11 @@
   display: grid;
   grid-template-columns: var(--arrange-head-w) 1fr var(--arrange-side-w);
   align-items: stretch;
-  border-bottom: 1px solid var(--line, #1e222a);
   /* A set height, so six of them fit and every lane is the same. */
   height: var(--arrange-lane-h);
   flex: 0 0 auto;
   min-height: 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .arrange-track > * {
@@ -64,49 +133,61 @@
   overflow: hidden;
 }
 
-.arrange-track.is-selected {
-  background: rgba(255, 255, 255, 0.03);
-}
-
 .arrange-track__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 0 8px;
-  border-right: 1px solid var(--line, #1e222a);
-  /* The edge that says which track the keys act on. */
-  box-shadow: inset 3px 0 0 0 transparent;
+  padding: 0 8px 0 10px;
+  background: var(--bg-panel);
+  /* At these darks a fill step of a few points is nothing, so the hard edge is
+     what separates the panels from the near-black timeline between them. */
+  border-right: 1px solid var(--border-strong);
+  /* The picked track is the one the keys act on, so it is meant to be
+     unmissable: lifted background and a lit bar down its left edge. */
+  box-shadow: inset 4px 0 0 0 var(--border-soft);
 }
 
 .arrange-track.is-selected .arrange-track__head {
-  box-shadow: inset 3px 0 0 0 var(--accent, #4aa3ff);
+  background: var(--bg-raised);
+  box-shadow:
+    inset 4px 0 0 0 var(--accent),
+    0 0 10px -2px var(--accent-glow);
 }
 
 .arrange-track__name {
   font-size: 12px;
-  color: var(--text, #e6e8ec);
+  color: var(--text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.arrange-track.is-selected .arrange-track__name {
+  color: var(--text);
+}
+
 .arrange-track__order {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .arrange-track__order button {
   font: inherit;
   font-size: 8px;
   line-height: 1;
-  padding: 2px 4px;
-  color: var(--text-dim, #8b93a1);
-  background: #171b22;
-  border: 1px solid #2a3039;
+  padding: 2px 5px;
+  color: var(--text-faint);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
   border-radius: 2px;
   cursor: pointer;
+}
+
+.arrange-track__order button:hover:not(:disabled) {
+  background: var(--bg-raised-hover);
+  color: var(--text);
 }
 
 .arrange-track__order button:disabled {
@@ -114,19 +195,11 @@
   cursor: default;
 }
 
-.arrange-track__lane {
-  position: relative;
-  min-width: 0;
-}
-
-.arrange-track__controls {
-  border-left: 1px solid var(--line, #1e222a);
-}
-
+/* The timeline itself: the darkest surface in the view, as the waveforms are. */
 .arrange-lane {
   position: relative;
   min-width: 0;
-  background: #0a0c10;
+  background: var(--bg-waveform);
 }
 
 .arrange-lane__canvas {
@@ -139,73 +212,14 @@
   display: flex;
   /* Stretched, not centred: the fader takes its height from the lane. */
   align-items: stretch;
-  gap: 8px;
-  padding: 4px 8px;
-  border-left: 1px solid var(--line, #1e222a);
+  gap: 10px;
+  padding: 5px 10px;
+  /* A step above the track header, so the two panels either side of a lane are
+     not the same surface. */
+  background: var(--bg-panel-2);
+  border-left: 1px solid var(--border-strong);
 }
 
 .arrange-track__controls .edit-eq {
   align-self: center;
-}
-
-/* The one timeline every lane is drawn against. */
-.arrange-ruler {
-  display: grid;
-  grid-template-columns: var(--arrange-head-w) 1fr var(--arrange-side-w);
-  height: var(--arrange-ruler-h);
-  flex: 0 0 auto;
-  border-bottom: 1px solid var(--line, #1e222a);
-  background: #0b0d11;
-}
-
-.arrange-ruler__spacer {
-  border-right: 1px solid var(--line, #1e222a);
-}
-
-.arrange-ruler__spacer:last-child {
-  border-right: 0;
-  border-left: 1px solid var(--line, #1e222a);
-}
-
-.arrange-ruler__canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: text;
-}
-
-.arrangement__play {
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  padding: 4px 14px;
-  color: var(--text, #e6e8ec);
-  background: #171b22;
-  border: 1px solid #2a3039;
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-.arrangement__play.is-lit {
-  color: #0b0d11;
-  background: var(--accent, #4aa3ff);
-  border-color: var(--accent, #4aa3ff);
-}
-
-.arrangement__zoom {
-  display: flex;
-  gap: 3px;
-}
-
-.arrangement__zoom button {
-  font: inherit;
-  font-size: 12px;
-  line-height: 1;
-  width: 22px;
-  height: 22px;
-  color: var(--text-dim, #8b93a1);
-  background: #171b22;
-  border: 1px solid #2a3039;
-  border-radius: 3px;
-  cursor: pointer;
 }

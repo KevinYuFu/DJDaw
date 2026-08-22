@@ -353,7 +353,11 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       // the MICRO view, so their names have room.
       drawLocators(ctx, state.locators, from, to, width, height, DETAIL_LOCATOR_STYLE)
       drawCueMarkers(ctx, state.hotCues, state.cuePoint, from, to, width, height, DETAIL_CUE_STYLE)
-      drawClipEdges(ctx, state.clips, state.selectedClipId, from, to, width, height)
+      // An uncut row is one whole-track piece, and outlining that would just
+      // put a box round the strip.
+      if (state.clips.length > 1) {
+        drawClipEdges(ctx, state.clips, state.selectedClipId, from, to, width, height)
+      }
       drawPlayhead(ctx, width / 2, height)
     }
 

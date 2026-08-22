@@ -12,9 +12,9 @@ import { gridLines, gridStepSec, timeLabel } from './timeline'
  * the grid drawn behind the clips. Clicking it puts the playhead there.
  */
 
-const TICK = 'rgba(255,255,255,0.35)'
-const TEXT = 'rgba(255,255,255,0.55)'
-const PLAYHEAD = '#ff5a5a'
+const TICK = 'rgba(255,255,255,0.45)'
+const TEXT = 'rgba(255,255,255,0.62)'
+const PLAYHEAD = '#ff4d4d'
 
 export function ArrangementRuler(): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -71,6 +71,14 @@ export function ArrangementRuler(): ReactElement {
       if (headX >= 0 && headX <= width) {
         ctx.fillStyle = PLAYHEAD
         ctx.fillRect(Math.round(headX), 0, 1, height)
+        // A tab on the ruler, so the playhead can be picked out of the lanes
+        // even where the audio behind it is bright.
+        ctx.beginPath()
+        ctx.moveTo(Math.round(headX) - 4, 0)
+        ctx.lineTo(Math.round(headX) + 5, 0)
+        ctx.lineTo(Math.round(headX) + 0.5, 7)
+        ctx.closePath()
+        ctx.fill()
       }
     }
     raf = requestAnimationFrame(frame)

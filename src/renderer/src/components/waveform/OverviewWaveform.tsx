@@ -280,7 +280,9 @@ export function OverviewWaveform({
       // Under the waveform, as the MICRO view draws it, so the envelope stays
       // the brightest thing on the strip. Mid-drag it marks the piece being
       // moved, which is what gives the eye both ends of the move at once.
-      if (state.draggable) {
+      // An uncut row is one whole-track piece, and outlining that would just
+      // put a box round the strip.
+      if (state.draggable && state.clips.length > 1) {
         drawClipBands(ctx, state.clips, 0, state.duration, width, height, OVERVIEW_CLIP_STYLE)
         drawClipHighlight(
           ctx,
