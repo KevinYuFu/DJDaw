@@ -4,6 +4,7 @@ import type { BeatGrid, DeckId, HotCue, Track, WaveformData } from '@shared/type
 import {
   deleteSegment,
   fillHole,
+  sourceIdsOf,
   insertClip,
   layOut,
   splitAt,
@@ -369,6 +370,10 @@ function pruneSources(): void {
  * plays.
  */
 function adoptClip(id: DeckId, sourceId: string, audio: AudioBuffer, landing: Clip): void {
+  // Claimed the way a load claims it: a decode still in flight for this row
+  // must not land on top of the piece that was just dropped on it.
+  runtime[id].loadToken++
+  clearPreview(id)
   const engine = AudioEngine.shared()
   const deck = engine.deck(id)
   watchDeck(id, deck)
@@ -394,7 +399,7 @@ function adoptClip(id: DeckId, sourceId: string, audio: AudioBuffer, landing: Cl
     clips,
     selectedClipId: landing.id
   })
-  deck.setRegions(toRegions(clips), timelineDuration(clips))
+  deck.setRegions(toRegions(clips), timelineDuration(clips), sourceIdsOf(clips))
 }
 
 function emptyDeck(): DeckState {
@@ -585,8 +590,16 @@ function writeHotCues(ctx: DeckContext, cues: HotCue[]): void {
  */
 function setClips(ctx: DeckContext, clips: Clip[], patch: Partial<DeckState> = {}): void {
   patchDeck(ctx.id, { ...patch, clips })
-  // The row's own length, so a tail that plays nothing still counts.
-  ctx.deck.setRegions(toRegions(clips), timelineDuration(clips))
+  // The row's own length, so a tail that plays nothing still counts, and every
+  // file it has a piece for, so switching one off does not lose its audio.
+  const length = timelineDuration(clips)
+  ctx.deck.setRegions(toRegions(clips), length, sourceIdsOf(clips))
+  // A loop the row no longer reaches would pull the playhead past its end and
+  // stop the deck there, with no way back.
+  if (ctx.state.loop && ctx.state.loop.endSec > length) {
+    ctx.deck.setLoop(false, 0, 0)
+    patchDeck(ctx.id, { loop: null })
+  }
 }
 
 /**
@@ -795,7 +808,7 @@ export const useDecks = create<DecksState>()(() => ({
       const clips = [wholeTrackClip(buffer.duration, trackId)]
       sourceAudio.set(trackId, buffer)
       patchDeck(id, { buffer, clips, selectedClipId: null })
-      deck.setRegions(toRegions(clips), timelineDuration(clips))
+      deck.setRegions(toRegions(clips), timelineDuration(clips), sourceIdsOf(clips))
 
       const [waveform, grid] = await Promise.all([resolveWaveform(track, buffer), resolveGrid(id, track, buffer)])
       if (runtime[id].loadToken !== token) return
@@ -1275,7 +1288,12 @@ export const useDecks = create<DecksState>()(() => ({
       if (!landed) return
       // A drag that ends where it started still arrives here, and re-pushing
       // the same regions would wake every subscriber for nothing.
-      if (landed.every((clip, i) => clip.id === src.state.clips[i]?.id)) return
+      if (
+        landed.length === src.state.clips.length &&
+        landed.every((clip, i) => clip.id === src.state.clips[i].id)
+      ) {
+        return
+      }
       setClips(src, landed, { selectedClipId: moving.id })
       return
     }

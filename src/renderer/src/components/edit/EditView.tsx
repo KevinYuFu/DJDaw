@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from 'react'
 import type { DeckId, ExportFormat } from '@shared/types'
 import { DECK_IDS } from '@shared/types'
-import { timelineDuration } from '@shared/clips'
+import type { Clip } from '@shared/clips'
+import { sourceIdsOf, timelineDuration } from '@shared/clips'
 import { encodeWav } from '@shared/wav'
 import { renderTimeline } from '@renderer/audio/render'
 import type { DeckRenderSpec } from '@renderer/audio/render'
-import { useDecks } from '@renderer/state/useDecks'
+import { audioForSource, useDecks } from '@renderer/state/useDecks'
 import type { DeckState } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
@@ -84,13 +85,29 @@ function useExportableDecks(): string {
  * performance mixer, and this view has none — the file is the edit, not the
  * mix position it was last heard at.
  */
+/** The audio for every piece on a row that came from somewhere else. */
+function sourcesFor(clips: readonly Clip[]): Map<string, AudioBuffer> {
+  const out = new Map<string, AudioBuffer>()
+  for (const id of sourceIdsOf(clips)) {
+    const buffer = audioForSource(id)
+    if (buffer) out.set(id, buffer)
+  }
+  return out
+}
+
 function buildSpecs(ids: readonly DeckId[]): DeckRenderSpec[] {
   const { decks } = useDecks.getState()
   const specs: DeckRenderSpec[] = []
   for (const id of ids) {
     const state = decks[id]
     if (!state.buffer || !isExportable(state)) continue
-    specs.push({ buffer: state.buffer, clips: state.clips, eq: state.eq })
+    specs.push({
+      buffer: state.buffer,
+      sourceId: state.trackId ?? undefined,
+      sources: sourcesFor(state.clips),
+      clips: state.clips,
+      eq: state.eq
+    })
   }
   return specs
 }

@@ -24,9 +24,12 @@ export interface ClipDrag {
   holeId: string | null
   /** Timeline seconds it would start at. */
   atSec: number
-  /** Where the ghost sits, and the size it was lifted at. */
+  /** Where the hand is, and how far along the piece it took hold. */
   x: number
   y: number
+  /** 0 at the piece's start, 1 at its end. */
+  grab: number
+  /** The size the piece was lifted at. */
   width: number
   height: number
 }
@@ -128,9 +131,18 @@ export interface ClipAim {
  * Empty room takes it where it was let go and is cut around it. `clips` must
  * already have the held piece out of it, so dropping a piece back into its own
  * row is the same question as dropping it into any other.
+ *
+ * `intoHoles` off leaves empty room to take its turn in the order like any
+ * other piece. A piece put back in its own row is being reordered, and a row
+ * that both loses a piece and fills a hole with it would come out shorter.
  */
-export function aimInRow(clips: readonly Clip[], held: Clip, at: number): ClipAim {
-  const under = clipAt(clips, at)
+export function aimInRow(
+  clips: readonly Clip[],
+  held: Clip,
+  at: number,
+  intoHoles = true
+): ClipAim {
+  const under = intoHoles ? clipAt(clips, at) : null
   if (under && under.silent && under.durationSec >= held.durationSec) {
     return { index: 0, holeId: under.id, atSec: fillStartSec(under, at, held.durationSec) }
   }
@@ -138,6 +150,18 @@ export function aimInRow(clips: readonly Clip[], held: Clip, at: number): ClipAi
   let atSec = 0
   for (let i = 0; i < index; i++) atSec += clips[i].durationSec
   return { index, holeId: null, atSec }
+}
+
+/**
+ * How far along a piece the hand took hold of it, 0 to 1.
+ *
+ * Kept as a fraction rather than pixels so the shadow stays under the hand
+ * however wide it ends up being drawn, including when the piece runs off the
+ * side of the strip it was picked up from.
+ */
+export function grabFraction(offsetPx: number, widthPx: number): number {
+  if (!(widthPx > 0)) return 0
+  return Math.max(0, Math.min(1, offsetPx / widthPx))
 }
 
 /** A row with the held piece taken out of it, which is what a drop aims into. */

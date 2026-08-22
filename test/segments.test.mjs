@@ -9,6 +9,8 @@ import {
   fillStartSec,
   layOut,
   reorderClip,
+  sourceIdsOf,
+  splitAt,
   segmentIndexAt,
   timelineDuration,
   toRegions
@@ -168,4 +170,34 @@ eq('a time past the end finds nothing', segmentIndexAt(row(), 99), -1)
   eq('the line sits where the piece will start', fillStartSec(hole, 25, 12), 25)
   eq('flush to the front when it is close enough', fillStartSec(hole, 10.005, 12), 10)
   eq('and flush to the back past the end', fillStartSec(hole, 500, 12), 38)
+}
+
+// A cut makes two of the same piece, so both halves keep what it was.
+{
+  const row = layOut([
+    { id: 'a', startSec: 0, durationSec: 10, sourceOffsetSec: 0 },
+    { id: 'b', startSec: 0, durationSec: 20, sourceOffsetSec: 5, sourceId: 'other', disabled: true }
+  ])
+  const { left, right } = splitAt(row, 20)
+  ok(`both halves play the file the piece played — ${left.sourceId} / ${right.sourceId}`,
+    left.sourceId === 'other' && right.sourceId === 'other')
+  ok('and both are still switched off', left.disabled === true && right.disabled === true)
+  eq('the right half reads on from where the left stops', right.sourceOffsetSec, 15)
+  eq('and it is a different piece', right.id === left.id, false)
+
+  const holes = splitAt(layOut([{ id: 'h', startSec: 0, durationSec: 20, sourceOffsetSec: 0, silent: true }]), 10)
+  ok('cutting a hole gives two holes', holes.left.silent === true && holes.right.silent === true)
+}
+
+// Every file a row has a piece for, whether or not that piece plays.
+{
+  const row = layOut([
+    { id: 'a', startSec: 0, durationSec: 10, sourceOffsetSec: 0, sourceId: 'own' },
+    { id: 'b', startSec: 0, durationSec: 10, sourceOffsetSec: 0, sourceId: 'guest', disabled: true },
+    { id: 'h', startSec: 0, durationSec: 10, sourceOffsetSec: 0, silent: true },
+    { id: 'c', startSec: 0, durationSec: 10, sourceOffsetSec: 0, sourceId: 'own' }
+  ])
+  eq('a switched-off piece still counts, a hole does not',
+    sourceIdsOf(row).join(','), 'own,guest')
+  eq('and the engine is only given what plays', toRegions(row).length, 2)
 }

@@ -320,8 +320,11 @@ export function splitAt(clips: readonly Clip[], timelineSec: number): SplitResul
     return { clips: [...clips], left: null, right: null, reason: 'too-short' }
   }
 
+  // Both halves are the piece that was cut, so they keep everything about it:
+  // the audio it plays, and whether it is a hole or switched off.
   const left: Clip = { ...target, durationSec: leftLen }
   const right: Clip = {
+    ...target,
     id: makeClipId(),
     startSec: timelineSec,
     durationSec: rightLen,
@@ -454,6 +457,16 @@ export interface Region {
   startSec: number
   durationSec: number
   sourceOffsetSec: number
+}
+
+/** Every file the row has a piece for, whether or not that piece plays. */
+export function sourceIdsOf(clips: readonly Clip[]): string[] {
+  const out: string[] = []
+  for (const clip of clips) {
+    if (clip.silent || !clip.sourceId) continue
+    if (!out.includes(clip.sourceId)) out.push(clip.sourceId)
+  }
+  return out
 }
 
 export function toRegions(clips: readonly Clip[]): Region[] {

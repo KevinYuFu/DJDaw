@@ -42,10 +42,14 @@ export function ClipGhost(): ReactElement {
 
       const width = Math.max(MIN_WIDTH_PX, Math.min(MAX_WIDTH_PX, Math.round(drag.width)))
       const height = Math.max(1, Math.round(drag.height))
+      // Hung off the hand by the fraction it took hold of, so the same spot on
+      // the piece stays under the pointer however wide it is drawn.
+      const left = Math.round(drag.x - drag.grab * width)
+      const top = Math.round(drag.y - height / 2)
       box.style.display = 'block'
       box.style.width = `${width}px`
       box.style.height = `${height}px`
-      box.style.transform = `translate(${Math.round(drag.x)}px, ${Math.round(drag.y)}px)`
+      box.style.transform = `translate(${left}px, ${top}px)`
 
       // The shape only has to be drawn when the piece or its size changes; the
       // rest of the drag just moves it.

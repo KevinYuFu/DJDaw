@@ -15,6 +15,7 @@ import { registerDropZone, zoneAt } from './dropZones'
 import {
   aimInRow,
   clipDrag,
+  grabFraction,
   dropLineFor,
   newDragRowMemo,
   rowForDrag,
@@ -147,8 +148,8 @@ interface ClipGesture {
   width: number
   height: number
   duration: number
-  /** Where in the piece it was taken hold of, so the ghost does not jump. */
-  grabDx: number
+  /** How far along the piece it was taken hold of, 0 at its start, 1 at its end. */
+  grab: number
   dragging: boolean
   /** Escape gives the drag up but keeps the gesture, so the release can tidy up. */
   cancelled: boolean
@@ -311,7 +312,16 @@ export function OverviewWaveform({
         if (done) slideRef.current = null
         else drawn = sliding
       }
-      const state = drawn === settled.clips ? settled : { ...settled, clips: drawn }
+      // Room opened for a held piece makes the row longer than what is stored,
+      // and the strip has to show all of it or the tail falls off the end.
+      const state =
+        drawn === settled.clips
+          ? settled
+          : {
+              ...settled,
+              clips: drawn,
+              duration: Math.max(settled.duration, timelineDuration(drawn))
+            }
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const playX = state.duration > 0 ? clamp((position / state.duration) * width, 0, width) : 0
@@ -405,7 +415,6 @@ export function OverviewWaveform({
           OVERVIEW_CLIP_STYLE
         )
       }
-      if (lineSec !== null) drawDropMarker(ctx, lineSec, 0, state.duration, width, height)
       // a line here; the names belong to the MICRO view, which has the room.
       drawCueMarkers(
         ctx,
@@ -417,6 +426,9 @@ export function OverviewWaveform({
         height,
         OVERVIEW_CUE_STYLE
       )
+      // Over the cue tabs: where a piece is about to land matters more than a
+      // marker while the hand is still down.
+      if (lineSec !== null) drawDropMarker(ctx, lineSec, 0, state.duration, width, height)
       drawPlayhead(ctx, playX, height)
     }
 
@@ -449,20 +461,23 @@ export function OverviewWaveform({
       const decks = useDecks.getState().decks
       const ghost = {
         clip: gesture.clip,
-        x: clientX - gesture.grabDx,
-        y: clientY - gesture.height / 2,
+        x: clientX,
+        y: clientY,
+        grab: gesture.grab,
         width: (gesture.clip.durationSec / gesture.duration) * gesture.width,
         height: gesture.height
       }
-      if (!zone) {
+      // Empty room has no audio to carry, so a row with nothing in it is not
+      // somewhere it can go.
+      const usable =
+        zone && (zone.deck === deckId || !gesture.clip.silent || decks[zone.deck].trackId)
+      if (!zone || !usable) {
         setClipDrag({ fromDeck: deckId, toDeck: null, index: 0, holeId: null, atSec: 0, ...ghost })
         return
       }
-      const row =
-        zone.deck === deckId
-          ? rowWithout(decks[deckId].clips, gesture.clip.id)
-          : decks[zone.deck].clips
-      const at = aimInRow(row, gesture.clip, zone.timeAt(clientX))
+      const ownRow = zone.deck === deckId
+      const row = ownRow ? rowWithout(decks[deckId].clips, gesture.clip.id) : decks[zone.deck].clips
+      const at = aimInRow(row, gesture.clip, zone.timeAt(clientX), !ownRow)
       setClipDrag({ fromDeck: deckId, toDeck: zone.deck, ...at, ...ghost })
     },
     [deckId]
@@ -504,7 +519,10 @@ export function OverviewWaveform({
         width: rect.width,
         height: rect.height,
         duration: state.duration,
-        grabDx: event.clientX - (rect.left + grabbed.startSec * perSec),
+        grab: grabFraction(
+          event.clientX - (rect.left + grabbed.startSec * perSec),
+          grabbed.durationSec * perSec
+        ),
         dragging: false,
         cancelled: false
       }

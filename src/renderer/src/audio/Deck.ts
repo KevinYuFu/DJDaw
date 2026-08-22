@@ -661,7 +661,10 @@ export class Deck {
    * An empty list puts the deck back to playing the whole file, which is what
    * an uncut deck wants and what the two performance decks always send.
    */
-  setRegions(regions: Region[], timelineSec?: number): void {
+  /** The row's own length, when it is longer than the audio on it. */
+  private timelineSec: number | null = null
+
+  setRegions(regions: Region[], timelineSec?: number, keep?: readonly string[]): void {
     const sr = this.fileSampleRate
     this.regions = regions
       .map((r) => ({
@@ -684,23 +687,24 @@ export class Deck {
       regions: this.regions,
       timelineFrames: this.timelineSec ? Math.round(this.timelineSec * sr) : 0
     })
-    this.dropUnusedSources()
+    this.dropUnusedSources(keep)
   }
 
   /**
-   * Let go of audio no region reads any more.
+   * Let go of audio nothing on this row has a piece for any more.
    *
    * A piece carried onto this row brought a whole file with it; once it has
-   * been moved on or deleted, nothing here plays it and the audio thread has
-   * no reason to keep holding tens of megabytes.
+   * been moved on or deleted, the audio thread has no reason to keep holding
+   * tens of megabytes.
+   *
+   * `keep` is every file the row has a piece for, which is not the same as
+   * every file it plays: a piece that is switched off has no region, and its
+   * audio still has to be there when it is switched back on.
    */
-  /** The row's own length, when it is longer than the audio on it. */
-  private timelineSec: number | null = null
-
-  private dropUnusedSources(): void {
+  private dropUnusedSources(keep?: readonly string[]): void {
     for (const id of [...this.sourceIds]) {
       if (id === this.mainSourceId) continue
-      if (this.regions.some((r) => r.sourceId === id)) continue
+      if (keep ? keep.includes(id) : this.regions.some((r) => r.sourceId === id)) continue
       this.sourceIds.delete(id)
       this.post({ type: 'dropSource', id })
     }
@@ -708,6 +712,7 @@ export class Deck {
 
   /** Timeline length in frames: the end of the last region, else the file. */
   private timelineFrames(): number {
+    if (this.timelineSec) return Math.round(this.timelineSec * this.fileSampleRate)
     const last = this.regions[this.regions.length - 1]
     return last ? last.endFrame : this.frames
   }

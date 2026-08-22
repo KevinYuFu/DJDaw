@@ -16,6 +16,7 @@ import { registerDropZone, zoneAt } from './dropZones'
 import {
   aimInRow,
   clipDrag,
+  grabFraction,
   dropLineFor,
   newDragRowMemo,
   rowForDrag,
@@ -113,8 +114,8 @@ interface HeldClip {
   width: number
   height: number
   span: number
-  /** Where in the piece it was taken hold of, so the ghost does not jump. */
-  grabDx: number
+  /** How far along the piece it was taken hold of, 0 at its start, 1 at its end. */
+  grab: number
   dragging: boolean
   /** Escape gives the drag up but keeps the gesture, so the release tidies up. */
   cancelled: boolean
@@ -487,7 +488,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
               width,
               height: rect.height,
               span: state.span,
-              grabDx: event.clientX - left,
+              grab: grabFraction(event.clientX - left, grabbed.durationSec * perSec),
               dragging: false,
               cancelled: false
             }
@@ -523,20 +524,23 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       const decks = useDecks.getState().decks
       const ghost = {
         clip: held.clip,
-        x: clientX - held.grabDx,
-        y: clientY - held.height / 2,
+        x: clientX,
+        y: clientY,
+        grab: held.grab,
         width: Math.min((held.clip.durationSec / held.span) * held.width, held.width),
         height: held.height
       }
-      if (!zone) {
+      // Empty room has no audio to carry, so a row with nothing in it is not
+      // somewhere it can go.
+      const usable =
+        zone && (zone.deck === deckId || !held.clip.silent || decks[zone.deck].trackId)
+      if (!zone || !usable) {
         setClipDrag({ fromDeck: deckId, toDeck: null, index: 0, holeId: null, atSec: 0, ...ghost })
         return
       }
-      const row =
-        zone.deck === deckId
-          ? rowWithout(decks[deckId].clips, held.clip.id)
-          : decks[zone.deck].clips
-      const at = aimInRow(row, held.clip, zone.timeAt(clientX))
+      const ownRow = zone.deck === deckId
+      const row = ownRow ? rowWithout(decks[deckId].clips, held.clip.id) : decks[zone.deck].clips
+      const at = aimInRow(row, held.clip, zone.timeAt(clientX), !ownRow)
       setClipDrag({ fromDeck: deckId, toDeck: zone.deck, ...at, ...ghost })
     },
     [deckId]

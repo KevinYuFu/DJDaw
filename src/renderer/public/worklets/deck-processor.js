@@ -145,7 +145,13 @@ class DeckProcessor extends AudioWorkletProcessor {
           this.onCommand({ type: 'addSource', id: src.id, stems: src.stems, frames: src.frames })
         }
       }
-      if (init.regions) this.onCommand({ type: 'regions', regions: init.regions })
+      if (init.regions) {
+        this.onCommand({
+          type: 'regions',
+          regions: init.regions,
+          timelineFrames: init.timelineFrames || 0
+        })
+      }
       if (typeof init.reportInterval === 'number') {
         this.onCommand({ type: 'reportInterval', quanta: init.reportInterval })
       }
