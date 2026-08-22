@@ -224,6 +224,16 @@ export function Toolbar(): ReactElement {
         >
           EDIT
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'arrangement'}
+          className={view === 'arrangement' ? 'active' : undefined}
+          title="Clips laid out on one timeline"
+          onClick={() => setView('arrangement')}
+        >
+          EDIT V2
+        </button>
       </div>
 
       <div className="toolbar__spacer" />

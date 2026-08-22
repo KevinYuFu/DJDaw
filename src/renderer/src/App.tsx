@@ -17,6 +17,7 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { Browser } from '@renderer/components/browser/Browser'
 import { analyzeTrackOffDeck } from '@renderer/components/browser/TrackTable'
 import { Deck } from '@renderer/components/deck/Deck'
+import { ArrangementView } from '@renderer/components/arrangement/ArrangementView'
 import { EditView } from '@renderer/components/edit/EditView'
 import { Mixer } from '@renderer/components/Mixer'
 import { Toolbar } from '@renderer/components/Toolbar'
@@ -54,6 +55,11 @@ const EDIT_CHROME_H = 38
 const EDIT_ROW_MIN_H = 110
 const EDIT_ROW_H = 126
 
+/** The arrangement's bar and its ruler. */
+const ARRANGE_CHROME_H = 64
+/** One arrangement lane: shorter than an editing row, so six of them fit. */
+const ARRANGE_LANE_H = 76
+
 /**
  * The two views want different amounts of height and get their own, so the
  * performance view can run a short waveform over a tall browser while the
@@ -64,6 +70,10 @@ const VIEW_HEIGHTS: Record<ViewName, { min: number; preferred: number }> = {
   edit: {
     min: EDIT_CHROME_H + 4 * EDIT_ROW_MIN_H,
     preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
+  },
+  arrangement: {
+    min: ARRANGE_CHROME_H + 2 * ARRANGE_LANE_H,
+    preferred: ARRANGE_CHROME_H + 6 * ARRANGE_LANE_H
   }
 }
 
@@ -283,7 +293,11 @@ export function App(): ReactElement {
     <div className={classes.join(' ')} style={layout}>
       <Toolbar />
 
-      {view === 'edit' ? (
+      {view === 'arrangement' ? (
+        <main className="edit-area">
+          <ArrangementView />
+        </main>
+      ) : view === 'edit' ? (
         <main className="edit-area">
           <EditView />
         </main>
