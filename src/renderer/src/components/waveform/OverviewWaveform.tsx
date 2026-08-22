@@ -23,7 +23,6 @@ import {
   canvasNeedsResize,
   drawClipBands,
   drawClipEdges,
-  drawClipGhost,
   drawClipHighlight,
   drawCueMarkers,
   drawLocators,
@@ -144,12 +143,6 @@ interface ClipGesture {
 
 type Gesture = SeekGesture | ClipGesture
 
-/** Where a dragged piece would land if it were dropped now. */
-interface Ghost {
-  clipId: string
-  startSec: number
-  durationSec: number
-}
 
 
 export function OverviewWaveform({
@@ -162,7 +155,6 @@ export function OverviewWaveform({
   const dirtyRef = useRef(true)
   const gestureRef = useRef<Gesture | null>(null)
   const slideRef = useRef<Slide | null>(null)
-  const ghostRef = useRef<Ghost | null>(null)
 
   const status = useDecks((s) => s.decks[deckId].status)
   const waveform = useDecks((s) => s.decks[deckId].waveform)
@@ -269,7 +261,6 @@ export function OverviewWaveform({
           dirtyRef.current = true
         }
       }
-      const ghost = ghostRef.current
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const playX = state.duration > 0 ? clamp((position / state.duration) * width, 0, width) : 0
@@ -294,7 +285,7 @@ export function OverviewWaveform({
         drawClipHighlight(
           ctx,
           state.clips,
-          ghost ? ghost.clipId : state.selectedClipId,
+          state.selectedClipId,
           0,
           state.duration,
           width,
@@ -352,9 +343,6 @@ export function OverviewWaveform({
         height,
         OVERVIEW_CUE_STYLE
       )
-      if (ghost) {
-        drawClipGhost(ctx, ghost.startSec, ghost.durationSec, 0, state.duration, width, height)
-      }
       drawPlayhead(ctx, playX, height)
     }
 
@@ -422,6 +410,9 @@ export function OverviewWaveform({
       // On a piece, the seek waits until the gesture has decided what it is.
       // Seeking now would jog the playhead every time a chunk is picked up.
       const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
+      // Mark the piece rather than the pointer: the row rearranges under the
+      // hand, so the highlight has to travel with the piece.
+      useDecks.getState().selectClip(deckId, grabbed.id)
       gestureRef.current = {
         kind: 'clip',
         pointerId: event.pointerId,
@@ -451,11 +442,6 @@ export function OverviewWaveform({
         if (Math.abs(event.clientX - gesture.startX) <= DRAG_SLOP_PX) return
         gesture.dragging = true
       }
-      ghostRef.current = {
-        clipId: gesture.clip.id,
-        startSec: dropTarget(gesture, event.clientX),
-        durationSec: gesture.clip.durationSec
-      }
       dirtyRef.current = true
     },
     [dropTarget, seekTo]
@@ -471,7 +457,6 @@ export function OverviewWaveform({
       const gesture = gestureRef.current
       if (!gesture || gesture.pointerId !== event.pointerId) return
       gestureRef.current = null
-      ghostRef.current = null
       dirtyRef.current = true
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId)
@@ -503,7 +488,6 @@ export function OverviewWaveform({
       // all the way along.
       useDecks.getState().reorderClipTo(deckId, gesture.clip.id, gesture.fromIndex)
       gesture.atIndex = gesture.fromIndex
-      ghostRef.current = null
       dirtyRef.current = true
     }
     window.addEventListener('keydown', onKeyDown)

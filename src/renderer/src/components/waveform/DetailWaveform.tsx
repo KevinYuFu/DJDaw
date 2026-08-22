@@ -25,7 +25,6 @@ import {
   drawClipBands,
   drawClipEdges,
   DEFAULT_CLIP_STYLE,
-  drawClipGhost,
   drawClipHighlight,
   drawCueMarkers,
   drawLocators,
@@ -108,12 +107,6 @@ interface ClipDrag {
   atIndex: number
 }
 
-/** Where a dragged piece would land if it were dropped now. */
-interface Ghost {
-  clipId: string
-  startSec: number
-  durationSec: number
-}
 
 
 /** Pointer travel below this is a click, above it a scrub. */
@@ -151,7 +144,6 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const boxRef = useRef({ width: 0, height: 0 })
   const extentsRef = useRef<ColumnExtents | null>(null)
   const clipDragRef = useRef<ClipDrag | null>(null)
-  const ghostRef = useRef<Ghost | null>(null)
   const slideRef = useRef<Slide | null>(null)
   const columnsRef = useRef<WaveformColumns | null>(null)
   const dirtyRef = useRef(true)
@@ -362,8 +354,6 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       drawLocators(ctx, state.locators, from, to, width, height, DETAIL_LOCATOR_STYLE)
       drawCueMarkers(ctx, state.hotCues, state.cuePoint, from, to, width, height, DETAIL_CUE_STYLE)
       drawClipEdges(ctx, state.clips, state.selectedClipId, from, to, width, height)
-      const ghost = ghostRef.current
-      if (ghost) drawClipGhost(ctx, ghost.startSec, ghost.durationSec, from, to, width, height)
       drawPlayhead(ctx, width / 2, height)
     }
 
@@ -392,6 +382,9 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           if (grabbed) {
             event.currentTarget.setPointerCapture(event.pointerId)
             const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
+            // Mark the piece rather than the pointer: the row rearranges under
+            // the hand, so the highlight has to travel with the piece.
+            useDecks.getState().selectClip(deckId, grabbed.id)
             clipDragRef.current = {
               pointerId: event.pointerId,
               startX: event.clientX,
@@ -444,13 +437,6 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           held.atIndex = to
           useDecks.getState().reorderClipTo(deckId, held.clip.id, to)
         }
-        // The ghost follows the hand rather than the slot, so the piece being
-        // carried is the one under the pointer.
-        ghostRef.current = {
-          clipId: held.clip.id,
-          startSec: moved,
-          durationSec: held.clip.durationSec
-        }
         dirtyRef.current = true
         return
       }
@@ -474,7 +460,6 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       const held = clipDragRef.current
       if (held && held.pointerId === event.pointerId) {
         clipDragRef.current = null
-        ghostRef.current = null
         dirtyRef.current = true
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
@@ -524,7 +509,6 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       // all the way along.
       useDecks.getState().reorderClipTo(deckId, held.clip.id, held.fromIndex)
       held.atIndex = held.fromIndex
-      ghostRef.current = null
       dirtyRef.current = true
     }
     window.addEventListener('keydown', onKeyDown)
