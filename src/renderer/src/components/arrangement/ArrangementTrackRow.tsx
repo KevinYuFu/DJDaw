@@ -1,5 +1,9 @@
 import type { ReactElement } from 'react'
+import { CENTRE, flatChannel } from '@shared/eq'
+import { FADER_UNITY } from '@shared/fader'
+import { ChannelEqStrip, ChannelFader } from '@renderer/components/channel/ChannelControls'
 import { useArrangement } from '@renderer/state/useArrangement'
+import { ArrangementLane } from './ArrangementLane'
 
 /**
  * One lane, with its name and controls on either side of the timeline.
@@ -43,9 +47,28 @@ export function ArrangementTrackRow({ trackId }: { trackId: string }): ReactElem
         </div>
       </div>
 
-      <div className="arrange-track__lane" />
+      <ArrangementLane trackId={trackId} />
 
-      <div className="arrange-track__controls" />
+      <div className="arrange-track__controls">
+        <ChannelFader
+          label={track?.name ?? 'Track'}
+          position={track?.fader ?? FADER_UNITY}
+          disabled={!track}
+          onChange={(position) => useArrangement.getState().setTrackFader(trackId, position)}
+        />
+        <ChannelEqStrip
+          label={track?.name ?? 'Track'}
+          eq={track?.eq ?? flatChannel()}
+          disabled={!track}
+          onKnob={(id, value) =>
+            track && useArrangement.getState().setTrackEq(trackId, { ...track.eq, [id]: value })
+          }
+          onResetKnob={(id) =>
+            track && useArrangement.getState().setTrackEq(trackId, { ...track.eq, [id]: CENTRE })
+          }
+          onResetAll={() => useArrangement.getState().setTrackEq(trackId, flatChannel())}
+        />
+      </div>
     </div>
   )
 }

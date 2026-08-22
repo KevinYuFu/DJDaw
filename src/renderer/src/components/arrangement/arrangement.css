@@ -1,5 +1,9 @@
 /* The arrangement view: a stack of lanes over one shared timeline. */
 .arrangement {
+  --arrange-head-w: 150px;
+  --arrange-side-w: 264px;
+  --arrange-lane-h: 74px;
+  --arrange-ruler-h: 22px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -46,10 +50,18 @@
 /* One lane: name on the left, timeline in the middle, channel on the right. */
 .arrange-track {
   display: grid;
-  grid-template-columns: 150px 1fr 264px;
+  grid-template-columns: var(--arrange-head-w) 1fr var(--arrange-side-w);
   align-items: stretch;
   border-bottom: 1px solid var(--line, #1e222a);
-  min-height: 56px;
+  /* A set height, so six of them fit and every lane is the same. */
+  height: var(--arrange-lane-h);
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.arrange-track > * {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .arrange-track.is-selected {
@@ -109,4 +121,91 @@
 
 .arrange-track__controls {
   border-left: 1px solid var(--line, #1e222a);
+}
+
+.arrange-lane {
+  position: relative;
+  min-width: 0;
+  background: #0a0c10;
+}
+
+.arrange-lane__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.arrange-track__controls {
+  display: flex;
+  /* Stretched, not centred: the fader takes its height from the lane. */
+  align-items: stretch;
+  gap: 8px;
+  padding: 4px 8px;
+  border-left: 1px solid var(--line, #1e222a);
+}
+
+.arrange-track__controls .edit-eq {
+  align-self: center;
+}
+
+/* The one timeline every lane is drawn against. */
+.arrange-ruler {
+  display: grid;
+  grid-template-columns: var(--arrange-head-w) 1fr var(--arrange-side-w);
+  height: var(--arrange-ruler-h);
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--line, #1e222a);
+  background: #0b0d11;
+}
+
+.arrange-ruler__spacer {
+  border-right: 1px solid var(--line, #1e222a);
+}
+
+.arrange-ruler__spacer:last-child {
+  border-right: 0;
+  border-left: 1px solid var(--line, #1e222a);
+}
+
+.arrange-ruler__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: text;
+}
+
+.arrangement__play {
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 4px 14px;
+  color: var(--text, #e6e8ec);
+  background: #171b22;
+  border: 1px solid #2a3039;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.arrangement__play.is-lit {
+  color: #0b0d11;
+  background: var(--accent, #4aa3ff);
+  border-color: var(--accent, #4aa3ff);
+}
+
+.arrangement__zoom {
+  display: flex;
+  gap: 3px;
+}
+
+.arrangement__zoom button {
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  color: var(--text-dim, #8b93a1);
+  background: #171b22;
+  border: 1px solid #2a3039;
+  border-radius: 3px;
+  cursor: pointer;
 }

@@ -273,6 +273,10 @@ function arrangementKey(event: KeyboardEvent): void {
   if (event.metaKey || event.ctrlKey || event.altKey) return
   const arrangement = useArrangement.getState()
   switch (event.code) {
+    case 'Space':
+      if (arrangement.playing) arrangement.pause()
+      else arrangement.play()
+      break
     case 'Delete':
     case 'Backspace': {
       const picked = arrangement.selectedTrackId

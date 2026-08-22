@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { MAX_TRACKS } from '@shared/arrangement'
 import { useArrangement } from '@renderer/state/useArrangement'
+import { ArrangementRuler } from './ArrangementRuler'
 import { ArrangementTrackRow } from './ArrangementTrackRow'
 import './arrangement.css'
 
@@ -14,6 +15,11 @@ import './arrangement.css'
 export function ArrangementView(): ReactElement {
   const trackIds = useArrangement((s) => s.trackIds)
   const addTrack = useArrangement((s) => s.addTrack)
+  const playing = useArrangement((s) => s.playing)
+  const play = useArrangement((s) => s.play)
+  const pause = useArrangement((s) => s.pause)
+  const zoomIndex = useArrangement((s) => s.zoomIndex)
+  const setZoom = useArrangement((s) => s.setZoom)
 
   return (
     <div className="arrangement">
@@ -29,7 +35,27 @@ export function ArrangementView(): ReactElement {
         >
           + TRACK
         </button>
+
+        <button
+          type="button"
+          className={`arrangement__play${playing ? ' is-lit' : ''}`}
+          title="Play every track from the playhead (Space)"
+          onClick={() => (playing ? pause() : play())}
+        >
+          {playing ? 'STOP' : 'PLAY'}
+        </button>
+
+        <div className="arrangement__zoom">
+          <button type="button" title="Zoom out (-)" onClick={() => setZoom(zoomIndex - 1)}>
+            −
+          </button>
+          <button type="button" title="Zoom in (=)" onClick={() => setZoom(zoomIndex + 1)}>
+            +
+          </button>
+        </div>
       </header>
+
+      <ArrangementRuler />
 
       <div className="arrangement__lanes">
         {trackIds.map((id) => (
