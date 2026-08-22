@@ -133,6 +133,19 @@ and every DJ application has one.
 
 ---
 
+## The arrangement view and the decks
+
+The arrangement view keeps its own tracks and shares nothing with the deck
+views: switching tabs carries nothing across.
+
+- **Record what is played on the decks, and lay it out as an arrangement.**
+  Perform a mix on the decks, then open the arrangement view and find the moves
+  already written down as clips to edit. This is the reason to connect the two,
+  and it only goes one way — the decks stay the instrument, the arrangement
+  stays the edit.
+
+---
+
 ## Housekeeping
 
 - **The SETUP modal has three wrong lines.** It warns that rekordbox's auto

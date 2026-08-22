@@ -36,6 +36,7 @@ export class AudioEngine {
   private graph: { ctx: AudioContext; master: GainNode } | null = null
   private decks: Record<DeckId, Deck> | null = null
   private ready: Promise<void> | null = null
+  private extra = new Map<string, Deck>()
 
   private constructor() {}
 
@@ -74,6 +75,36 @@ export class AudioEngine {
   async resume(): Promise<void> {
     const { ctx } = this.ensureGraph()
     if (ctx.state === 'suspended') await ctx.resume()
+  }
+
+  /**
+   * A deck outside the four, made on first ask and kept by name.
+   *
+   * The arrangement view plays one of these per track and file. They are not
+   * in {@link DECK_IDS} and nothing that walks the decks can see them.
+   */
+  namedDeck(key: string, destination?: AudioNode): Deck {
+    const held = this.extra.get(key)
+    if (held) return held
+    if (!this.decks) {
+      throw new Error(`AudioEngine.namedDeck('${key}') called before init() resolved`)
+    }
+    const made = new Deck(key, this.ctx, destination ?? this.master)
+    this.extra.set(key, made)
+    return made
+  }
+
+  /** Whether a named deck has been made yet. */
+  hasNamedDeck(key: string): boolean {
+    return this.extra.has(key)
+  }
+
+  /** Take a named deck out of the graph and forget it. */
+  dropNamedDeck(key: string): void {
+    const held = this.extra.get(key)
+    if (!held) return
+    this.extra.delete(key)
+    held.dispose()
   }
 
   deck(id: DeckId): Deck {

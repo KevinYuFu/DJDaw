@@ -1,0 +1,112 @@
+/* The arrangement view: a stack of lanes over one shared timeline. */
+.arrangement {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--panel, #0d0f13);
+}
+
+.arrangement__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line, #1e222a);
+}
+
+.arrangement__add {
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  color: var(--text, #e6e8ec);
+  background: #171b22;
+  border: 1px solid #2a3039;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.arrangement__add:hover:not(:disabled) {
+  background: #1e232c;
+}
+
+.arrangement__add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.arrangement__lanes {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* One lane: name on the left, timeline in the middle, channel on the right. */
+.arrange-track {
+  display: grid;
+  grid-template-columns: 150px 1fr 264px;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line, #1e222a);
+  min-height: 56px;
+}
+
+.arrange-track.is-selected {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.arrange-track__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 8px;
+  border-right: 1px solid var(--line, #1e222a);
+  /* The edge that says which track the keys act on. */
+  box-shadow: inset 3px 0 0 0 transparent;
+}
+
+.arrange-track.is-selected .arrange-track__head {
+  box-shadow: inset 3px 0 0 0 var(--accent, #4aa3ff);
+}
+
+.arrange-track__name {
+  font-size: 12px;
+  color: var(--text, #e6e8ec);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arrange-track__order {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.arrange-track__order button {
+  font: inherit;
+  font-size: 8px;
+  line-height: 1;
+  padding: 2px 4px;
+  color: var(--text-dim, #8b93a1);
+  background: #171b22;
+  border: 1px solid #2a3039;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.arrange-track__order button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.arrange-track__lane {
+  position: relative;
+  min-width: 0;
+}
+
+.arrange-track__controls {
+  border-left: 1px solid var(--line, #1e222a);
+}
