@@ -22,6 +22,131 @@ export interface Clip {
   durationSec: number
   /** Where inside the source file this piece begins. */
   sourceOffsetSec: number
+  /**
+   * A hole in the row: it takes up time and plays nothing.
+   *
+   * Deleting a piece from the middle of a row leaves one of these rather than
+   * closing the row up, because the pieces after it were placed against the
+   * ones before and pulling them earlier is rarely what was meant. It is a
+   * piece like any other — it can be selected, reordered and deleted — and
+   * deleting it is what closes the row up.
+   */
+  silent?: boolean
+}
+
+/**
+ * Lay pieces end to end in the order given.
+ *
+ * A row is its pieces in an order, not a set of pieces at positions. Every
+ * operation that changes the order returns to this, so a row can never end up
+ * with two pieces over each other or an accidental hole between them — the
+ * only holes are the ones that say they are holes.
+ */
+export function layOut(clips: readonly Clip[]): Clip[] {
+  let at = 0
+  return clips.map((clip) => {
+    const placed = clip.startSec === at ? clip : { ...clip, startSec: at }
+    at += clip.durationSec
+    return placed
+  })
+}
+
+/** Index of the piece covering `timelineSec`, or -1. */
+export function segmentIndexAt(clips: readonly Clip[], timelineSec: number): number {
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i]
+    if (timelineSec >= clip.startSec && timelineSec < clip.startSec + clip.durationSec) return i
+  }
+  return -1
+}
+
+/**
+ * Where a piece dropped at `startSec` belongs in the order.
+ *
+ * Measured against the row with the piece taken out, so the answer is an index
+ * into that shorter list: dropping a piece where it already is gives back its
+ * own index and nothing moves. The comparison is against each remaining
+ * piece's middle, so a piece has to be dragged past half of its neighbour
+ * before they trade places rather than flickering at the first pixel.
+ */
+export function dropIndex(clips: readonly Clip[], id: string, startSec: number): number {
+  const rest = clips.filter((clip) => clip.id !== id)
+  let at = 0
+  for (let i = 0; i < rest.length; i++) {
+    const middle = at + rest[i].durationSec / 2
+    if (startSec < middle) return i
+    at += rest[i].durationSec
+  }
+  return rest.length
+}
+
+/**
+ * Where a piece dropped at `startSec` would actually come to rest.
+ *
+ * The drop is a reordering, so a piece does not land under the pointer — it
+ * lands at the place in the order the pointer picked out. The ghost has to
+ * show that, or a drag against a long neighbour promises a move that will not
+ * happen and the row looks broken when it does not.
+ */
+export function dropStartSec(clips: readonly Clip[], id: string, startSec: number): number {
+  const to = dropIndex(clips, id, startSec)
+  const rest = clips.filter((clip) => clip.id !== id)
+  let at = 0
+  for (let i = 0; i < to && i < rest.length; i++) at += rest[i].durationSec
+  return at
+}
+
+/**
+ * Move a piece to a new place in the order. The rest close up behind it and
+ * open up in front of it; nothing is overwritten and nothing is trimmed.
+ */
+export function reorderClip(clips: readonly Clip[], id: string, toIndex: number): Clip[] {
+  const from = clips.findIndex((clip) => clip.id === id)
+  if (from < 0) return clips.slice()
+  const rest = clips.filter((clip) => clip.id !== id)
+  const to = Math.max(0, Math.min(rest.length, toIndex))
+  rest.splice(to, 0, clips[from])
+  return layOut(rest)
+}
+
+/** What a delete did, and what should be selected afterwards. */
+export interface DeleteResult {
+  clips: Clip[]
+  /** The hole left behind, so it can be selected and deleted again to close up. */
+  selectId: string | null
+}
+
+/**
+ * Delete a piece.
+ *
+ * From the middle of a row this leaves a hole of the same length, and hands
+ * back its id so it can be selected: deleting again removes the hole and the
+ * row closes up. At either end there is nothing to hold apart, so the piece
+ * simply goes and the row shortens.
+ *
+ * Deleting a hole always closes the row up. That is the only thing a hole is
+ * for.
+ */
+export function deleteSegment(clips: readonly Clip[], id: string): DeleteResult {
+  const index = clips.findIndex((clip) => clip.id === id)
+  if (index < 0) return { clips: clips.slice(), selectId: null }
+
+  const target = clips[index]
+  const atEdge = index === 0 || index === clips.length - 1
+  if (target.silent || atEdge) {
+    return { clips: layOut(clips.filter((clip) => clip.id !== id)), selectId: null }
+  }
+
+  const hole: Clip = {
+    id: makeClipId(),
+    startSec: target.startSec,
+    durationSec: target.durationSec,
+    sourceOffsetSec: 0,
+    silent: true
+  }
+  const next = clips.slice()
+  next[index] = hole
+  return { clips: layOut(next), selectId: hole.id }
 }
 
 /** Shortest clip we will create. Below this a cut is a mistake, not an edit. */
@@ -249,7 +374,7 @@ export interface Region {
 
 export function toRegions(clips: readonly Clip[]): Region[] {
   return sortClips(clips)
-    .filter((clip) => clip.durationSec > 0)
+    .filter((clip) => clip.durationSec > 0 && !clip.silent)
     .map((clip) => ({
       startSec: clip.startSec,
       durationSec: clip.durationSec,

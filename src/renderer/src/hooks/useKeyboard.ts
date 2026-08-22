@@ -409,7 +409,7 @@ export function useKeyboard(): void {
         case 'Backspace':
           // Shift closes the gap the deleted clip leaves; on its own the gap
           // stays and plays as silence.
-          if (inEditView()) decks.deleteSelectedClip(deck, shift)
+          if (inEditView()) decks.deleteSelectedClip(deck)
           else handled = false
           break
 

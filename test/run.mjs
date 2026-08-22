@@ -30,7 +30,8 @@ const MODULES = [
   'src/shared/wav.ts',
   'src/shared/deckList.ts',
   'src/shared/fader.ts',
-  'src/renderer/src/components/waveform/waveformRender.ts'
+  'src/renderer/src/components/waveform/waveformRender.ts',
+  'src/renderer/src/components/waveform/clipSlide.ts'
 ]
 
 /** The renderer's path aliases, which Vite supplies in the app. */

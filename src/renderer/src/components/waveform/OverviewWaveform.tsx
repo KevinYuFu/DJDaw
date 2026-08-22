@@ -2,11 +2,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import type { Clip } from '@shared/clips'
-import { clipAt, timelineDuration } from '@shared/clips'
+import { clipAt, dropIndex, timelineDuration } from '@shared/clips'
+import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
+import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
-import { nearestBeatTime } from '@renderer/core/beatgrid'
 import { BAND_COLORS, BAND_COLORS_DIM } from '@renderer/core/constants'
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
@@ -22,7 +23,6 @@ import {
   canvasNeedsResize,
   drawClipBands,
   drawClipEdges,
-  drawClipGhost,
   drawClipHighlight,
   drawCueMarkers,
   drawLocators,
@@ -135,30 +135,15 @@ interface ClipGesture {
   dragging: boolean
   /** Escape gives the drag up but keeps the gesture, so the release can tidy up. */
   cancelled: boolean
+  /** Where the piece sat before any of this, to put it back on Escape. */
+  fromIndex: number
+  /** Where it sits now, so the row is only rearranged when that changes. */
+  atIndex: number
 }
 
 type Gesture = SeekGesture | ClipGesture
 
-/** Where a dragged piece would land if it were dropped now. */
-interface Ghost {
-  clipId: string
-  startSec: number
-  durationSec: number
-}
 
-/**
- * Nearest beat while Quantize is on: the rule the store applies when the drop
- * commits, so the ghost can promise what the release will do.
- *
- * Read from the stores rather than captured at press time, because Quantize
- * can be toggled with the pointer still down.
- */
-function snapToGrid(deckId: DeckId, sec: number): number {
-  const state = useDecks.getState().decks[deckId]
-  if (!state.quantize || !state.trackId) return sec
-  const grid = useLibrary.getState().trackById(state.trackId)?.grid ?? null
-  return grid ? nearestBeatTime(grid, sec) : sec
-}
 
 export function OverviewWaveform({
   deckId,
@@ -169,7 +154,7 @@ export function OverviewWaveform({
   const layersRef = useRef<Layers | null>(null)
   const dirtyRef = useRef(true)
   const gestureRef = useRef<Gesture | null>(null)
-  const ghostRef = useRef<Ghost | null>(null)
+  const slideRef = useRef<Slide | null>(null)
 
   const status = useDecks((s) => s.decks[deckId].status)
   const waveform = useDecks((s) => s.decks[deckId].waveform)
@@ -211,6 +196,12 @@ export function OverviewWaveform({
   // No dependency list: this is the one place the slow-changing store values
   // cross into the render loop, and it must run after every render.
   useEffect(() => {
+    const before = frameRef.current.clips
+    const nextClips = draggableClips ? clips : NO_CLIPS
+    if (before !== nextClips) {
+      const slide = beginSlide(before, nextClips, performance.now())
+      if (slide) slideRef.current = slide
+    }
     frameRef.current = {
       // `deck()` throws until the engine has initialised, which `ready` implies.
       deck: status === 'ready' ? AudioEngine.shared().deck(deckId) : null,
@@ -256,8 +247,20 @@ export function OverviewWaveform({
       const { width, height } = boxRef.current
       if (width <= 0 || height <= 0) return
       const dpr = window.devicePixelRatio || 1
-      const state = frameRef.current
-      const ghost = ghostRef.current
+      const settled = frameRef.current
+      let state = settled
+      if (slideRef.current) {
+        const { clips: sliding, done } = slideClips(
+          settled.clips,
+          slideRef.current,
+          performance.now()
+        )
+        if (done) slideRef.current = null
+        else {
+          state = { ...settled, clips: sliding }
+          dirtyRef.current = true
+        }
+      }
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const playX = state.duration > 0 ? clamp((position / state.duration) * width, 0, width) : 0
@@ -282,7 +285,7 @@ export function OverviewWaveform({
         drawClipHighlight(
           ctx,
           state.clips,
-          ghost ? ghost.clipId : state.selectedClipId,
+          state.selectedClipId,
           0,
           state.duration,
           width,
@@ -340,9 +343,6 @@ export function OverviewWaveform({
         height,
         OVERVIEW_CUE_STYLE
       )
-      if (ghost) {
-        drawClipGhost(ctx, ghost.startSec, ghost.durationSec, 0, state.duration, width, height)
-      }
       drawPlayhead(ctx, playX, height)
     }
 
@@ -369,8 +369,17 @@ export function OverviewWaveform({
         gesture.clip.startSec + ((clientX - gesture.startX) * gesture.duration) / gesture.width
       // Keep the piece on the strip: past either edge there is nothing to draw
       // the ghost against and nothing to aim at.
+      // Rearrange the row as the hand crosses each neighbour, not on release,
+      // and let the ghost follow the hand rather than the slot.
       const room = Math.max(0, gesture.duration - gesture.clip.durationSec)
-      return Math.max(0, snapToGrid(deckId, clamp(raw, 0, room)))
+      const at = clamp(raw, 0, room)
+      const clips = useDecks.getState().decks[deckId].clips
+      const to = dropIndex(clips, gesture.clip.id, at)
+      if (to !== gesture.atIndex) {
+        gesture.atIndex = to
+        useDecks.getState().reorderClipTo(deckId, gesture.clip.id, to)
+      }
+      return at
     },
     [deckId]
   )
@@ -400,6 +409,10 @@ export function OverviewWaveform({
 
       // On a piece, the seek waits until the gesture has decided what it is.
       // Seeking now would jog the playhead every time a chunk is picked up.
+      const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
+      // Mark the piece rather than the pointer: the row rearranges under the
+      // hand, so the highlight has to travel with the piece.
+      useDecks.getState().selectClip(deckId, grabbed.id)
       gestureRef.current = {
         kind: 'clip',
         pointerId: event.pointerId,
@@ -408,7 +421,9 @@ export function OverviewWaveform({
         width: rect.width,
         duration: state.duration,
         dragging: false,
-        cancelled: false
+        cancelled: false,
+        fromIndex: index,
+        atIndex: index
       }
     },
     [seekTo]
@@ -427,11 +442,6 @@ export function OverviewWaveform({
         if (Math.abs(event.clientX - gesture.startX) <= DRAG_SLOP_PX) return
         gesture.dragging = true
       }
-      ghostRef.current = {
-        clipId: gesture.clip.id,
-        startSec: dropTarget(gesture, event.clientX),
-        durationSec: gesture.clip.durationSec
-      }
       dirtyRef.current = true
     },
     [dropTarget, seekTo]
@@ -447,8 +457,6 @@ export function OverviewWaveform({
       const gesture = gestureRef.current
       if (!gesture || gesture.pointerId !== event.pointerId) return
       gestureRef.current = null
-      const ghost = ghostRef.current
-      ghostRef.current = null
       dirtyRef.current = true
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId)
@@ -461,7 +469,8 @@ export function OverviewWaveform({
         seekTo(event.clientX)
         return
       }
-      if (ghost) useDecks.getState().moveClipTo(deckId, ghost.clipId, ghost.startSec)
+      // The row has already been rearranged all the way along, so a release has
+      // nothing left to commit.
     },
     [deckId, seekTo]
   )
@@ -473,14 +482,17 @@ export function OverviewWaveform({
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       const gesture = gestureRef.current
-      if (!gesture || gesture.kind !== 'clip' || !gesture.dragging) return
+      if (!gesture || gesture.kind !== 'clip' || !gesture.dragging || gesture.cancelled) return
       gesture.cancelled = true
-      ghostRef.current = null
+      // Put it back where it was picked up, since the row has been rearranging
+      // all the way along.
+      useDecks.getState().reorderClipTo(deckId, gesture.clip.id, gesture.fromIndex)
+      gesture.atIndex = gesture.fromIndex
       dirtyRef.current = true
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [deckId])
 
   return (
     <div className="waveform-overview">

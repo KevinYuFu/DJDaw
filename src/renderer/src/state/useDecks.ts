@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import { DECK_IDS } from '@shared/types'
 import type { BeatGrid, DeckId, HotCue, Track, WaveformData } from '@shared/types'
 import {
-  placeClip,
-  removeClip,
-  rippleRemoveClip,
+  deleteSegment,
+  dropIndex,
+  reorderClip,
   splitAt,
   timelineDuration,
   toRegions,
@@ -191,8 +191,14 @@ export interface DecksState {
    */
   cutAtPlayhead(deck: DeckId): CutResult
   selectClip(deck: DeckId, clipId: string | null): void
-  /** Delete the selected clip, leaving a gap, or closing it when `ripple`. */
-  deleteSelectedClip(deck: DeckId, ripple: boolean): void
+  /**
+   * Delete the selected piece.
+   *
+   * From the middle of a row this leaves a hole of the same length and selects
+   * it, so pressing delete again closes the row up. At either end the piece
+   * simply goes.
+   */
+  deleteSelectedClip(deck: DeckId): void
   /**
    * Move a clip to a new place on the row, letting it overwrite whatever it
    * lands on the way a DAW does. Snaps to the grid first when Quantize is on,
@@ -201,6 +207,13 @@ export interface DecksState {
    * This is what a drag in the MACRO view commits on release.
    */
   moveClipTo(deck: DeckId, clipId: string, toStartSec: number): void
+  /**
+   * Put a piece at a place in the order.
+   *
+   * Driven straight from a drag: the row rearranges under the hand rather than
+   * on release, so what the drop will do is what is already on screen.
+   */
+  reorderClipTo(deck: DeckId, clipId: string, index: number): void
   /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
   /** Move the channel fader. See {@link DeckState.fader}. */
   setFader(deck: DeckId, position: number): void
@@ -1114,7 +1127,7 @@ export const useDecks = create<DecksState>()(() => ({
     patchDeck(id, { selectedClipId: clipId })
   },
 
-  deleteSelectedClip(id, ripple) {
+  deleteSelectedClip(id) {
     const ctx = context(id)
     if (!ctx) return
     const selected = ctx.state.selectedClipId
@@ -1123,13 +1136,24 @@ export const useDecks = create<DecksState>()(() => ({
       patchDeck(id, { selectedClipId: null })
       return
     }
-    const clips = ripple
-      ? rippleRemoveClip(ctx.state.clips, selected)
-      : removeClip(ctx.state.clips, selected)
-    // Deleting the last clip leaves a deck that is still loaded and simply
+    // The hole comes back selected, so a second delete closes the row up
+    // without having to find it again.
+    const { clips, selectId } = deleteSegment(ctx.state.clips, selected)
+    // Deleting the last piece leaves a deck that is still loaded and simply
     // plays nothing. The buffer, waveform and track stay put, so the row is a
     // silent piece of the edit rather than an empty slot.
-    setClips(ctx, clips, { selectedClipId: null })
+    setClips(ctx, clips, { selectedClipId: selectId })
+  },
+
+  reorderClipTo(id, clipId, index) {
+    const ctx = context(id)
+    if (!ctx) return
+    if (!ctx.state.clips.some((c) => c.id === clipId)) return
+    const clips = reorderClip(ctx.state.clips, clipId, index)
+    // A move that changes nothing still arrives here on every pointer event,
+    // and re-pushing the same regions would wake every subscriber for nothing.
+    if (clips.every((clip, i) => clip.id === ctx.state.clips[i]?.id)) return
+    setClips(ctx, clips, {})
   },
 
   moveClipTo(id, clipId, toStartSec) {
@@ -1139,23 +1163,17 @@ export const useDecks = create<DecksState>()(() => ({
     const moving = ctx.state.clips.find((c) => c.id === clipId)
     if (!moving) return
 
-    // Snap first, as cutting does: a chunk dropped half a beat off the grid is
-    // out of phase with everything around it and no use to a DJ.
-    const at = Math.max(0, snapped(ctx, toStartSec))
+    // A drop changes the order, it does not carve a hole where it lands. The
+    // pieces are an arrangement: dragging one past its neighbour trades their
+    // places and every piece keeps all of its audio. Nothing is trimmed and
+    // nothing is overwritten, which is what a cut-up track is nearly always
+    // for.
+    const to = dropIndex(ctx.state.clips, clipId, Math.max(0, toStartSec))
+    const clips = reorderClip(ctx.state.clips, clipId, to)
     // A drag that ends where it started still arrives here, and re-pushing the
     // same regions would wake every subscriber for nothing.
-    if (at === moving.startSec) return
-
-    // `placeClip`, never `moveClip`: dropping on top of a neighbour has to trim
-    // or split it, or the row would carry an overlap, and an overlap has no
-    // honest answer for what plays there.
-    const clips = placeClip(ctx.state.clips, clipId, at)
-    // The drop can swallow the selected piece whole. A selection pointing at a
-    // piece that no longer exists gets past every guard in `selectClip`, so
-    // clear it here rather than leaving it dangling.
-    const selected = ctx.state.selectedClipId
-    const orphaned = selected !== null && !clips.some((c) => c.id === selected)
-    setClips(ctx, clips, orphaned ? { selectedClipId: null } : {})
+    if (clips.every((clip, i) => clip.id === ctx.state.clips[i]?.id)) return
+    setClips(ctx, clips, {})
   },
 
   setFader(id, position) {
