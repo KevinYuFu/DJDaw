@@ -15,10 +15,11 @@ import { clamp } from '@renderer/core/format'
 export type WaveformColorMode = '3band' | 'rgb' | 'mono'
 
 /**
- * Which view is on screen. `performance` is the two-deck rekordbox layout;
- * `edit` stacks four tracks for building an edit.
+ * Which view is on screen. `performance` is the two-deck rekordbox layout,
+ * `edit` stacks four tracks for building an edit, and `arrangement` lays clips
+ * out on one timeline the way a DAW does.
  */
-export type ViewName = 'performance' | 'edit'
+export type ViewName = 'performance' | 'edit' | 'arrangement'
 
 /**
  * The decks a view shows. Focus and `Tab` stay inside this set, so the
@@ -26,7 +27,11 @@ export type ViewName = 'performance' | 'edit'
  * could not see they were controlling.
  */
 function decksInView(view: ViewName): readonly DeckId[] {
-  return view === 'edit' ? DECK_IDS : DECK_IDS.slice(0, 2)
+  if (view === 'edit') return DECK_IDS
+  // The arrangement view holds no decks at all, so nothing there can move the
+  // focus onto one behind it.
+  if (view === 'arrangement') return []
+  return DECK_IDS.slice(0, 2)
 }
 
 /** App-wide preferences, persisted to localStorage. */
@@ -106,12 +111,16 @@ export const useSettings = create<SettingsState>()(
         const decks = decksInView(view)
         // Carry the focus back into view when it is on a deck the new view does
         // not draw, or the unshifted keys would act on a deck nothing shows.
-        const focusedDeck = decks.includes(get().focusedDeck) ? get().focusedDeck : decks[0]
+        // A view that draws no decks leaves the focus where it was, ready for
+        // going back to one that does.
+        const focusedDeck =
+          decks.length === 0 || decks.includes(get().focusedDeck) ? get().focusedDeck : decks[0]
         set({ view, focusedDeck })
       },
 
       cycleFocusedDeck(step) {
         const decks = decksInView(get().view)
+        if (decks.length === 0) return
         const at = decks.indexOf(get().focusedDeck)
         // An out-of-view focus reads as index -1; stepping from there still
         // lands somewhere sensible because the modulo is taken on the length.

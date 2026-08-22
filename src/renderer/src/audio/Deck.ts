@@ -1,4 +1,3 @@
-import type { DeckId } from '@shared/types'
 import type { Region } from '@shared/clips'
 import {
   bandGain,
@@ -395,7 +394,8 @@ function applyFilter(filter: BiquadFilterNode, knob: number, now: number): void 
 }
 
 export class Deck {
-  readonly id: DeckId
+  /** A label, for whoever is holding it. Nothing here reads it. */
+  readonly id: string
   readonly node: AudioWorkletNode
   readonly output: GainNode
 
@@ -430,7 +430,7 @@ export class Deck {
   private readonly stateListeners = new Set<(s: DeckSnapshot) => void>()
   private readonly endedListeners = new Set<() => void>()
 
-  constructor(id: DeckId, ctx: AudioContext, destination: AudioNode) {
+  constructor(id: string, ctx: AudioContext, destination: AudioNode) {
     this.id = id
     this.ctx = ctx
     this.fileSampleRate = ctx.sampleRate
@@ -496,6 +496,20 @@ export class Deck {
       transfer
     )
     this.emitState()
+  }
+
+  /**
+   * Take the deck out of the graph for good.
+   *
+   * For decks that come and go with what is on screen. Its worklet keeps its
+   * quantum but has no audio and reaches nothing, so it costs a silent pass.
+   */
+  dispose(): void {
+    this.unload()
+    this.node.port.onmessage = null
+    this.output.disconnect()
+    this.node.disconnect()
+    this.strip.filter.disconnect()
   }
 
   /** Drop the audio and report an empty deck to every listener. */

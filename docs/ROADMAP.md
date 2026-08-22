@@ -133,6 +133,21 @@ and every DJ application has one.
 
 ---
 
+## The arrangement view
+
+- **Key lock.** A clip dropped on the arrangement plays at whatever speed makes
+  its grid match the arrangement's, so its pitch moves with it: 174 into 150 is
+  about two and a half semitones down. What is wanted is the tempo moving
+  without the pitch, which is MASTER TEMPO on a CDJ and Complex Pro in Ableton.
+  Ableton's is the one to match. That is a phase vocoder in the worklet, and
+  its own piece of work.
+- **Record what is played on the decks, and lay it out as an arrangement.**
+  Perform a mix on the decks, then open the arrangement view and find the moves
+  already written down as clips to edit. One way only — the decks stay the
+  instrument, the arrangement stays the edit.
+
+---
+
 ## Housekeeping
 
 - **The SETUP modal has three wrong lines.** It warns that rekordbox's auto

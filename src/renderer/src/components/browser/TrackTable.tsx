@@ -13,6 +13,9 @@ import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 
+/** What a row being dragged out of the browser carries. */
+export const TRACK_DRAG_TYPE = 'application/x-djdaw-track'
+
 /**
  * The track list.
  *
@@ -259,6 +262,11 @@ const TrackRow = memo(function TrackRow({
       role="row"
       aria-selected={selected}
       title={`${track.title} — ${track.artist}`}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData(TRACK_DRAG_TYPE, track.id)
+        event.dataTransfer.effectAllowed = 'copy'
+      }}
       onClick={() => onSelect(track.id)}
       onDoubleClick={() => onOpen(track.id)}
       onContextMenu={(event) => onMenu(event, track.id)}

@@ -5,6 +5,7 @@ import { BEAT_JUMP_SIZES, HOT_CUE_COUNT, LOOP_SIZES } from '@renderer/core/const
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
+import { useArrangement } from '@renderer/state/useArrangement'
 import { useSettings } from '@renderer/state/useSettings'
 
 /**
@@ -62,7 +63,9 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Shift + Tab', action: 'Move the focus back one deck' },
   { keys: 'Cmd / Ctrl + E', action: 'Edit view: cut the track at the playhead' },
   { keys: 'Delete', action: 'Edit view: delete the picked clip, leaving a gap' },
-  { keys: 'Shift + Delete', action: 'Edit view: delete it and close the gap' }
+  { keys: 'Shift + Delete', action: 'Edit view: delete it and close the gap' },
+  { keys: 'Delete', action: 'Edit V2: delete the picked track' },
+  { keys: '- / =', action: 'Edit V2: zoom the timeline out / in' }
 ] as const
 
 /**
@@ -134,6 +137,43 @@ function focusedDeck(): DeckId {
 /** Whether the editing view is on screen, which is the only place clips exist. */
 function inEditView(): boolean {
   return useSettings.getState().view === 'edit'
+}
+
+/** The arrangement view holds no decks, so no deck binding fires behind it. */
+function inArrangementView(): boolean {
+  return useSettings.getState().view === 'arrangement'
+}
+
+/**
+ * The arrangement view's own keys.
+ *
+ * Its own because nothing on screen is a deck: the transport, the zoom and
+ * delete all belong to the arrangement, and every deck binding is off.
+ */
+function arrangementKey(event: KeyboardEvent): void {
+  if (event.metaKey || event.ctrlKey || event.altKey) return
+  const arrangement = useArrangement.getState()
+  switch (event.code) {
+    case 'Space':
+      if (arrangement.playing) arrangement.pause()
+      else arrangement.play()
+      break
+    case 'Delete':
+    case 'Backspace': {
+      const picked = arrangement.selectedTrackId
+      if (picked) arrangement.removeTrack(picked)
+      break
+    }
+    case 'Minus':
+      arrangement.setZoom(arrangement.zoomIndex - 1)
+      break
+    case 'Equal':
+      arrangement.setZoom(arrangement.zoomIndex + 1)
+      break
+    default:
+      return
+  }
+  event.preventDefault()
 }
 
 /**
@@ -287,6 +327,10 @@ export function useKeyboard(): void {
 
     const onKeyDown = (event: KeyboardEvent): void => {
       if (isTypingTarget(event.target)) return
+      if (inArrangementView()) {
+        arrangementKey(event)
+        return
+      }
       // Cut is the one binding that wants a modifier, so it is matched ahead of
       // the guard below, which hands every other Cmd/Ctrl chord to the menu.
       if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey) && !event.altKey) {
