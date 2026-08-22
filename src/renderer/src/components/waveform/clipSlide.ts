@@ -66,38 +66,6 @@ export function openGap(clips: readonly Clip[], index: number, gapSec: number): 
   return clips.map((clip, i) => (i < at ? clip : { ...clip, startSec: clip.startSec + gapSec }))
 }
 
-/** What a row's last gap was built from, so it is rebuilt only when it moves. */
-export interface GapMemo {
-  from: readonly Clip[] | null
-  index: number
-  gapSec: number
-  row: readonly Clip[]
-}
-
-export function newGapMemo(): GapMemo {
-  return { from: null, index: -1, gapSec: 0, row: [] }
-}
-
-/**
- * The row with room opened for a held piece, held steady between changes.
- *
- * The same array comes back until the gap moves, so whatever draws from it can
- * tell one frame from the next by identity alone.
- */
-export function rowWithGap(
-  memo: GapMemo,
-  clips: readonly Clip[],
-  index: number,
-  gapSec: number
-): readonly Clip[] {
-  if (memo.from === clips && memo.index === index && memo.gapSec === gapSec) return memo.row
-  memo.from = clips
-  memo.index = index
-  memo.gapSec = gapSec
-  memo.row = openGap(clips, index, gapSec)
-  return memo.row
-}
-
 /** Ease out: quick to leave, gentle to arrive. */
 function ease(t: number): number {
   return 1 - Math.pow(1 - t, 3)

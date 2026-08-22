@@ -115,6 +115,14 @@ export function dropStartSec(clips: readonly Clip[], id: string, startSec: numbe
  * Move a piece to a new place in the order. The rest close up behind it and
  * open up in front of it; nothing is overwritten and nothing is trimmed.
  */
+/** Put a piece into a row at a place in its order. */
+export function insertClip(clips: readonly Clip[], index: number, clip: Clip): Clip[] {
+  const at = Math.max(0, Math.min(clips.length, index))
+  const out = clips.slice()
+  out.splice(at, 0, clip)
+  return layOut(out)
+}
+
 export function reorderClip(clips: readonly Clip[], id: string, toIndex: number): Clip[] {
   const from = clips.findIndex((clip) => clip.id === id)
   if (from < 0) return clips.slice()

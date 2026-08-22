@@ -3,16 +3,16 @@ import { DECK_IDS } from '@shared/types'
 import type { BeatGrid, DeckId, HotCue, Track, WaveformData } from '@shared/types'
 import {
   deleteSegment,
-  dropIndex,
   fillHole,
+  insertClip,
   layOut,
-  reorderClip,
   splitAt,
   timelineDuration,
   toRegions,
   wholeTrackClip
 } from '@shared/clips'
 import type { Clip } from '@shared/clips'
+import { rowWithout } from '@renderer/components/waveform/clipDrag'
 import { CENTRE, flatChannel, isFlat } from '@shared/eq'
 import { FADER_UNITY, crossfadeGainFor, faderGain } from '@shared/fader'
 import type { ChannelEq } from '@shared/eq'
@@ -202,21 +202,6 @@ export interface DecksState {
    */
   deleteSelectedClip(deck: DeckId): void
   /**
-   * Move a clip to a new place on the row, letting it overwrite whatever it
-   * lands on the way a DAW does. Snaps to the grid first when Quantize is on,
-   * exactly as cutting does.
-   *
-   * This is what a drag in the MACRO view commits on release.
-   */
-  moveClipTo(deck: DeckId, clipId: string, toStartSec: number): void
-  /**
-   * Put a piece at a place in the order.
-   *
-   * Driven straight from a drag: the row rearranges under the hand rather than
-   * on release, so what the drop will do is what is already on screen.
-   */
-  reorderClipTo(deck: DeckId, clipId: string, index: number): void
-  /**
    * Switch the picked piece off, or back on.
    *
    * A piece that is off keeps its place on the row and plays nothing. Holes
@@ -224,27 +209,18 @@ export interface DecksState {
    */
   toggleClipDisabled(deck: DeckId): void
   /**
-   * Move a piece onto another row, at a place in that row's order.
+   * Let a dragged piece go, wherever it has been carried to.
    *
-   * The piece keeps the audio it always played, so the row it lands on has to
-   * be handed that audio too. Where it came from is left a hole, because the
-   * pieces around it were placed against each other and pulling them together
-   * is a separate decision.
+   * The same call whether it lands back in its own row or on another one: it
+   * comes out of the row it was picked up from and goes in where the drag was
+   * pointing. Crossing rows leaves an empty piece behind, because the pieces
+   * around it were placed against each other; put back in its own row it is a
+   * reorder and leaves none.
    *
-   * `into` names a hole to land in, and where in it. Empty room takes the
-   * piece where it was let go and is cut around it, rather than taking it
-   * between two neighbours the way a row of pieces does.
-   *
-   * Refused when the target row has no track: a row with nothing in it has no
-   * timeline to drop onto yet.
+   * The row it lands on is handed the audio the piece plays, and a row with
+   * nothing in it takes that audio on as its own track.
    */
-  moveClipToDeck(
-    from: DeckId,
-    clipId: string,
-    to: DeckId,
-    index: number,
-    into?: { holeId: string | null; atSec: number }
-  ): void
+  dropClip(from: DeckId, clipId: string, to: DeckId, target: ClipDropTarget): void
   /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
   /** Move the channel fader. See {@link DeckState.fader}. */
   setFader(deck: DeckId, position: number): void
@@ -254,6 +230,16 @@ export interface DecksState {
   resetChannelKnob(deck: DeckId, knob: keyof ChannelEq): void
   /** Put the whole channel back to flat. */
   resetChannelEq(deck: DeckId): void
+}
+
+/** Where a dragged piece is being let go. */
+export interface ClipDropTarget {
+  /** Place in the row's order, counted with the piece already out of it. */
+  index: number
+  /** The hole it lands in, when it is landing in empty room. */
+  holeId: string | null
+  /** Timeline seconds it starts at inside that hole. */
+  atSec: number
 }
 
 /** Short, plain text for a cut that did nothing. */
@@ -1268,75 +1254,50 @@ export const useDecks = create<DecksState>()(() => ({
     setClips(ctx, clips, {})
   },
 
-  reorderClipTo(id, clipId, index) {
-    const ctx = context(id)
-    if (!ctx) return
-    if (!ctx.state.clips.some((c) => c.id === clipId)) return
-    const clips = reorderClip(ctx.state.clips, clipId, index)
-    // A move that changes nothing still arrives here on every pointer event,
-    // and re-pushing the same regions would wake every subscriber for nothing.
-    if (clips.every((clip, i) => clip.id === ctx.state.clips[i]?.id)) return
-    setClips(ctx, clips, {})
-  },
-
-  moveClipToDeck(from, clipId, to, index, into) {
-    if (from === to) return
+  dropClip(from, clipId, to, target) {
     const src = context(from)
     if (!src) return
     const moving = src.state.clips.find((c) => c.id === clipId)
     if (!moving) return
     const sourceId = moving.sourceId ?? src.state.trackId
     const audio = sourceId ? sourceAudio.get(sourceId) : null
-    // A hole plays nothing, so it has nothing to carry and nowhere empty to go.
-    if (!moving.silent && (!sourceId || !audio)) return
+    // A hole plays nothing, so it has nothing to carry to another row.
+    const carries = !moving.silent
+    if (carries && (!sourceId || !audio)) return
 
-    const dst = context(to)
-    if (!dst) {
-      if (moving.silent || !sourceId || !audio) return
-      const landing = { ...moving, sourceId }
-      adoptClip(to, sourceId, audio, landing)
-      const gone = deleteSegment(src.state.clips, clipId)
-      setClips(src, gone.clips, { selectedClipId: gone.selectId })
+    // Back into its own row: out of the order and in again somewhere else,
+    // which leaves the row exactly as long as it was.
+    if (from === to) {
+      const rest = rowWithout(src.state.clips, clipId)
+      const landed = target.holeId
+        ? fillHole(rest, target.holeId, target.atSec, moving)
+        : insertClip(rest, target.index, moving)
+      if (!landed) return
+      // A drag that ends where it started still arrives here, and re-pushing
+      // the same regions would wake every subscriber for nothing.
+      if (landed.every((clip, i) => clip.id === src.state.clips[i]?.id)) return
+      setClips(src, landed, { selectedClipId: moving.id })
       return
     }
 
-    let landing = moving
-    if (!moving.silent && sourceId && audio) {
-      dst.deck.addSource(sourceId, audio)
-      // Pinned to the piece from here on: it has left the row whose track it
-      // came from, and nothing else says what it plays.
-      landing = { ...moving, sourceId }
+    const landing = carries && sourceId ? { ...moving, sourceId } : moving
+    const dst = context(to)
+    if (!dst) {
+      // A row with nothing in it becomes the piece that lands on it.
+      if (!carries || !sourceId || !audio) return
+      adoptClip(to, sourceId, audio, landing)
+    } else {
+      if (carries && sourceId && audio) dst.deck.addSource(sourceId, audio)
+      const filled = target.holeId
+        ? fillHole(dst.state.clips, target.holeId, target.atSec, landing)
+        : null
+      const landed = filled ?? insertClip(dst.state.clips, target.index, landing)
+      setClips(dst, landed, { selectedClipId: landing.id })
     }
 
     // Out of the row it came from, leaving a hole unless it was at an end.
     const gone = deleteSegment(src.state.clips, clipId)
     setClips(src, gone.clips, { selectedClipId: gone.selectId })
-
-    const filled = into?.holeId
-      ? fillHole(dst.state.clips, into.holeId, into.atSec, landing)
-      : null
-    const landed = filled ?? reorderClip([...dst.state.clips, landing], landing.id, index)
-    setClips(dst, landed, { selectedClipId: landing.id })
-  },
-
-  moveClipTo(id, clipId, toStartSec) {
-    const ctx = context(id)
-    if (!ctx) return
-    if (!Number.isFinite(toStartSec)) return
-    const moving = ctx.state.clips.find((c) => c.id === clipId)
-    if (!moving) return
-
-    // A drop changes the order, it does not carve a hole where it lands. The
-    // pieces are an arrangement: dragging one past its neighbour trades their
-    // places and every piece keeps all of its audio. Nothing is trimmed and
-    // nothing is overwritten, which is what a cut-up track is nearly always
-    // for.
-    const to = dropIndex(ctx.state.clips, clipId, Math.max(0, toStartSec))
-    const clips = reorderClip(ctx.state.clips, clipId, to)
-    // A drag that ends where it started still arrives here, and re-pushing the
-    // same regions would wake every subscriber for nothing.
-    if (clips.every((clip, i) => clip.id === ctx.state.clips[i]?.id)) return
-    setClips(ctx, clips, {})
   },
 
   setFader(id, position) {

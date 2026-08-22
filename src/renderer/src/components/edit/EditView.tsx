@@ -12,6 +12,7 @@ import type { DeckState } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import { EditTrack } from '@renderer/components/edit/EditTrack'
+import { ClipGhost } from '@renderer/components/waveform/ClipGhost'
 import './edit.css'
 
 /**
@@ -27,9 +28,9 @@ const CUT_FAILED = 'Cannot cut here'
 const NOTICE_MS = 1800
 
 /**
- * 24-bit, always. An export is the master Kevin takes back into rekordbox, so
- * the bounce is the last place to lose depth; MP3 is encoded from these bytes
- * in main, and giving ffmpeg the better input costs nothing.
+ * 24-bit, always. An export is a master, so the bounce is the last place to
+ * lose depth; MP3 is encoded from these bytes in main, and giving ffmpeg the
+ * better input costs nothing.
  */
 const BIT_DEPTH = 24
 
@@ -37,9 +38,9 @@ const BIT_DEPTH = 24
 const FALLBACK_NAME = 'DJDaw edit'
 
 /**
- * The likeliest MP3 failure by far, and "export failed" would send Kevin
- * looking in the wrong place. Main sends its own line too, which is kept
- * underneath this one.
+ * The likeliest MP3 failure by far, and "export failed" would send anyone
+ * looking in the wrong place. Main sends its own line too, kept underneath
+ * this one.
  */
 const FFMPEG_MISSING = 'MP3 needs ffmpeg, and it was not found. Export WAV instead, or install ffmpeg.'
 
@@ -487,6 +488,8 @@ export function EditView(): ReactElement {
       {DECK_IDS.map((id) => (
         <EditTrack key={id} deckId={id} />
       ))}
+
+      <ClipGhost />
 
       {exportOpen ? (
         <ExportPanel loaded={loaded} onClose={() => setExportOpen(false)} />

@@ -2,13 +2,8 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import type { Clip } from '@shared/clips'
-import { clipAt, dropIndex, fillStartSec, timelineDuration } from '@shared/clips'
-import {
-  beginSlide,
-  newGapMemo,
-  rowWithGap,
-  slideClips
-} from '@renderer/components/waveform/clipSlide'
+import { clipAt, timelineDuration } from '@shared/clips'
+import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
 import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
@@ -16,7 +11,16 @@ import type { Deck } from '@renderer/audio/Deck'
 import { BAND_COLORS, BAND_COLORS_DIM } from '@renderer/core/constants'
 import { clamp } from '@renderer/core/format'
 import { useDecks, waveForSource } from '@renderer/state/useDecks'
-import { dropMarkFor, registerDropZone, setDropMark, zoneAt } from './dropZones'
+import { registerDropZone, zoneAt } from './dropZones'
+import {
+  aimInRow,
+  clipDrag,
+  dropLineFor,
+  newDragRowMemo,
+  rowForDrag,
+  rowWithout,
+  setClipDrag
+} from './clipDrag'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import {
@@ -141,22 +145,13 @@ interface ClipGesture {
   clip: Clip
   /** Strip geometry at press time, so a resize mid-drag cannot skew the maths. */
   width: number
+  height: number
   duration: number
+  /** Where in the piece it was taken hold of, so the ghost does not jump. */
+  grabDx: number
   dragging: boolean
   /** Escape gives the drag up but keeps the gesture, so the release can tidy up. */
   cancelled: boolean
-  /** Where the piece sat before any of this, to put it back on Escape. */
-  fromIndex: number
-  /** Where it sits now, so the row is only rearranged when that changes. */
-  atIndex: number
-  /** The row under the pointer, once it has left the one the piece is on. */
-  overDeck: DeckId | null
-  /** Where it would land on that row. */
-  overIndex: number
-  /** The hole it would drop into, when it is landing in empty room. */
-  overHoleId: string | null
-  /** Where in that hole it would start. */
-  overAtSec: number
 }
 
 type Gesture = SeekGesture | ClipGesture
@@ -173,7 +168,7 @@ export function OverviewWaveform({
   const dirtyRef = useRef(true)
   const gestureRef = useRef<Gesture | null>(null)
   const slideRef = useRef<Slide | null>(null)
-  const gapRef = useRef(newGapMemo())
+  const gapRef = useRef(newDragRowMemo())
   const shownRef = useRef<readonly Clip[]>(NO_CLIPS)
 
   const status = useDecks((s) => s.decks[deckId].status)
@@ -232,6 +227,16 @@ export function OverviewWaveform({
     dirtyRef.current = true
   })
 
+  // A strip that goes away mid-drag takes the drag with it: left published, it
+  // would keep every other row showing a drop that is never coming.
+  useEffect(() => {
+    if (!draggableClips) return
+    return () => {
+      const held = clipDrag()
+      if (held && held.fromDeck === deckId) setClipDrag(null)
+    }
+  }, [deckId, draggableClips])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !draggableClips) return
@@ -281,13 +286,10 @@ export function OverviewWaveform({
 
       // Room for a piece held over this row from another one. It is drawn, not
       // stored: nothing about the row changes until the piece is let go.
-      const mark = settled.draggable ? dropMarkFor(deckId) : null
-      const target = rowWithGap(
-        gapRef.current,
-        settled.clips,
-        mark && !mark.holeId ? mark.index : -1,
-        mark && !mark.holeId ? mark.durationSec : 0
-      )
+      const lineSec = settled.draggable ? dropLineFor(deckId) : null
+      const target = settled.draggable
+        ? rowForDrag(gapRef.current, deckId, settled.clips)
+        : settled.clips
       // Every movement a row makes goes through here: reordering, closing a
       // hole, opening room for a piece. Starting from where the pieces are
       // being drawn rather than where they were headed keeps a slide that is
@@ -303,17 +305,17 @@ export function OverviewWaveform({
       let drawn = target
       if (slideRef.current) {
         const { clips: sliding, done } = slideClips(target, slideRef.current, now)
+        // The frame a slide finishes on is the first one showing where the
+        // pieces actually are, so it has to be drawn like any other.
+        dirtyRef.current = true
         if (done) slideRef.current = null
-        else {
-          drawn = sliding
-          dirtyRef.current = true
-        }
+        else drawn = sliding
       }
       const state = drawn === settled.clips ? settled : { ...settled, clips: drawn }
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const playX = state.duration > 0 ? clamp((position / state.duration) * width, 0, width) : 0
-      const markSec = mark ? mark.atSec : -1
+      const markSec = lineSec ?? -1
       if (markSec !== lastMark) dirtyRef.current = true
       lastMark = markSec
 
@@ -331,8 +333,7 @@ export function OverviewWaveform({
       if (state.duration <= 0) return
 
       // Under the waveform, as the MICRO view draws it, so the envelope stays
-      // the brightest thing on the strip. Mid-drag it marks the piece being
-      // moved, which is what gives the eye both ends of the move at once.
+      // the brightest thing on the strip.
       if (state.draggable) {
         drawClipBands(ctx, state.clips, 0, state.duration, width, height, OVERVIEW_CLIP_STYLE)
         drawClipHighlight(
@@ -404,7 +405,7 @@ export function OverviewWaveform({
           OVERVIEW_CLIP_STYLE
         )
       }
-      if (mark) drawDropMarker(ctx, mark.atSec, 0, state.duration, width, height)
+      if (lineSec !== null) drawDropMarker(ctx, lineSec, 0, state.duration, width, height)
       // a line here; the names belong to the MICRO view, which has the room.
       drawCueMarkers(
         ctx,
@@ -435,79 +436,36 @@ export function OverviewWaveform({
     [deckId]
   )
 
-  /** Where the dragged piece would start if the pointer let go at `clientX`. */
-  const dropTarget = useCallback(
-    (gesture: ClipGesture, clientX: number): number => {
-      const raw =
-        gesture.clip.startSec + ((clientX - gesture.startX) * gesture.duration) / gesture.width
-      // Keep the piece on the strip: past either edge there is nothing to draw
-      // the ghost against and nothing to aim at.
-      // Rearrange the row as the hand crosses each neighbour, not on release,
-      // and let the ghost follow the hand rather than the slot.
-      const room = Math.max(0, gesture.duration - gesture.clip.durationSec)
-      const at = clamp(raw, 0, room)
-      const clips = useDecks.getState().decks[deckId].clips
-      const to = dropIndex(clips, gesture.clip.id, at)
-      if (to !== gesture.atIndex) {
-        gesture.atIndex = to
-        useDecks.getState().reorderClipTo(deckId, gesture.clip.id, to)
-      }
-      return at
-    },
-    [deckId]
-  )
-
   /**
-   * Point the drag at whatever is under the hand.
+   * Point the drag at whatever is under the hand, and say so.
    *
-   * Over another row it only leaves a mark: the piece stays where it is until
-   * the hand lets go, so passing over a row does not disturb it. Over its own
-   * row it rearranges live, as it always has.
+   * The same answer whether the hand is over the row the piece came from or
+   * another one: the piece comes out of the order, and the row it is over says
+   * where it would go back in. Nothing is written until the hand opens.
    */
   const aim = useCallback(
     (gesture: ClipGesture, clientX: number, clientY: number): void => {
       const zone = zoneAt(clientX, clientY)
-      const over = zone && zone.deck !== deckId ? zone : null
-
-      if (over) {
-        // The piece is on its way out, so the row it came from goes back to the
-        // order it had before the drag started.
-        if (gesture.overDeck === null) {
-          useDecks.getState().reorderClipTo(deckId, gesture.clip.id, gesture.fromIndex)
-          gesture.atIndex = gesture.fromIndex
-        }
-        const clips = useDecks.getState().decks[over.deck].clips
-        const at = over.timeAt(clientX)
-        // Empty room takes the piece where it was let go, rather than between
-        // two neighbours the way a row of pieces does.
-        const hole = clipAt(clips, at)
-        const into =
-          hole && hole.silent && hole.durationSec >= gesture.clip.durationSec ? hole : null
-        const index = dropIndex(clips, gesture.clip.id, at)
-        let atSec = 0
-        for (let i = 0; i < index; i++) atSec += clips[i].durationSec
-        gesture.overDeck = over.deck
-        gesture.overIndex = index
-        gesture.overHoleId = into ? into.id : null
-        gesture.overAtSec = into ? fillStartSec(into, at, gesture.clip.durationSec) : atSec
-        setDropMark({
-          deck: over.deck,
-          atSec: into ? fillStartSec(into, at, gesture.clip.durationSec) : atSec,
-          index,
-          durationSec: gesture.clip.durationSec,
-          holeId: into ? into.id : undefined
-        })
+      const decks = useDecks.getState().decks
+      const ghost = {
+        clip: gesture.clip,
+        x: clientX - gesture.grabDx,
+        y: clientY - gesture.height / 2,
+        width: (gesture.clip.durationSec / gesture.duration) * gesture.width,
+        height: gesture.height
+      }
+      if (!zone) {
+        setClipDrag({ fromDeck: deckId, toDeck: null, index: 0, holeId: null, atSec: 0, ...ghost })
         return
       }
-
-      if (gesture.overDeck !== null) {
-        gesture.overDeck = null
-        gesture.overHoleId = null
-        setDropMark(null)
-      }
-      dropTarget(gesture, clientX)
+      const row =
+        zone.deck === deckId
+          ? rowWithout(decks[deckId].clips, gesture.clip.id)
+          : decks[zone.deck].clips
+      const at = aimInRow(row, gesture.clip, zone.timeAt(clientX))
+      setClipDrag({ fromDeck: deckId, toDeck: zone.deck, ...at, ...ghost })
     },
-    [deckId, dropTarget]
+    [deckId]
   )
 
   const onPointerDown = useCallback(
@@ -535,10 +493,8 @@ export function OverviewWaveform({
 
       // On a piece, the seek waits until the gesture has decided what it is.
       // Seeking now would jog the playhead every time a chunk is picked up.
-      const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
-      // Mark the piece rather than the pointer: the row rearranges under the
-      // hand, so the highlight has to travel with the piece.
       useDecks.getState().selectClip(deckId, grabbed.id)
+      const perSec = rect.width / state.duration
       gestureRef.current = {
         kind: 'clip',
         pointerId: event.pointerId,
@@ -546,18 +502,14 @@ export function OverviewWaveform({
         startY: event.clientY,
         clip: grabbed,
         width: rect.width,
+        height: rect.height,
         duration: state.duration,
+        grabDx: event.clientX - (rect.left + grabbed.startSec * perSec),
         dragging: false,
-        cancelled: false,
-        fromIndex: index,
-        atIndex: index,
-        overDeck: null,
-        overIndex: 0,
-        overHoleId: null,
-        overAtSec: 0
+        cancelled: false
       }
     },
-    [seekTo]
+    [deckId, seekTo]
   )
 
   const onPointerMove = useCallback(
@@ -600,7 +552,8 @@ export function OverviewWaveform({
         event.currentTarget.releasePointerCapture(event.pointerId)
       }
 
-      if (gesture.kind === 'clip') setDropMark(null)
+      const drag = gesture.kind === 'clip' ? clipDrag() : null
+      if (gesture.kind === 'clip') setClipDrag(null)
       if (gesture.kind === 'seek' || gesture.cancelled) return
       // A press that went nowhere is still a needle drop. Picking pieces up
       // must not cost the strip its click-to-seek.
@@ -608,16 +561,14 @@ export function OverviewWaveform({
         seekTo(event.clientX)
         return
       }
-      // Let go over another row and the piece moves there, leaving a hole
-      // behind it. Let go over its own row and there is nothing to commit: it
-      // has been rearranging all the way along.
-      if (gesture.overDeck) {
-        useDecks
-          .getState()
-          .moveClipToDeck(deckId, gesture.clip.id, gesture.overDeck, gesture.overIndex, {
-            holeId: gesture.overHoleId,
-            atSec: gesture.overAtSec
-          })
+      // Where the drag was pointing is where it lands, which is what the rows
+      // have been showing all the way along.
+      if (drag && drag.toDeck) {
+        useDecks.getState().dropClip(deckId, gesture.clip.id, drag.toDeck, {
+          index: drag.index,
+          holeId: drag.holeId,
+          atSec: drag.atSec
+        })
       }
     },
     [deckId, seekTo]
@@ -632,12 +583,7 @@ export function OverviewWaveform({
       const gesture = gestureRef.current
       if (!gesture || gesture.kind !== 'clip' || !gesture.dragging || gesture.cancelled) return
       gesture.cancelled = true
-      gesture.overDeck = null
-      setDropMark(null)
-      // Put it back where it was picked up, since the row has been rearranging
-      // all the way along.
-      useDecks.getState().reorderClipTo(deckId, gesture.clip.id, gesture.fromIndex)
-      gesture.atIndex = gesture.fromIndex
+      setClipDrag(null)
       dirtyRef.current = true
     }
     window.addEventListener('keydown', onKeyDown)
