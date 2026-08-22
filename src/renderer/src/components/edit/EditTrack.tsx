@@ -4,13 +4,12 @@ import type {
   PointerEvent as ReactPointerEvent,
   ReactElement
 } from 'react'
-import type { DeckId, HotCue } from '@shared/types'
+import type { DeckId } from '@shared/types'
 import type { ChannelEq, EqMode } from '@shared/eq'
 import { CENTRE, eqGainDb, formatDb, formatFilter, isFlat, trimGainDb } from '@shared/eq'
 import { FADER_UNITY, formatFaderDb } from '@shared/fader'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { bpmAt } from '@renderer/core/beatgrid'
-import { HOT_CUE_COUNT, HOT_CUE_LABELS } from '@renderer/core/constants'
 import { clamp, formatBpm, formatTime } from '@renderer/core/format'
 import { useRaf, useTextRef } from '@renderer/hooks/useRaf'
 import { useDecks } from '@renderer/state/useDecks'
@@ -25,7 +24,6 @@ export interface EditTrackProps {
 
 const EMPTY_TIME = '0:00.0'
 
-const PAD_INDICES = Array.from({ length: HOT_CUE_COUNT }, (_, i) => i)
 
 /**
  * The pointer holding a pad down, and which pad it is holding.
@@ -50,15 +48,6 @@ function preventFocus(e: ReactMouseEvent<HTMLElement>): void {
   e.preventDefault()
 }
 
-/**
- * A hot cue colour at reduced opacity, so a set pad reads as a cue marker
- * rather than as a lit button. Same treatment the deck's pads get.
- */
-function tint(hex: string, alpha: number): string {
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
-}
 
 /* ------------------------------------------------------------- channel EQ */
 
@@ -399,7 +388,6 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
     [deckId]
   )
 
-  const cues = track?.hotCues ?? []
   const title = track?.title ?? (status === 'loading' ? 'Loading' : 'Empty')
   const artist = track?.artist ?? ''
 
@@ -409,32 +397,8 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   // the third catches a capture torn away without either. Whichever arrives
   // first clears the ref, so the rest are no-ops.
 
-  const onPadDown = (
-    e: ReactPointerEvent<HTMLButtonElement>,
-    index: number,
-    cue: HotCue | undefined
-  ): void => {
-    if (e.button !== 0) return
-    if (e.shiftKey) {
-      // A delete is over the instant it happens; there is no hold to track.
-      if (cue) useDecks.getState().deleteHotCue(deckId, index)
-      return
-    }
-    // Capture before the trigger. Without it the release only arrives while
-    // the pointer is still over the pad, and a release a few pixels away
-    // leaves the preview running until the track hits its end.
-    e.currentTarget.setPointerCapture(e.pointerId)
-    heldPad.current = { pointerId: e.pointerId, index }
-    useDecks.getState().triggerHotCue(deckId, index)
-  }
 
   /** The pad counterpart of {@link onCueEnd}, released by cue index. */
-  const onPadEnd = (e: ReactPointerEvent<HTMLButtonElement>): void => {
-    const hold = heldPad.current
-    if (!hold || hold.pointerId !== e.pointerId) return
-    heldPad.current = null
-    useDecks.getState().releaseHotCue(deckId, hold.index)
-  }
 
   return (
     <section
@@ -518,36 +482,6 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
 
         <ChannelEqStrip deckId={deckId} disabled={!ready} />
 
-        <div className="edit-pads">
-          {PAD_INDICES.map((index) => {
-            const cue = cues.find((c) => c.index === index)
-            const label = HOT_CUE_LABELS[index]
-            return (
-              <button
-                type="button"
-                key={index}
-                className={`edit-pad${cue ? ' is-set' : ''}`}
-                style={
-                  cue
-                    ? { background: tint(cue.color, 0.3), borderColor: tint(cue.color, 0.9) }
-                    : undefined
-                }
-                disabled={!ready}
-                onPointerDown={(e) => onPadDown(e, index, cue)}
-                onPointerUp={onPadEnd}
-                onPointerCancel={onPadEnd}
-                onLostPointerCapture={onPadEnd}
-                title={
-                  cue
-                    ? `Hot cue ${label} at ${formatTime(cue.time)} — hold to preview, shift-click to delete (${index + 1})`
-                    : `Set hot cue ${label} here (${index + 1})`
-                }
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
       </div>
     </section>
   )
