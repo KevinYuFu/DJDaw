@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { ReactElement } from 'react'
 import { useArrangement, ZOOM_LEVELS } from '@renderer/state/useArrangement'
 import { canvasNeedsResize, sizeCanvas } from '@renderer/components/waveform/waveformRender'
-import { gridLines, gridStepSec, timeLabel } from './timeline'
+import { barLabel, gridBeats, gridLines, snapSec } from './timeline'
 
 /**
  * The timeline above the lanes.
@@ -12,8 +12,10 @@ import { gridLines, gridStepSec, timeLabel } from './timeline'
  * the grid drawn behind the clips. Clicking it puts the playhead there.
  */
 
-const TICK = 'rgba(255,255,255,0.45)'
-const TEXT = 'rgba(255,255,255,0.62)'
+const TICK = 'rgba(255,255,255,0.5)'
+const TICK_BEAT = 'rgba(255,255,255,0.24)'
+const TEXT = 'rgba(255,255,255,0.7)'
+const TEXT_BEAT = 'rgba(255,255,255,0.36)'
 const PLAYHEAD = '#ff4d4d'
 
 export function ArrangementRuler(): ReactElement {
@@ -22,8 +24,9 @@ export function ArrangementRuler(): ReactElement {
   const zoomIndex = useArrangement((s) => s.zoomIndex)
   const scrollSec = useArrangement((s) => s.scrollSec)
   const playheadSec = useArrangement((s) => s.playheadSec)
-  const frameRef = useRef({ zoomIndex, scrollSec, playheadSec })
-  frameRef.current = { zoomIndex, scrollSec, playheadSec }
+  const bpm = useArrangement((s) => s.bpm)
+  const frameRef = useRef({ zoomIndex, scrollSec, playheadSec, bpm })
+  frameRef.current = { zoomIndex, scrollSec, playheadSec, bpm }
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -52,18 +55,17 @@ export function ArrangementRuler(): ReactElement {
       if (!ctx) return
       ctx.clearRect(0, 0, width, height)
 
-      const { zoomIndex: zoom, scrollSec: from, playheadSec: head } = frameRef.current
+      const { zoomIndex: zoom, scrollSec: from, playheadSec: head, bpm: tempo } = frameRef.current
       const pxPerSec = ZOOM_LEVELS[zoom]
-      const step = gridStepSec(pxPerSec)
       ctx.save()
       ctx.font = '9px ui-monospace, SFMono-Regular, Menlo, monospace'
       ctx.textBaseline = 'top'
-      for (const sec of gridLines(from, from + width / pxPerSec, step)) {
-        const x = Math.round((sec - from) * pxPerSec) + 0.5
-        ctx.fillStyle = TICK
-        ctx.fillRect(x, height - 6, 1, 6)
-        ctx.fillStyle = TEXT
-        ctx.fillText(timeLabel(sec, step), x + 3, 3)
+      for (const line of gridLines(from, from + width / pxPerSec, tempo, gridBeats(tempo, pxPerSec))) {
+        const x = Math.round((line.sec - from) * pxPerSec) + 0.5
+        ctx.fillStyle = line.onBar ? TICK : TICK_BEAT
+        ctx.fillRect(x, height - (line.onBar ? 8 : 5), 1, line.onBar ? 8 : 5)
+        ctx.fillStyle = line.onBar ? TEXT : TEXT_BEAT
+        ctx.fillText(barLabel(line), x + 3, 3)
       }
       ctx.restore()
 
@@ -89,8 +91,11 @@ export function ArrangementRuler(): ReactElement {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    const { zoomIndex: zoom, scrollSec: from } = frameRef.current
-    useArrangement.getState().seek(from + (clientX - rect.left) / ZOOM_LEVELS[zoom])
+    const state = useArrangement.getState()
+    const at = state.scrollSec + (clientX - rect.left) / ZOOM_LEVELS[state.zoomIndex]
+    state.seek(
+      state.snap ? snapSec(at, state.bpm, gridBeats(state.bpm, ZOOM_LEVELS[state.zoomIndex])) : at
+    )
   }, [])
 
   return (

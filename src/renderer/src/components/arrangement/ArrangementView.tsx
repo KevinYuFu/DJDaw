@@ -20,6 +20,10 @@ export function ArrangementView(): ReactElement {
   const pause = useArrangement((s) => s.pause)
   const zoomIndex = useArrangement((s) => s.zoomIndex)
   const setZoom = useArrangement((s) => s.setZoom)
+  const bpm = useArrangement((s) => s.bpm)
+  const setBpm = useArrangement((s) => s.setBpm)
+  const snap = useArrangement((s) => s.snap)
+  const toggleSnap = useArrangement((s) => s.toggleSnap)
 
   return (
     <div className="arrangement">
@@ -43,6 +47,27 @@ export function ArrangementView(): ReactElement {
           onClick={() => (playing ? pause() : play())}
         >
           {playing ? 'STOP' : 'PLAY'}
+        </button>
+
+        <label className="arrangement__bpm" title="The tempo the grid is built from">
+          <span>BPM</span>
+          <input
+            type="number"
+            min={20}
+            max={300}
+            step={0.01}
+            value={bpm}
+            onChange={(event) => setBpm(Number(event.target.value))}
+          />
+        </label>
+
+        <button
+          type="button"
+          className={`arrangement__snap${snap ? ' is-lit' : ''}`}
+          title="Snap what lands on the timeline to the grid — hold Alt to place by hand"
+          onClick={toggleSnap}
+        >
+          SNAP
         </button>
 
         <div className="arrangement__zoom">

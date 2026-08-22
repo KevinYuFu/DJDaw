@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef } from 'react'
 import type {
   DragEvent as ReactDragEvent,
   PointerEvent as ReactPointerEvent,
-  ReactElement
+  ReactElement,
+  WheelEvent as ReactWheelEvent
 } from 'react'
 import { clipAt, dragEndEdge, dragStartEdge, moveClip } from '@shared/arrangement'
 import { BAND_COLORS } from '@renderer/core/constants'
@@ -14,7 +15,7 @@ import {
   useArrangement,
   ZOOM_LEVELS
 } from '@renderer/state/useArrangement'
-import { gridLines, gridStepSec } from './timeline'
+import { gridBeats, gridLines, snapSec } from './timeline'
 import { CURSOR_END_EDGE, CURSOR_START_EDGE, edgeAt } from './clipCursor'
 import { useSettings } from '@renderer/state/useSettings'
 import {
@@ -40,13 +41,9 @@ import type { WaveformColumns } from '@renderer/components/waveform/waveformRend
 /** The clips are drawn exactly as the editing view draws them. */
 const CLIP_STYLE = DEFAULT_CLIP_STYLE
 
-/**
- * The grid, over the near-black lane rather than over a panel.
- *
- * Drawn under the clips, so it only shows in the empty stretches and behind
- * the quiet parts and can be strong enough to actually read.
- */
-const GRID_LINE = 'rgba(255,255,255,0.26)'
+/** The grid, drawn over everything so it reads on a clip as well as off one. */
+const GRID_BAR = 'rgba(255,255,255,0.42)'
+const GRID_BEAT = 'rgba(255,255,255,0.17)'
 const PLAYHEAD = '#ff4d4d'
 
 /** Peaks are lifted a little, as the deck strips do. */
@@ -71,12 +68,13 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
   const zoomIndex = useArrangement((s) => s.zoomIndex)
   const scrollSec = useArrangement((s) => s.scrollSec)
   const selectedClipId = useArrangement((s) => s.selectedClipId)
+  const bpm = useArrangement((s) => s.bpm)
   const mono = useSettings((s) => s.waveformColorMode === 'mono')
   const rgb = useSettings((s) => s.waveformColorMode === 'rgb')
 
-  const frameRef = useRef({ clips, zoomIndex, scrollSec, selectedClipId, mono, rgb })
+  const frameRef = useRef({ clips, zoomIndex, scrollSec, selectedClipId, bpm, mono, rgb })
   useEffect(() => {
-    frameRef.current = { clips, zoomIndex, scrollSec, selectedClipId, mono, rgb }
+    frameRef.current = { clips, zoomIndex, scrollSec, selectedClipId, bpm, mono, rgb }
     dirtyRef.current = true
   })
 
@@ -119,14 +117,12 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
       const from = state.scrollSec
       const to = from + width / pxPerSec
 
-      // The same grid the ruler draws, so a lane lines up with the times above
-      // it and with every other lane.
-      ctx.save()
-      ctx.fillStyle = GRID_LINE
-      for (const sec of gridLines(from, to, gridStepSec(pxPerSec))) {
-        ctx.fillRect(Math.round((sec - from) * pxPerSec), 0, 1, height)
-      }
-      ctx.restore()
+      const clips = state.clips ?? []
+      drawClipBands(ctx, clips, from, to, width, height, CLIP_STYLE)
+      drawClipHighlight(ctx, clips, state.selectedClipId, from, to, width, height, CLIP_STYLE)
+
+      // One set of columns for the whole lane, filled a clip at a time so each
+      // one is read from its own file.
       const columns = Math.max(1, Math.round(width * dpr))
       if (!colsRef.current || colsRef.current.width !== columns) {
         colsRef.current = emptyColumns(columns)
@@ -135,10 +131,6 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
       cols.low.fill(0)
       cols.mid.fill(0)
       cols.high.fill(0)
-
-      const clips = state.clips ?? []
-      drawClipBands(ctx, clips, from, to, width, height, CLIP_STYLE)
-      drawClipHighlight(ctx, clips, state.selectedClipId, from, to, width, height, CLIP_STYLE)
 
       for (const clip of state.clips ?? []) {
         const x0 = (clip.startSec - from) * pxPerSec
@@ -180,6 +172,17 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
       // Over the audio, so the edges of a clip stay readable however loud it is.
       drawClipEdges(ctx, clips, state.selectedClipId, from, to, width, height, CLIP_STYLE)
 
+      // The grid goes over the clips too. Behind them it would only show in
+      // the empty stretches, which is where it is needed least. Bars are drawn
+      // stronger than the beats between them, so the count reads without
+      // counting.
+      ctx.save()
+      for (const line of gridLines(from, to, state.bpm, gridBeats(state.bpm, pxPerSec))) {
+        ctx.fillStyle = line.onBar ? GRID_BAR : GRID_BEAT
+        ctx.fillRect(Math.round((line.sec - from) * pxPerSec), 0, 1, height)
+      }
+      ctx.restore()
+
       const headX = (arrangementPlayhead() - from) * pxPerSec
       if (headX >= 0 && headX <= width) {
         ctx.fillStyle = PLAYHEAD
@@ -190,6 +193,13 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
   }, [mono, rgb])
+
+  /** The nearest grid line, unless Alt is held for placing it by hand. */
+  const onGrid = useCallback((sec: number, freehand: boolean): number => {
+    const state = useArrangement.getState()
+    if (freehand || !state.snap) return sec
+    return snapSec(sec, state.bpm, gridBeats(state.bpm, ZOOM_LEVELS[state.zoomIndex]))
+  }, [])
 
   /** What the pointer is holding, once it has gone down on a clip. */
   const holdRef = useRef<{
@@ -220,9 +230,11 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
       const libraryTrackId = event.dataTransfer.getData(TRACK_DRAG_TYPE)
       if (!libraryTrackId) return
       event.preventDefault()
-      void useArrangement.getState().dropTrack(trackId, libraryTrackId, timeAt(event.clientX))
+      void useArrangement
+        .getState()
+        .dropTrack(trackId, libraryTrackId, onGrid(timeAt(event.clientX), event.altKey))
     },
-    [trackId, timeAt]
+    [trackId, timeAt, onGrid]
   )
 
   /** The clip under the pointer and which of its edges, if any. */
@@ -277,13 +289,15 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
       const at = timeAt(event.clientX)
       const next =
         hold.edge === 'start'
-          ? dragStartEdge(clips, hold.clipId, at)
+          ? dragStartEdge(clips, hold.clipId, onGrid(at, event.altKey))
           : hold.edge === 'end'
-            ? dragEndEdge(clips, hold.clipId, at)
-            : moveClip(clips, hold.clipId, at - hold.grabSec)
+            ? dragEndEdge(clips, hold.clipId, onGrid(at, event.altKey))
+            : // The clip's own start lands on the line, not the spot in it that
+              // the hand took hold of.
+              moveClip(clips, hold.clipId, onGrid(at - hold.grabSec, event.altKey))
       useArrangement.getState().setClips(trackId, next)
     },
-    [hitTest, timeAt, trackId]
+    [hitTest, timeAt, trackId, onGrid]
   )
 
   const endHold = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
@@ -293,6 +307,32 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
+  }, [])
+
+  /**
+   * The wheel moves along the timeline; with a modifier it zooms.
+   *
+   * Zooming holds the moment under the pointer still, so the thing being
+   * looked at stays where it is instead of sliding away.
+   */
+  const onWheel = useCallback((event: ReactWheelEvent<HTMLCanvasElement>): void => {
+    const state = useArrangement.getState()
+    if (event.ctrlKey || event.metaKey) {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const rect = canvas.getBoundingClientRect()
+      const under = state.scrollSec + (event.clientX - rect.left) / ZOOM_LEVELS[state.zoomIndex]
+      const next = Math.max(
+        0,
+        Math.min(ZOOM_LEVELS.length - 1, state.zoomIndex + (event.deltaY < 0 ? 1 : -1))
+      )
+      if (next === state.zoomIndex) return
+      state.setZoom(next)
+      state.setScroll(under - (event.clientX - rect.left) / ZOOM_LEVELS[next])
+      return
+    }
+    const along = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+    state.setScroll(state.scrollSec + along / ZOOM_LEVELS[state.zoomIndex])
   }, [])
 
   return (
@@ -305,6 +345,7 @@ export function ArrangementLane({ trackId }: { trackId: string }): ReactElement 
         onPointerUp={endHold}
         onPointerCancel={endHold}
         onLostPointerCapture={endHold}
+        onWheel={onWheel}
       />
     </div>
   )

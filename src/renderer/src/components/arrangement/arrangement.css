@@ -93,6 +93,7 @@
 .arrange-ruler__spacer {
   background: var(--bg-panel);
   border-right: 1px solid var(--border-strong);
+  cursor: grab;
 }
 
 .arrange-ruler__spacer:last-child {
@@ -167,32 +168,17 @@
   color: var(--text);
 }
 
-.arrange-track__order {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* Where a track being dragged up or down would land. */
+.arrange-track__head.is-over-above {
+  box-shadow:
+    inset 4px 0 0 0 var(--border-soft),
+    inset 0 3px 0 0 var(--accent);
 }
 
-.arrange-track__order button {
-  font: inherit;
-  font-size: 8px;
-  line-height: 1;
-  padding: 2px 5px;
-  color: var(--text-faint);
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  cursor: pointer;
-}
-
-.arrange-track__order button:hover:not(:disabled) {
-  background: var(--bg-raised-hover);
-  color: var(--text);
-}
-
-.arrange-track__order button:disabled {
-  opacity: 0.3;
-  cursor: default;
+.arrange-track__head.is-over-below {
+  box-shadow:
+    inset 4px 0 0 0 var(--border-soft),
+    inset 0 -3px 0 0 var(--accent);
 }
 
 /* The timeline itself: the darkest surface in the view, as the waveforms are. */
@@ -222,4 +208,42 @@
 
 .arrange-track__controls .edit-eq {
   align-self: center;
+}
+
+.arrangement__bpm {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.arrangement__bpm input {
+  font: inherit;
+  font-size: 11px;
+  width: 58px;
+  padding: 3px 5px;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.arrangement__snap {
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 4px 9px;
+  color: var(--text-faint);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.arrangement__snap.is-lit {
+  color: var(--text-inverse);
+  background: var(--accent);
+  border-color: var(--accent);
 }

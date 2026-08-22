@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import type { ReactElement } from 'react'
 import { CENTRE, flatChannel } from '@shared/eq'
 import { FADER_UNITY } from '@shared/fader'
 import { ChannelEqStrip, ChannelFader } from '@renderer/components/channel/ChannelControls'
 import { useArrangement } from '@renderer/state/useArrangement'
 import { ArrangementLane } from './ArrangementLane'
+
+/** What a track header being dragged up or down the stack carries. */
+const TRACK_ROW_DRAG_TYPE = 'application/x-djdaw-arrange-track'
 
 /**
  * One lane, with its name and controls on either side of the timeline.
@@ -15,14 +19,7 @@ export function ArrangementTrackRow({ trackId }: { trackId: string }): ReactElem
   const track = useArrangement((s) => s.tracks[trackId])
   const selected = useArrangement((s) => s.selectedTrackId === trackId)
   const selectTrack = useArrangement((s) => s.selectTrack)
-  const trackIds = useArrangement((s) => s.trackIds)
-  const moveSelectedTrack = useArrangement((s) => s.moveSelectedTrack)
-  const at = trackIds.indexOf(trackId)
-
-  const nudge = (by: number) => (): void => {
-    selectTrack(trackId)
-    moveSelectedTrack(by)
-  }
+  const [over, setOver] = useState<'above' | 'below' | null>(null)
 
   return (
     <div
@@ -30,21 +27,38 @@ export function ArrangementTrackRow({ trackId }: { trackId: string }): ReactElem
       data-track={trackId}
       onPointerDown={() => selectTrack(trackId)}
     >
-      <div className="arrange-track__head">
+      <div
+        className={`arrange-track__head${over ? ` is-over-${over}` : ''}`}
+        draggable
+        title="Drag to move this track up or down"
+        onDragStart={(event) => {
+          event.dataTransfer.setData(TRACK_ROW_DRAG_TYPE, trackId)
+          event.dataTransfer.effectAllowed = 'move'
+        }}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes(TRACK_ROW_DRAG_TYPE)) return
+          event.preventDefault()
+          event.dataTransfer.dropEffect = 'move'
+          const box = event.currentTarget.getBoundingClientRect()
+          setOver(event.clientY < box.top + box.height / 2 ? 'above' : 'below')
+        }}
+        onDragLeave={() => setOver(null)}
+        onDrop={(event) => {
+          const moving = event.dataTransfer.getData(TRACK_ROW_DRAG_TYPE)
+          setOver(null)
+          if (!moving || moving === trackId) return
+          event.preventDefault()
+          const box = event.currentTarget.getBoundingClientRect()
+          const after = event.clientY >= box.top + box.height / 2
+          const ids = useArrangement.getState().trackIds
+          const target = ids.indexOf(trackId)
+          const from = ids.indexOf(moving)
+          // Taking it out first shifts everything after it up by one.
+          const to = target + (after ? 1 : 0) - (from < target ? 1 : 0)
+          useArrangement.getState().moveTrackTo(moving, to)
+        }}
+      >
         <span className="arrange-track__name">{track?.name ?? ''}</span>
-        <div className="arrange-track__order">
-          <button type="button" disabled={at <= 0} onClick={nudge(-1)} title="Move up">
-            ▲
-          </button>
-          <button
-            type="button"
-            disabled={at < 0 || at >= trackIds.length - 1}
-            onClick={nudge(1)}
-            title="Move down"
-          >
-            ▼
-          </button>
-        </div>
       </div>
 
       <ArrangementLane trackId={trackId} />

@@ -164,12 +164,18 @@ export interface ArrangementState {
   playing: boolean
   /** Where the one playhead is, in seconds. */
   playheadSec: number
+  /** The tempo the grid is built from. */
+  bpm: number
+  /** Whether what lands on the timeline jumps to the nearest grid line. */
+  snap: boolean
 
   addTrack(): void
   removeTrack(id: string): void
   selectTrack(id: string | null): void
   /** Move the picked track up (-1) or down (1) the stack. */
   moveSelectedTrack(by: number): void
+  /** Put a track at a place in the stack, for dragging one there. */
+  moveTrackTo(id: string, index: number): void
   renameTrack(id: string, name: string): void
   setTrackEq(id: string, eq: ChannelEq): void
   setTrackFader(id: string, position: number): void
@@ -189,6 +195,8 @@ export interface ArrangementState {
   play(): void
   pause(): void
   seek(sec: number): void
+  setBpm(bpm: number): void
+  toggleSnap(): void
   setZoom(index: number): void
   setScroll(sec: number): void
   /** How far the whole arrangement runs, which is its longest track. */
@@ -227,6 +235,8 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   scrollSec: 0,
   playing: false,
   playheadSec: 0,
+  bpm: 120,
+  snap: true,
 
   addTrack() {
     const { trackIds, tracks } = get()
@@ -264,6 +274,17 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     const next = moveTrack(trackIds, selectedTrackId, by)
     if (next.every((id, i) => id === trackIds[i])) return
     set({ trackIds: next })
+  },
+
+  moveTrackTo(id, index) {
+    const { trackIds } = get()
+    const from = trackIds.indexOf(id)
+    if (from < 0) return
+    const rest = trackIds.filter((other) => other !== id)
+    const to = Math.max(0, Math.min(rest.length, index))
+    rest.splice(to, 0, id)
+    if (rest.every((other, i) => other === trackIds[i])) return
+    set({ trackIds: rest })
   },
 
   renameTrack(id, name) {
@@ -375,6 +396,16 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     const at = Math.max(0, sec)
     set({ playheadSec: at })
     if (get().playing) void startVoices(at)
+  },
+
+  setBpm(bpm) {
+    const next = Math.max(20, Math.min(300, bpm))
+    if (!Number.isFinite(next) || next === get().bpm) return
+    set({ bpm: next })
+  },
+
+  toggleSnap() {
+    set({ snap: !get().snap })
   },
 
   setZoom(index) {
