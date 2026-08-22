@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import type { Clip } from '@shared/clips'
-import { clipAt, dropStartSec, timelineDuration } from '@shared/clips'
+import { clipAt, dropIndex, timelineDuration } from '@shared/clips'
 import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
 import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
@@ -136,6 +136,10 @@ interface ClipGesture {
   dragging: boolean
   /** Escape gives the drag up but keeps the gesture, so the release can tidy up. */
   cancelled: boolean
+  /** Where the piece sat before any of this, to put it back on Escape. */
+  fromIndex: number
+  /** Where it sits now, so the row is only rearranged when that changes. */
+  atIndex: number
 }
 
 type Gesture = SeekGesture | ClipGesture
@@ -377,12 +381,17 @@ export function OverviewWaveform({
         gesture.clip.startSec + ((clientX - gesture.startX) * gesture.duration) / gesture.width
       // Keep the piece on the strip: past either edge there is nothing to draw
       // the ghost against and nothing to aim at.
-      // Where it will come to rest, not where the pointer is: the drop is a
-      // reordering, so the ghost has to promise the place in the order the
-      // pointer has picked out.
+      // Rearrange the row as the hand crosses each neighbour, not on release,
+      // and let the ghost follow the hand rather than the slot.
       const room = Math.max(0, gesture.duration - gesture.clip.durationSec)
+      const at = clamp(raw, 0, room)
       const clips = useDecks.getState().decks[deckId].clips
-      return dropStartSec(clips, gesture.clip.id, clamp(raw, 0, room))
+      const to = dropIndex(clips, gesture.clip.id, at)
+      if (to !== gesture.atIndex) {
+        gesture.atIndex = to
+        useDecks.getState().reorderClipTo(deckId, gesture.clip.id, to)
+      }
+      return at
     },
     [deckId]
   )
@@ -412,6 +421,7 @@ export function OverviewWaveform({
 
       // On a piece, the seek waits until the gesture has decided what it is.
       // Seeking now would jog the playhead every time a chunk is picked up.
+      const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
       gestureRef.current = {
         kind: 'clip',
         pointerId: event.pointerId,
@@ -420,7 +430,9 @@ export function OverviewWaveform({
         width: rect.width,
         duration: state.duration,
         dragging: false,
-        cancelled: false
+        cancelled: false,
+        fromIndex: index,
+        atIndex: index
       }
     },
     [seekTo]
@@ -459,7 +471,6 @@ export function OverviewWaveform({
       const gesture = gestureRef.current
       if (!gesture || gesture.pointerId !== event.pointerId) return
       gestureRef.current = null
-      const ghost = ghostRef.current
       ghostRef.current = null
       dirtyRef.current = true
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -473,7 +484,8 @@ export function OverviewWaveform({
         seekTo(event.clientX)
         return
       }
-      if (ghost) useDecks.getState().moveClipTo(deckId, ghost.clipId, ghost.startSec)
+      // The row has already been rearranged all the way along, so a release has
+      // nothing left to commit.
     },
     [deckId, seekTo]
   )
@@ -485,14 +497,18 @@ export function OverviewWaveform({
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       const gesture = gestureRef.current
-      if (!gesture || gesture.kind !== 'clip' || !gesture.dragging) return
+      if (!gesture || gesture.kind !== 'clip' || !gesture.dragging || gesture.cancelled) return
       gesture.cancelled = true
+      // Put it back where it was picked up, since the row has been rearranging
+      // all the way along.
+      useDecks.getState().reorderClipTo(deckId, gesture.clip.id, gesture.fromIndex)
+      gesture.atIndex = gesture.fromIndex
       ghostRef.current = null
       dirtyRef.current = true
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [deckId])
 
   return (
     <div className="waveform-overview">

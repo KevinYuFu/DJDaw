@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, WheelEvent as ReactWheelEvent } from 'react'
 import type { Clip } from '@shared/clips'
 import type { ColumnExtents } from '@renderer/components/waveform/waveformRender'
-import { clipAt, dropStartSec } from '@shared/clips'
+import { clipAt, dropIndex } from '@shared/clips'
 import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
 import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { BeatGrid, DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
@@ -102,6 +102,10 @@ interface ClipDrag {
   dragging: boolean
   /** Escape gives the drag up but keeps the gesture, so the release tidies up. */
   cancelled: boolean
+  /** Where the piece sat before any of this, to put it back on Escape. */
+  fromIndex: number
+  /** Where it sits now, so the row is only rearranged when that changes. */
+  atIndex: number
 }
 
 /** Where a dragged piece would land if it were dropped now. */
@@ -387,6 +391,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           const grabbed = clipAt(state.clips, at)
           if (grabbed) {
             event.currentTarget.setPointerCapture(event.pointerId)
+            const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
             clipDragRef.current = {
               pointerId: event.pointerId,
               startX: event.clientX,
@@ -394,7 +399,9 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
               width,
               span: state.span,
               dragging: false,
-              cancelled: false
+              cancelled: false,
+              fromIndex: index,
+              atIndex: index
             }
             return
           }
@@ -424,15 +431,24 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           if (Math.abs(event.clientX - held.startX) <= CLICK_SLOP_PX) return
           held.dragging = true
         }
-        const moved =
+        const moved = Math.max(
+          0,
           held.clip.startSec + ((event.clientX - held.startX) * held.span) / held.width
-        // Where it will come to rest, not where the pointer is: the drop is a
-        // reordering, so the ghost has to promise the place in the order the
-        // pointer has picked out.
+        )
+        // Rearrange the row as the hand crosses each neighbour, not on release.
+        // The neighbours slide out of the way while the piece is still held, so
+        // what the drop will do is already on screen and can be dragged back.
         const clips = useDecks.getState().decks[deckId].clips
+        const to = dropIndex(clips, held.clip.id, moved)
+        if (to !== held.atIndex) {
+          held.atIndex = to
+          useDecks.getState().reorderClipTo(deckId, held.clip.id, to)
+        }
+        // The ghost follows the hand rather than the slot, so the piece being
+        // carried is the one under the pointer.
         ghostRef.current = {
           clipId: held.clip.id,
-          startSec: dropStartSec(clips, held.clip.id, Math.max(0, moved)),
+          startSec: moved,
           durationSec: held.clip.durationSec
         }
         dirtyRef.current = true
@@ -458,19 +474,15 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       const held = clipDragRef.current
       if (held && held.pointerId === event.pointerId) {
         clipDragRef.current = null
-        const ghost = ghostRef.current
         ghostRef.current = null
         dirtyRef.current = true
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
         }
         // A press that went nowhere is a click on the handle, which picks the
-        // piece rather than moving it.
-        if (!held.dragging || held.cancelled) {
-          if (!held.cancelled) useDecks.getState().selectClip(deckId, held.clip.id)
-          return
-        }
-        if (ghost) useDecks.getState().moveClipTo(deckId, ghost.clipId, ghost.startSec)
+        // piece rather than moving it. The row has already been rearranged, so
+        // a release has nothing left to commit.
+        if (!held.dragging) useDecks.getState().selectClip(deckId, held.clip.id)
         return
       }
 
@@ -506,14 +518,18 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       const held = clipDragRef.current
-      if (!held || !held.dragging) return
+      if (!held || !held.dragging || held.cancelled) return
       held.cancelled = true
+      // Put it back where it was picked up, since the row has been rearranging
+      // all the way along.
+      useDecks.getState().reorderClipTo(deckId, held.clip.id, held.fromIndex)
+      held.atIndex = held.fromIndex
       ghostRef.current = null
       dirtyRef.current = true
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [deckId])
 
   const onWheel = useCallback(
     (event: ReactWheelEvent<HTMLCanvasElement>): void => {

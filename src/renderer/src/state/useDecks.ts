@@ -207,6 +207,13 @@ export interface DecksState {
    * This is what a drag in the MACRO view commits on release.
    */
   moveClipTo(deck: DeckId, clipId: string, toStartSec: number): void
+  /**
+   * Put a piece at a place in the order.
+   *
+   * Driven straight from a drag: the row rearranges under the hand rather than
+   * on release, so what the drop will do is what is already on screen.
+   */
+  reorderClipTo(deck: DeckId, clipId: string, index: number): void
   /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
   /** Move the channel fader. See {@link DeckState.fader}. */
   setFader(deck: DeckId, position: number): void
@@ -1136,6 +1143,17 @@ export const useDecks = create<DecksState>()(() => ({
     // plays nothing. The buffer, waveform and track stay put, so the row is a
     // silent piece of the edit rather than an empty slot.
     setClips(ctx, clips, { selectedClipId: selectId })
+  },
+
+  reorderClipTo(id, clipId, index) {
+    const ctx = context(id)
+    if (!ctx) return
+    if (!ctx.state.clips.some((c) => c.id === clipId)) return
+    const clips = reorderClip(ctx.state.clips, clipId, index)
+    // A move that changes nothing still arrives here on every pointer event,
+    // and re-pushing the same regions would wake every subscriber for nothing.
+    if (clips.every((clip, i) => clip.id === ctx.state.clips[i]?.id)) return
+    setClips(ctx, clips, {})
   },
 
   moveClipTo(id, clipId, toStartSec) {
