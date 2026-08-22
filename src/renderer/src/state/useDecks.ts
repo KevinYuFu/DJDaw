@@ -4,6 +4,8 @@ import type { BeatGrid, DeckId, HotCue, Track, WaveformData } from '@shared/type
 import {
   deleteSegment,
   dropIndex,
+  fillHole,
+  layOut,
   reorderClip,
   splitAt,
   timelineDuration,
@@ -215,6 +217,13 @@ export interface DecksState {
    */
   reorderClipTo(deck: DeckId, clipId: string, index: number): void
   /**
+   * Switch the picked piece off, or back on.
+   *
+   * A piece that is off keeps its place on the row and plays nothing. Holes
+   * are left alone: they already play nothing.
+   */
+  toggleClipDisabled(deck: DeckId): void
+  /**
    * Move a piece onto another row, at a place in that row's order.
    *
    * The piece keeps the audio it always played, so the row it lands on has to
@@ -222,10 +231,20 @@ export interface DecksState {
    * pieces around it were placed against each other and pulling them together
    * is a separate decision.
    *
+   * `into` names a hole to land in, and where in it. Empty room takes the
+   * piece where it was let go and is cut around it, rather than taking it
+   * between two neighbours the way a row of pieces does.
+   *
    * Refused when the target row has no track: a row with nothing in it has no
    * timeline to drop onto yet.
    */
-  moveClipToDeck(from: DeckId, clipId: string, to: DeckId, index: number): void
+  moveClipToDeck(
+    from: DeckId,
+    clipId: string,
+    to: DeckId,
+    index: number,
+    into?: { holeId: string | null; atSec: number }
+  ): void
   /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
   /** Move the channel fader. See {@link DeckState.fader}. */
   setFader(deck: DeckId, position: number): void
@@ -353,6 +372,43 @@ function pruneSources(): void {
   }
   for (const id of [...sourceAudio.keys()]) if (!live.has(id)) sourceAudio.delete(id)
   for (const id of [...sourceWaves.keys()]) if (!live.has(id)) sourceWaves.delete(id)
+}
+
+/**
+ * Make an empty row out of one piece.
+ *
+ * The row takes on the track the piece came from — it is the audio the row is
+ * now built from, and the engine has no other way to be handed a file. The
+ * piece keeps its own place in that file, so only the part that was dropped
+ * plays.
+ */
+function adoptClip(id: DeckId, sourceId: string, audio: AudioBuffer, landing: Clip): void {
+  const engine = AudioEngine.shared()
+  const deck = engine.deck(id)
+  watchDeck(id, deck)
+  applyEq(id, useDecks.getState().decks[id].eq)
+  applyFader(id)
+  if (deck.playing) deck.pause()
+  deck.setLoop(false, 0, 0)
+
+  deck.load(audio, sourceId)
+  deck.setRate(1 + useDecks.getState().decks[id].pitchPercent / 100)
+  deck.seekSeconds(0)
+  runtime[id].commandedSec = 0
+
+  const clips = layOut([landing])
+  patchDeck(id, {
+    trackId: sourceId,
+    status: 'ready',
+    playing: false,
+    previewing: false,
+    buffer: audio,
+    waveform: sourceWaves.get(sourceId) ?? null,
+    loop: null,
+    clips,
+    selectedClipId: landing.id
+  })
+  deck.setRegions(toRegions(clips), timelineDuration(clips))
 }
 
 function emptyDeck(): DeckState {
@@ -543,7 +599,8 @@ function writeHotCues(ctx: DeckContext, cues: HotCue[]): void {
  */
 function setClips(ctx: DeckContext, clips: Clip[], patch: Partial<DeckState> = {}): void {
   patchDeck(ctx.id, { ...patch, clips })
-  ctx.deck.setRegions(toRegions(clips))
+  // The row's own length, so a tail that plays nothing still counts.
+  ctx.deck.setRegions(toRegions(clips), timelineDuration(clips))
 }
 
 /**
@@ -752,7 +809,7 @@ export const useDecks = create<DecksState>()(() => ({
       const clips = [wholeTrackClip(buffer.duration, trackId)]
       sourceAudio.set(trackId, buffer)
       patchDeck(id, { buffer, clips, selectedClipId: null })
-      deck.setRegions(toRegions(clips))
+      deck.setRegions(toRegions(clips), timelineDuration(clips))
 
       const [waveform, grid] = await Promise.all([resolveWaveform(track, buffer), resolveGrid(id, track, buffer)])
       if (runtime[id].loadToken !== token) return
@@ -1198,6 +1255,19 @@ export const useDecks = create<DecksState>()(() => ({
     setClips(ctx, clips, { selectedClipId: selectId })
   },
 
+  toggleClipDisabled(id) {
+    const ctx = context(id)
+    if (!ctx) return
+    const selected = ctx.state.selectedClipId
+    if (selected == null) return
+    const picked = ctx.state.clips.find((c) => c.id === selected)
+    if (!picked || picked.silent) return
+    const clips = ctx.state.clips.map((c) =>
+      c.id === selected ? { ...c, disabled: !c.disabled } : c
+    )
+    setClips(ctx, clips, {})
+  },
+
   reorderClipTo(id, clipId, index) {
     const ctx = context(id)
     if (!ctx) return
@@ -1209,20 +1279,29 @@ export const useDecks = create<DecksState>()(() => ({
     setClips(ctx, clips, {})
   },
 
-  moveClipToDeck(from, clipId, to, index) {
+  moveClipToDeck(from, clipId, to, index, into) {
     if (from === to) return
     const src = context(from)
-    const dst = context(to)
-    if (!src || !dst) return
+    if (!src) return
     const moving = src.state.clips.find((c) => c.id === clipId)
     if (!moving) return
+    const sourceId = moving.sourceId ?? src.state.trackId
+    const audio = sourceId ? sourceAudio.get(sourceId) : null
+    // A hole plays nothing, so it has nothing to carry and nowhere empty to go.
+    if (!moving.silent && (!sourceId || !audio)) return
 
-    // A hole plays nothing, so there is nothing to carry over with it.
+    const dst = context(to)
+    if (!dst) {
+      if (moving.silent || !sourceId || !audio) return
+      const landing = { ...moving, sourceId }
+      adoptClip(to, sourceId, audio, landing)
+      const gone = deleteSegment(src.state.clips, clipId)
+      setClips(src, gone.clips, { selectedClipId: gone.selectId })
+      return
+    }
+
     let landing = moving
-    if (!moving.silent) {
-      const sourceId = moving.sourceId ?? src.state.trackId
-      const audio = sourceId ? sourceAudio.get(sourceId) : null
-      if (!sourceId || !audio) return
+    if (!moving.silent && sourceId && audio) {
       dst.deck.addSource(sourceId, audio)
       // Pinned to the piece from here on: it has left the row whose track it
       // came from, and nothing else says what it plays.
@@ -1233,7 +1312,10 @@ export const useDecks = create<DecksState>()(() => ({
     const gone = deleteSegment(src.state.clips, clipId)
     setClips(src, gone.clips, { selectedClipId: gone.selectId })
 
-    const landed = reorderClip([...dst.state.clips, landing], landing.id, index)
+    const filled = into?.holeId
+      ? fillHole(dst.state.clips, into.holeId, into.atSec, landing)
+      : null
+    const landed = filled ?? reorderClip([...dst.state.clips, landing], landing.id, index)
     setClips(dst, landed, { selectedClipId: landing.id })
   },
 

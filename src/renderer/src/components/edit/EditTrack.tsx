@@ -12,6 +12,7 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { bpmAt } from '@renderer/core/beatgrid'
 import { clamp, formatBpm, formatTime } from '@renderer/core/format'
 import { useRaf, useTextRef } from '@renderer/hooks/useRaf'
+import { registerDropZone } from '@renderer/components/waveform/dropZones'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
@@ -320,6 +321,14 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
  */
 export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   const status = useDecks((s) => s.decks[deckId].status)
+  // A row with nothing in it still takes a piece: the panel it shows instead
+  // of its strips is the thing to aim at.
+  const emptyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const panel = emptyRef.current
+    if (!panel) return
+    return registerDropZone({ deck: deckId, canvas: panel, timeAt: () => 0 })
+  }, [deckId, status])
   const trackId = useDecks((s) => s.decks[deckId].trackId)
   const track = useLibrary((s) => (trackId ? s.trackById(trackId) : undefined))
   const focused = useSettings((s) => s.focusedDeck === deckId)
@@ -461,7 +470,7 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
             <DetailWaveform deckId={deckId} selectClips />
           </>
         ) : (
-          <div className="edit-track__empty">
+          <div className="edit-track__empty" ref={emptyRef}>
             {status === 'loading' ? (
               <span>Loading the track</span>
             ) : (

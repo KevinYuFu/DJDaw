@@ -661,7 +661,7 @@ export class Deck {
    * An empty list puts the deck back to playing the whole file, which is what
    * an uncut deck wants and what the two performance decks always send.
    */
-  setRegions(regions: Region[]): void {
+  setRegions(regions: Region[], timelineSec?: number): void {
     const sr = this.fileSampleRate
     this.regions = regions
       .map((r) => ({
@@ -672,11 +672,18 @@ export class Deck {
       }))
       .filter((r) => r.endFrame > r.startFrame)
     // Timeline seconds, not file seconds: cutting a track changes how long the
-    // row is, and everything that clamps a position clamps against this.
-    this.durationSec = this.regions.length > 0
-      ? this.timelineFrames() / sr
-      : this.sourceDurationSec
-    this.post({ type: 'regions', regions: this.regions })
+    // row is, and everything that clamps a position clamps against this. A row
+    // whose tail plays nothing is still that long, so the caller's length wins
+    // over the end of the last region.
+    this.timelineSec = timelineSec != null && timelineSec > 0 ? timelineSec : null
+    this.durationSec =
+      this.timelineSec ??
+      (this.regions.length > 0 ? this.timelineFrames() / sr : this.sourceDurationSec)
+    this.post({
+      type: 'regions',
+      regions: this.regions,
+      timelineFrames: this.timelineSec ? Math.round(this.timelineSec * sr) : 0
+    })
     this.dropUnusedSources()
   }
 
@@ -687,6 +694,9 @@ export class Deck {
    * been moved on or deleted, nothing here plays it and the audio thread has
    * no reason to keep holding tens of megabytes.
    */
+  /** The row's own length, when it is longer than the audio on it. */
+  private timelineSec: number | null = null
+
   private dropUnusedSources(): void {
     for (const id of [...this.sourceIds]) {
       if (id === this.mainSourceId) continue

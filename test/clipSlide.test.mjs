@@ -1,5 +1,5 @@
 /** The slide a row does when its pieces change places. */
-import { SLIDE_MS, beginSlide, slideClips } from './.build/clipSlide.mjs'
+import { SLIDE_MS, beginSlide, openGap, slideClips } from './.build/clipSlide.mjs'
 
 const { eq, ok } = globalThis.__t
 
@@ -58,4 +58,29 @@ ok('a reordering does slide', beginSlide(before, after, 0) !== null)
   const late = slideClips(after, slide, SLIDE_MS * 10)
   eq('long after, everything is home', late.clips.map((x) => x.startSec).join(','), '0,1,4')
   ok('and it is done', late.done === true)
+}
+
+// Room opened for a piece being held over the row.
+{
+  const row = [
+    { id: 'a', startSec: 0, durationSec: 10, sourceOffsetSec: 0 },
+    { id: 'b', startSec: 10, durationSec: 10, sourceOffsetSec: 10 },
+    { id: 'c', startSec: 20, durationSec: 10, sourceOffsetSec: 20 }
+  ]
+  const opened = openGap(row, 1, 4)
+  eq('the piece before the gap does not move', opened[0].startSec, 0)
+  eq('the ones after it are pushed along by the gap', opened[1].startSec, 14)
+  eq('all of them, by the same amount', opened[2].startSec, 24)
+  ok('nothing is added or dropped', opened.length === 3 && opened.every((c, i) => c.id === row[i].id))
+  ok('and no piece changes length', opened.every((c, i) => c.durationSec === row[i].durationSec))
+
+  eq('room at the very end leaves the row alone', openGap(row, 3, 4), row)
+  eq('so does no room at all', openGap(row, 1, 0), row)
+
+  // It is an ordinary rearrangement as far as the slide is concerned.
+  const slide = beginSlide(row, openGap(row, 1, 4), 0)
+  ok('opening it slides', slide !== null)
+  const half = slideClips(openGap(row, 1, 4), slide, SLIDE_MS / 2)
+  ok(`part way, the gap is part open — ${half.clips[1].startSec.toFixed(1)}s`,
+    half.clips[1].startSec > 10 && half.clips[1].startSec < 14)
 }

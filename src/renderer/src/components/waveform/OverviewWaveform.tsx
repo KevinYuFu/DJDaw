@@ -2,8 +2,13 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import type { Clip } from '@shared/clips'
-import { clipAt, dropIndex, timelineDuration } from '@shared/clips'
-import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
+import { clipAt, dropIndex, fillStartSec, timelineDuration } from '@shared/clips'
+import {
+  beginSlide,
+  newGapMemo,
+  rowWithGap,
+  slideClips
+} from '@renderer/components/waveform/clipSlide'
 import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
@@ -24,6 +29,8 @@ import {
   canvasNeedsResize,
   drawClipBands,
   drawClipEdges,
+  disabledMasks,
+  DISABLED_FILTER,
   drawClipHighlight,
   drawCueMarkers,
   drawDropMarker,
@@ -77,7 +84,7 @@ const RGB_DIM = 0.42
 /** Playhead movement below this is invisible, so the frame can be skipped. */
 const MIN_PLAYHEAD_STEP_PX = 0.2
 
-/** Pointer travel below this is a click, above it a clip drag. */
+/** Pointer travel below this, in either direction, is a click not a drag. */
 const DRAG_SLOP_PX = 3
 
 const NO_CLIPS: readonly Clip[] = []
@@ -130,6 +137,7 @@ interface ClipGesture {
   kind: 'clip'
   pointerId: number
   startX: number
+  startY: number
   clip: Clip
   /** Strip geometry at press time, so a resize mid-drag cannot skew the maths. */
   width: number
@@ -145,6 +153,10 @@ interface ClipGesture {
   overDeck: DeckId | null
   /** Where it would land on that row. */
   overIndex: number
+  /** The hole it would drop into, when it is landing in empty room. */
+  overHoleId: string | null
+  /** Where in that hole it would start. */
+  overAtSec: number
 }
 
 type Gesture = SeekGesture | ClipGesture
@@ -161,6 +173,8 @@ export function OverviewWaveform({
   const dirtyRef = useRef(true)
   const gestureRef = useRef<Gesture | null>(null)
   const slideRef = useRef<Slide | null>(null)
+  const gapRef = useRef(newGapMemo())
+  const shownRef = useRef<readonly Clip[]>(NO_CLIPS)
 
   const status = useDecks((s) => s.decks[deckId].status)
   const waveform = useDecks((s) => s.decks[deckId].waveform)
@@ -178,12 +192,11 @@ export function OverviewWaveform({
       ? (waveform.bucketCount * waveform.bucketSize) / waveform.sampleRate
       : (track?.durationSec ?? 0)
 
-  // An edit row is a timeline, not a file: a piece dragged past the end of the
-  // audio makes the row longer than the track it came from, and the strip has
-  // to keep showing all of it.
-  const duration = draggableClips
-    ? Math.max(sourceDuration, timelineDuration(clips))
-    : sourceDuration
+  // An edit row is a timeline, not a file: it is as long as the pieces on it,
+  // which is what the engine plays and clamps against. A row built out of one
+  // dropped piece is that piece long, not as long as the file it came from.
+  const rowDuration = timelineDuration(clips)
+  const duration = draggableClips && rowDuration > 0 ? rowDuration : sourceDuration
 
   const frameRef = useRef<FrameState>({
     deck: null,
@@ -202,12 +215,6 @@ export function OverviewWaveform({
   // No dependency list: this is the one place the slow-changing store values
   // cross into the render loop, and it must run after every render.
   useEffect(() => {
-    const before = frameRef.current.clips
-    const nextClips = draggableClips ? clips : NO_CLIPS
-    if (before !== nextClips) {
-      const slide = beginSlide(before, nextClips, performance.now())
-      if (slide) slideRef.current = slide
-    }
     frameRef.current = {
       // `deck()` throws until the engine has initialised, which `ready` implies.
       deck: status === 'ready' ? AudioEngine.shared().deck(deckId) : null,
@@ -270,23 +277,42 @@ export function OverviewWaveform({
       if (width <= 0 || height <= 0) return
       const dpr = window.devicePixelRatio || 1
       const settled = frameRef.current
-      let state = settled
+      const now = performance.now()
+
+      // Room for a piece held over this row from another one. It is drawn, not
+      // stored: nothing about the row changes until the piece is let go.
+      const mark = settled.draggable ? dropMarkFor(deckId) : null
+      const target = rowWithGap(
+        gapRef.current,
+        settled.clips,
+        mark && !mark.holeId ? mark.index : -1,
+        mark && !mark.holeId ? mark.durationSec : 0
+      )
+      // Every movement a row makes goes through here: reordering, closing a
+      // hole, opening room for a piece. Starting from where the pieces are
+      // being drawn rather than where they were headed keeps a slide that is
+      // interrupted by another from jumping.
+      if (target !== shownRef.current) {
+        const seen = slideRef.current
+          ? slideClips(shownRef.current, slideRef.current, now).clips
+          : shownRef.current
+        slideRef.current = beginSlide(seen, target, now)
+        shownRef.current = target
+        dirtyRef.current = true
+      }
+      let drawn = target
       if (slideRef.current) {
-        const { clips: sliding, done } = slideClips(
-          settled.clips,
-          slideRef.current,
-          performance.now()
-        )
+        const { clips: sliding, done } = slideClips(target, slideRef.current, now)
         if (done) slideRef.current = null
         else {
-          state = { ...settled, clips: sliding }
+          drawn = sliding
           dirtyRef.current = true
         }
       }
+      const state = drawn === settled.clips ? settled : { ...settled, clips: drawn }
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const playX = state.duration > 0 ? clamp((position / state.duration) * width, 0, width) : 0
-      const mark = state.draggable ? dropMarkFor(deckId) : null
       const markSec = mark ? mark.atSec : -1
       if (markSec !== lastMark) dirtyRef.current = true
       lastMark = markSec
@@ -324,20 +350,39 @@ export function OverviewWaveform({
       if (layers.waveform) {
         // Two clipped blits of full-size layers rather than a scaled partial
         // copy: the source and destination stay pixel-aligned at any dpr.
-        if (playX > 0) {
-          ctx.save()
-          ctx.beginPath()
-          ctx.rect(0, 0, playX, height)
-          ctx.clip()
-          ctx.drawImage(layers.played, 0, 0, width, height)
-          ctx.restore()
+        const blit = (): void => {
+          if (playX > 0) {
+            ctx.save()
+            ctx.beginPath()
+            ctx.rect(0, 0, playX, height)
+            ctx.clip()
+            ctx.drawImage(layers.played, 0, 0, width, height)
+            ctx.restore()
+          }
+          if (playX < width) {
+            ctx.save()
+            ctx.beginPath()
+            ctx.rect(playX, 0, width - playX, height)
+            ctx.clip()
+            ctx.drawImage(layers.live, 0, 0, width, height)
+            ctx.restore()
+          }
         }
-        if (playX < width) {
+        // Switched-off pieces are laid down in a second pass with the colour
+        // filtered out, so their shape stays but they read as off.
+        const masks = state.draggable
+          ? disabledMasks(state.clips, 0, state.duration, width, height)
+          : null
+        if (!masks) blit()
+        else {
           ctx.save()
-          ctx.beginPath()
-          ctx.rect(playX, 0, width - playX, height)
-          ctx.clip()
-          ctx.drawImage(layers.live, 0, 0, width, height)
+          ctx.clip(masks.on)
+          blit()
+          ctx.restore()
+          ctx.save()
+          ctx.clip(masks.off)
+          ctx.filter = DISABLED_FILTER
+          blit()
           ctx.restore()
         }
       }
@@ -422,8 +467,7 @@ export function OverviewWaveform({
   const aim = useCallback(
     (gesture: ClipGesture, clientX: number, clientY: number): void => {
       const zone = zoneAt(clientX, clientY)
-      const over =
-        zone && zone.deck !== deckId && useDecks.getState().decks[zone.deck].trackId ? zone : null
+      const over = zone && zone.deck !== deckId ? zone : null
 
       if (over) {
         // The piece is on its way out, so the row it came from goes back to the
@@ -433,17 +477,32 @@ export function OverviewWaveform({
           gesture.atIndex = gesture.fromIndex
         }
         const clips = useDecks.getState().decks[over.deck].clips
-        const index = dropIndex(clips, gesture.clip.id, over.timeAt(clientX))
+        const at = over.timeAt(clientX)
+        // Empty room takes the piece where it was let go, rather than between
+        // two neighbours the way a row of pieces does.
+        const hole = clipAt(clips, at)
+        const into =
+          hole && hole.silent && hole.durationSec >= gesture.clip.durationSec ? hole : null
+        const index = dropIndex(clips, gesture.clip.id, at)
         let atSec = 0
         for (let i = 0; i < index; i++) atSec += clips[i].durationSec
         gesture.overDeck = over.deck
         gesture.overIndex = index
-        setDropMark({ deck: over.deck, atSec, index })
+        gesture.overHoleId = into ? into.id : null
+        gesture.overAtSec = into ? fillStartSec(into, at, gesture.clip.durationSec) : atSec
+        setDropMark({
+          deck: over.deck,
+          atSec: into ? fillStartSec(into, at, gesture.clip.durationSec) : atSec,
+          index,
+          durationSec: gesture.clip.durationSec,
+          holeId: into ? into.id : undefined
+        })
         return
       }
 
       if (gesture.overDeck !== null) {
         gesture.overDeck = null
+        gesture.overHoleId = null
         setDropMark(null)
       }
       dropTarget(gesture, clientX)
@@ -484,6 +543,7 @@ export function OverviewWaveform({
         kind: 'clip',
         pointerId: event.pointerId,
         startX: event.clientX,
+        startY: event.clientY,
         clip: grabbed,
         width: rect.width,
         duration: state.duration,
@@ -492,7 +552,9 @@ export function OverviewWaveform({
         fromIndex: index,
         atIndex: index,
         overDeck: null,
-        overIndex: 0
+        overIndex: 0,
+        overHoleId: null,
+        overAtSec: 0
       }
     },
     [seekTo]
@@ -508,7 +570,13 @@ export function OverviewWaveform({
       }
       if (gesture.cancelled) return
       if (!gesture.dragging) {
-        if (Math.abs(event.clientX - gesture.startX) <= DRAG_SLOP_PX) return
+        // Either direction: a piece taken to another row moves mostly down.
+        if (
+          Math.abs(event.clientX - gesture.startX) <= DRAG_SLOP_PX &&
+          Math.abs(event.clientY - gesture.startY) <= DRAG_SLOP_PX
+        ) {
+          return
+        }
         gesture.dragging = true
       }
       aim(gesture, event.clientX, event.clientY)
@@ -546,7 +614,10 @@ export function OverviewWaveform({
       if (gesture.overDeck) {
         useDecks
           .getState()
-          .moveClipToDeck(deckId, gesture.clip.id, gesture.overDeck, gesture.overIndex)
+          .moveClipToDeck(deckId, gesture.clip.id, gesture.overDeck, gesture.overIndex, {
+            holeId: gesture.overHoleId,
+            atSec: gesture.overAtSec
+          })
       }
     },
     [deckId, seekTo]

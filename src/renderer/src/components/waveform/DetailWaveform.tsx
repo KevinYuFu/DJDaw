@@ -3,8 +3,13 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, WheelEvent as ReactWheelEvent } from 'react'
 import type { Clip } from '@shared/clips'
 import type { ColumnExtents } from '@renderer/components/waveform/waveformRender'
-import { clipAt, dropIndex } from '@shared/clips'
-import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
+import { clipAt, dropIndex, fillStartSec } from '@shared/clips'
+import {
+  beginSlide,
+  newGapMemo,
+  rowWithGap,
+  slideClips
+} from '@renderer/components/waveform/clipSlide'
 import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { BeatGrid, DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
@@ -27,6 +32,8 @@ import {
   drawClipEdges,
   DEFAULT_CLIP_STYLE,
   drawClipHighlight,
+  disabledMasks,
+  DISABLED_FILTER,
   drawCueMarkers,
   drawDropMarker,
   drawLocators,
@@ -96,6 +103,7 @@ const NO_LOCATORS: readonly MemoryCue[] = []
 interface ClipDrag {
   pointerId: number
   startX: number
+  startY: number
   clip: Clip
   /** Geometry at press time, so a resize mid-drag cannot skew the maths. */
   width: number
@@ -111,6 +119,10 @@ interface ClipDrag {
   overDeck: DeckId | null
   /** Where it would land on that row. */
   overIndex: number
+  /** The hole it would drop into, when it is landing in empty room. */
+  overHoleId: string | null
+  /** Where in that hole it would start. */
+  overAtSec: number
 }
 
 
@@ -169,6 +181,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const extentsRef = useRef<ColumnExtents | null>(null)
   const clipDragRef = useRef<ClipDrag | null>(null)
   const slideRef = useRef<Slide | null>(null)
+  const gapRef = useRef(newGapMemo())
+  const shownRef = useRef<readonly Clip[]>(NO_CLIPS)
   const columnsRef = useRef<WaveformColumns | null>(null)
   const dirtyRef = useRef(true)
   const dragRef = useRef<{
@@ -221,11 +235,6 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   // No dependency list: this is the one place the slow-changing store values
   // cross into the render loop, and it must run after every render.
   useEffect(() => {
-    const before = frameRef.current.clips
-    if (before !== clips) {
-      const slide = beginSlide(before, clips, performance.now())
-      if (slide) slideRef.current = slide
-    }
     frameRef.current = {
       // `deck()` throws until the engine has initialised, which `ready` implies.
       deck: status === 'ready' ? AudioEngine.shared().deck(deckId) : null,
@@ -291,23 +300,42 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       if (width <= 0 || height <= 0) return
       const dpr = window.devicePixelRatio || 1
       const settled = frameRef.current
-      let state = settled
+      const now = performance.now()
+
+      // Room for a piece held over this row from another one. It is drawn, not
+      // stored: nothing about the row changes until the piece is let go.
+      const mark = selectClips ? dropMarkFor(deckId) : null
+      const target = rowWithGap(
+        gapRef.current,
+        settled.clips,
+        mark && !mark.holeId ? mark.index : -1,
+        mark && !mark.holeId ? mark.durationSec : 0
+      )
+      // Every movement a row makes goes through here: reordering, closing a
+      // hole, opening room for a piece. Starting from where the pieces are
+      // being drawn rather than where they were headed keeps a slide that is
+      // interrupted by another from jumping.
+      if (target !== shownRef.current) {
+        const seen = slideRef.current
+          ? slideClips(shownRef.current, slideRef.current, now).clips
+          : shownRef.current
+        slideRef.current = beginSlide(seen, target, now)
+        shownRef.current = target
+        dirtyRef.current = true
+      }
+      let drawn = target
       if (slideRef.current) {
-        const { clips: sliding, done } = slideClips(
-          settled.clips,
-          slideRef.current,
-          performance.now()
-        )
+        const { clips: sliding, done } = slideClips(target, slideRef.current, now)
         if (done) slideRef.current = null
         else {
-          state = { ...settled, clips: sliding }
+          drawn = sliding
           dirtyRef.current = true
         }
       }
+      const state = drawn === settled.clips ? settled : { ...settled, clips: drawn }
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const pxPerSecond = width / state.span
-      const mark = selectClips ? dropMarkFor(deckId) : null
       const markSec = mark ? mark.atSec : -1
       if (markSec !== lastMark) dirtyRef.current = true
       lastMark = markSec
@@ -383,15 +411,31 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
               )
             : null
         extentsRef.current = extents
-        drawWaveform(ctx, cols, {
-          height,
-          colors: BAND_COLORS,
-          mono: state.mono ? MONO_COLOR : undefined,
-          rgb: state.rgb,
-          gain: WAVE_GAIN,
-          subpixel: dpr,
-          extents
-        })
+        const paint = (): void =>
+          drawWaveform(ctx, cols, {
+            height,
+            colors: BAND_COLORS,
+            mono: state.mono ? MONO_COLOR : undefined,
+            rgb: state.rgb,
+            gain: WAVE_GAIN,
+            subpixel: dpr,
+            extents
+          })
+        // Switched-off pieces are laid down in a second pass with the colour
+        // filtered out, so their shape stays but they read as off.
+        const masks = selectClips ? disabledMasks(state.clips, from, to, width, height) : null
+        if (!masks) paint()
+        else {
+          ctx.save()
+          ctx.clip(masks.on)
+          paint()
+          ctx.restore()
+          ctx.save()
+          ctx.clip(masks.off)
+          ctx.filter = DISABLED_FILTER
+          paint()
+          ctx.restore()
+        }
       }
       if (state.loop?.active) {
         drawLoopRegion(ctx, state.loop.startSec, state.loop.endSec, from, to, width, height)
@@ -437,6 +481,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
             clipDragRef.current = {
               pointerId: event.pointerId,
               startX: event.clientX,
+              startY: event.clientY,
               clip: grabbed,
               width,
               span: state.span,
@@ -445,7 +490,9 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
               fromIndex: index,
               atIndex: index,
               overDeck: null,
-              overIndex: 0
+              overIndex: 0,
+              overHoleId: null,
+              overAtSec: 0
             }
             return
           }
@@ -476,8 +523,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const aim = useCallback(
     (held: ClipDrag, clientX: number, clientY: number): void => {
       const zone = zoneAt(clientX, clientY)
-      const over =
-        zone && zone.deck !== deckId && useDecks.getState().decks[zone.deck].trackId ? zone : null
+      const over = zone && zone.deck !== deckId ? zone : null
 
       if (over) {
         // The piece is on its way out, so the row it came from goes back to the
@@ -487,17 +533,32 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           held.atIndex = held.fromIndex
         }
         const clips = useDecks.getState().decks[over.deck].clips
-        const index = dropIndex(clips, held.clip.id, over.timeAt(clientX))
+        const at = over.timeAt(clientX)
+        // Empty room takes the piece where it was let go, rather than between
+        // two neighbours the way a row of pieces does.
+        const hole = clipAt(clips, at)
+        const into =
+          hole && hole.silent && hole.durationSec >= held.clip.durationSec ? hole : null
+        const index = dropIndex(clips, held.clip.id, at)
         let atSec = 0
         for (let i = 0; i < index; i++) atSec += clips[i].durationSec
         held.overDeck = over.deck
         held.overIndex = index
-        setDropMark({ deck: over.deck, atSec, index })
+        held.overHoleId = into ? into.id : null
+        held.overAtSec = into ? fillStartSec(into, at, held.clip.durationSec) : atSec
+        setDropMark({
+          deck: over.deck,
+          atSec: into ? fillStartSec(into, at, held.clip.durationSec) : atSec,
+          index,
+          durationSec: held.clip.durationSec,
+          holeId: into ? into.id : undefined
+        })
         return
       }
 
       if (held.overDeck !== null) {
         held.overDeck = null
+        held.overHoleId = null
         setDropMark(null)
       }
       // Rearrange the row as the hand crosses each neighbour, not on release.
@@ -523,7 +584,13 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       if (held && held.pointerId === event.pointerId) {
         if (held.cancelled) return
         if (!held.dragging) {
-          if (Math.abs(event.clientX - held.startX) <= CLICK_SLOP_PX) return
+          // Either direction: a piece taken to another row moves mostly down.
+          if (
+            Math.abs(event.clientX - held.startX) <= CLICK_SLOP_PX &&
+            Math.abs(event.clientY - held.startY) <= CLICK_SLOP_PX
+          ) {
+            return
+          }
           held.dragging = true
         }
         aim(held, event.clientX, event.clientY)
@@ -560,7 +627,12 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         // a release over its own row has nothing left to commit.
         if (!held.dragging) useDecks.getState().selectClip(deckId, held.clip.id)
         else if (!held.cancelled && held.overDeck) {
-          useDecks.getState().moveClipToDeck(deckId, held.clip.id, held.overDeck, held.overIndex)
+          useDecks
+            .getState()
+            .moveClipToDeck(deckId, held.clip.id, held.overDeck, held.overIndex, {
+              holeId: held.overHoleId,
+              atSec: held.overAtSec
+            })
         }
         return
       }

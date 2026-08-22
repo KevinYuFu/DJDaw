@@ -66,7 +66,12 @@ export type DeckCommand =
    * list means the whole file, straight through, which is what an uncut deck
    * sends.
    */
-  | { type: 'regions'; regions: RegionFrames[] }
+  | {
+      type: 'regions'
+      regions: RegionFrames[]
+      /** The row's own length, when it is longer than the audio on it. */
+      timelineFrames: number
+    }
   /**
    * Enter/leave scrub mode. While scrubbing the playhead chases `scrubTarget`
    * and the deck sounds it out, the way a CDJ platter does in search mode.

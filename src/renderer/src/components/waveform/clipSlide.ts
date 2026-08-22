@@ -51,6 +51,53 @@ export function beginSlide(
   return moved ? { from, startedAt: now } : null
 }
 
+/**
+ * The row as it looks with room opened at `index` for a piece `gapSec` long.
+ *
+ * What a row shows while a piece from somewhere else is held over it. Only
+ * `startSec` moves and no piece is added, so the slide animates it like any
+ * other rearrangement and the store is left alone until the drop.
+ */
+export function openGap(clips: readonly Clip[], index: number, gapSec: number): readonly Clip[] {
+  if (!(gapSec > 0)) return clips
+  // Room at the very end has nothing to push aside, so the row is unchanged.
+  const at = Math.max(0, Math.min(clips.length, index))
+  if (at >= clips.length) return clips
+  return clips.map((clip, i) => (i < at ? clip : { ...clip, startSec: clip.startSec + gapSec }))
+}
+
+/** What a row's last gap was built from, so it is rebuilt only when it moves. */
+export interface GapMemo {
+  from: readonly Clip[] | null
+  index: number
+  gapSec: number
+  row: readonly Clip[]
+}
+
+export function newGapMemo(): GapMemo {
+  return { from: null, index: -1, gapSec: 0, row: [] }
+}
+
+/**
+ * The row with room opened for a held piece, held steady between changes.
+ *
+ * The same array comes back until the gap moves, so whatever draws from it can
+ * tell one frame from the next by identity alone.
+ */
+export function rowWithGap(
+  memo: GapMemo,
+  clips: readonly Clip[],
+  index: number,
+  gapSec: number
+): readonly Clip[] {
+  if (memo.from === clips && memo.index === index && memo.gapSec === gapSec) return memo.row
+  memo.from = clips
+  memo.index = index
+  memo.gapSec = gapSec
+  memo.row = openGap(clips, index, gapSec)
+  return memo.row
+}
+
 /** Ease out: quick to leave, gentle to arrive. */
 function ease(t: number): number {
   return 1 - Math.pow(1 - t, 3)

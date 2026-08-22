@@ -61,6 +61,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Tab', action: 'Move the focus to the next deck' },
   { keys: 'Shift + Tab', action: 'Move the focus back one deck' },
   { keys: 'Cmd / Ctrl + E', action: 'Edit view: cut the track at the playhead' },
+  { keys: '0', action: 'Edit view: switch the picked clip off or back on' },
   { keys: 'Delete', action: 'Edit view: delete the picked clip, leaving a gap' },
   { keys: 'Shift + Delete', action: 'Edit view: delete it and close the gap' }
 ] as const
@@ -403,6 +404,11 @@ export function useKeyboard(): void {
 
         case 'ArrowRight':
           decks.beatJump(deck, 1)
+          break
+
+        case 'Digit0':
+          if (inEditView()) decks.toggleClipDisabled(deck)
+          else handled = false
           break
 
         case 'Delete':

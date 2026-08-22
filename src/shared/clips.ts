@@ -40,6 +40,13 @@ export interface Clip {
    * deleting it is what closes the row up.
    */
   silent?: boolean
+  /**
+   * Switched off: it keeps its place on the row and plays nothing.
+   *
+   * Unlike a hole it still holds audio and is drawn, greyed out, so it can be
+   * switched back on. Muting a piece to hear the row without it is the point.
+   */
+  disabled?: boolean
 }
 
 /**
@@ -166,6 +173,57 @@ let clipSeq = 0
 export function makeClipId(): string {
   clipSeq += 1
   return `c${clipSeq}`
+}
+
+/**
+ * How much of a hole is left in front of a piece dropped at `atSec`.
+ *
+ * A placement that would leave a sliver of a hole is nudged flush to that
+ * edge. Negative when the piece is longer than the hole.
+ */
+function leadInHole(hole: Clip, atSec: number, durationSec: number): number {
+  const room = hole.durationSec - durationSec
+  if (room < 0) return -1
+  const lead = Math.max(0, Math.min(room, atSec - hole.startSec))
+  if (lead < MIN_CLIP_SEC) return 0
+  if (room - lead < MIN_CLIP_SEC) return room
+  return lead
+}
+
+/**
+ * Drop a piece into a hole, keeping whatever time is left either side of it.
+ *
+ * A hole is empty room, so a piece dropped on one lands where it was let go
+ * rather than between two neighbours. The hole is cut around it and the row
+ * stays exactly as long as it was.
+ *
+ * Null when the piece is longer than the hole, which the caller takes as
+ * "this does not fit here".
+ */
+export function fillHole(
+  clips: readonly Clip[],
+  holeId: string,
+  atSec: number,
+  incoming: Clip
+): Clip[] | null {
+  const at = clips.findIndex((clip) => clip.id === holeId)
+  const hole = clips[at]
+  if (!hole || !hole.silent) return null
+  const lead = leadInHole(hole, atSec, incoming.durationSec)
+  if (lead < 0) return null
+  const trail = hole.durationSec - incoming.durationSec - lead
+
+  const pieces: Clip[] = []
+  if (lead > 0) pieces.push({ ...hole, durationSec: lead })
+  pieces.push(incoming)
+  if (trail > 0) pieces.push({ ...hole, id: makeClipId(), durationSec: trail })
+  return layOut([...clips.slice(0, at), ...pieces, ...clips.slice(at + 1)])
+}
+
+/** Where a piece dropped at `atSec` would start inside a hole. */
+export function fillStartSec(hole: Clip, atSec: number, durationSec: number): number {
+  const lead = leadInHole(hole, atSec, durationSec)
+  return hole.startSec + Math.max(0, lead)
 }
 
 /** The single clip a freshly loaded track starts as. */
@@ -378,7 +436,9 @@ export function moveClip(clips: readonly Clip[], id: string, toStartSec: number)
 /**
  * Playable regions in source order, for the audio engine.
  *
- * Zero-length clips are dropped so the engine never has to reason about them.
+ * Zero-length clips are dropped so the engine never has to reason about them,
+ * and so are holes and switched-off pieces: the row plays nothing for the time
+ * they take up.
  */
 export interface Region {
   /** Which audio to read. Left off, the row's own track. */
@@ -390,7 +450,7 @@ export interface Region {
 
 export function toRegions(clips: readonly Clip[]): Region[] {
   return sortClips(clips)
-    .filter((clip) => clip.durationSec > 0 && !clip.silent)
+    .filter((clip) => clip.durationSec > 0 && !clip.silent && !clip.disabled)
     .map((clip) => ({
       startSec: clip.startSec,
       durationSec: clip.durationSec,

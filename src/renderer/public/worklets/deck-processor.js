@@ -68,6 +68,8 @@ class DeckProcessor extends AudioWorkletProcessor {
     this.regions = []
     /** End of the last region: where the timeline, and playback, stops. */
     this.timelineFrames = 0
+    /** The row's own length, when it is longer than the audio on it. */
+    this.rowFrames = 0
     /** Region the playhead was last in, or -1 for a gap. Drives the splice. */
     this.regionIndex = -1
     /** Search hint, so finding the region under the playhead is not a scan. */
@@ -174,6 +176,7 @@ class DeckProcessor extends AudioWorkletProcessor {
         // A timeline belongs to the track it was cut from, so new audio starts
         // uncut. The renderer resends regions if the new track has any.
         this.regionList = []
+        this.rowFrames = 0
         this.rebuildRegions()
         this.port.postMessage({ type: 'loaded', frames: this.frames })
         break
@@ -205,6 +208,7 @@ class DeckProcessor extends AudioWorkletProcessor {
         const before = this.lastSrcPos
         const beforeId = this.lastSrcId
         this.regionList = Array.isArray(msg.regions) ? msg.regions : []
+        this.rowFrames = msg.timelineFrames > 0 ? msg.timelineFrames : 0
         this.rebuildRegions()
         // Re-cutting under a running playhead can move the source out from
         // under it — deleting the piece being played is the obvious case — so
@@ -313,8 +317,10 @@ class DeckProcessor extends AudioWorkletProcessor {
       ]
     } else this.regions = []
 
+    // A row whose tail plays nothing is still that long, so the length the
+    // renderer sent wins over the end of the last region.
     const last = this.regions[this.regions.length - 1]
-    this.timelineFrames = last ? last.endFrame : 0
+    this.timelineFrames = Math.max(this.rowFrames, last ? last.endFrame : 0)
     if (this.pos > this.timelineFrames) this.pos = this.timelineFrames
     this.regionCursor = 0
     this.syncRegion()

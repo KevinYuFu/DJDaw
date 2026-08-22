@@ -1152,6 +1152,44 @@ export function drawClipHighlight(
   }
 }
 
+/** How a switched-off piece is drawn: the colour taken out, and dimmer. */
+export const DISABLED_FILTER = 'grayscale(1) brightness(0.62)'
+
+/** The parts of the view the switched-off pieces cover, and the rest. */
+export interface ClipMasks {
+  on: Path2D
+  off: Path2D
+}
+
+/**
+ * Masks for drawing the switched-off pieces apart from the rest.
+ *
+ * Null when nothing is switched off, so the usual row is drawn in one pass
+ * with no clipping at all.
+ */
+export function disabledMasks(
+  clips: readonly Clip[],
+  from: number,
+  to: number,
+  width: number,
+  height: number
+): ClipMasks | null {
+  const span = to - from
+  if (!(span > 0) || width <= 0) return null
+  if (!clips.some((clip) => clip.disabled)) return null
+  const scale = width / span
+  const on = new Path2D()
+  const off = new Path2D()
+  for (const clip of clips) {
+    const x0 = Math.max((clip.startSec - from) * scale, 0)
+    const x1 = Math.min((clip.startSec + clip.durationSec - from) * scale, width)
+    if (x1 <= x0) continue
+    const into = clip.disabled ? off : on
+    into.rect(x0, 0, x1 - x0, height)
+  }
+  return { on, off }
+}
+
 /** Width of the line that shows where a piece dragged in from another row lands. */
 export const DROP_MARKER_WIDTH = 2
 const DROP_MARKER_COLOR = 'rgba(255,255,255,0.9)'

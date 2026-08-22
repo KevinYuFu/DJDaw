@@ -13,7 +13,8 @@ import type { DeckId } from '@shared/types'
 /** A strip a dragged piece can be dropped onto. */
 export interface DropZone {
   deck: DeckId
-  canvas: HTMLCanvasElement
+  /** Whatever the row draws on, or the empty panel it shows instead. */
+  canvas: HTMLElement
   /** Timeline seconds under a screen x. */
   timeAt(clientX: number): number
 }
@@ -47,6 +48,10 @@ export interface DropMark {
   atSec: number
   /** Place in that row's order. */
   index: number
+  /** How long the held piece is, so the row can open room the right size. */
+  durationSec: number
+  /** The hole it would drop into, when it is landing in empty room. */
+  holeId?: string
 }
 
 let mark: DropMark | null = null
