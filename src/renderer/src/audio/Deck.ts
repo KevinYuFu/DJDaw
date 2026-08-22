@@ -398,6 +398,10 @@ export class Deck {
   readonly id: DeckId
   readonly node: AudioWorkletNode
   readonly output: GainNode
+  /** The deck's own track. Regions that name nothing read from this. */
+  private mainSourceId = 'main'
+  /** Every source the worklet already holds, so audio is sent once. */
+  private sourceIds = new Set<string>(['main'])
 
   /** Length of the loaded audio in frames. 0 when the deck is empty. */
   frames = 0
@@ -464,7 +468,9 @@ export class Deck {
    * transferred, because transferring the views `getChannelData()` returns
    * would detach the AudioBuffer that analysis and export still need.
    */
-  load(buffer: AudioBuffer): void {
+  load(buffer: AudioBuffer, sourceId = 'main'): void {
+    this.mainSourceId = sourceId
+    this.sourceIds = new Set([sourceId])
     this.frames = buffer.length
     this.fileSampleRate = buffer.sampleRate
     this.sourceDurationSec = buffer.duration
@@ -489,6 +495,7 @@ export class Deck {
     this.post(
       {
         type: 'load',
+        id: sourceId,
         stems: [{ id: 'master', channels }],
         frames: buffer.length,
         sampleRate: buffer.sampleRate
@@ -496,6 +503,34 @@ export class Deck {
       transfer
     )
     this.emitState()
+  }
+
+  /**
+   * Hand the deck audio a piece brought with it from another row.
+   *
+   * Sent once per source: the same sample dropped here twice costs nothing the
+   * second time, and a five-minute file is fifty megabytes to copy.
+   */
+  addSource(sourceId: string, buffer: AudioBuffer): void {
+    if (this.sourceIds.has(sourceId)) return
+    this.sourceIds.add(sourceId)
+    const channelCount = Math.min(buffer.numberOfChannels, 2)
+    const channels: Float32Array[] = []
+    const transfer: ArrayBuffer[] = []
+    for (let c = 0; c < channelCount; c++) {
+      const copy = buffer.getChannelData(c).slice()
+      channels.push(copy)
+      transfer.push(copy.buffer)
+    }
+    this.post(
+      { type: 'addSource', id: sourceId, stems: [{ id: 'master', channels }], frames: buffer.length },
+      transfer
+    )
+  }
+
+  /** Whether this deck already holds a given source. */
+  hasSource(sourceId: string): boolean {
+    return this.sourceIds.has(sourceId)
   }
 
   /** Drop the audio and report an empty deck to every listener. */
@@ -632,7 +667,8 @@ export class Deck {
       .map((r) => ({
         startFrame: Math.round(r.startSec * sr),
         endFrame: Math.round((r.startSec + r.durationSec) * sr),
-        sourceOffsetFrame: Math.round(r.sourceOffsetSec * sr)
+        sourceOffsetFrame: Math.round(r.sourceOffsetSec * sr),
+        sourceId: r.sourceId ?? this.mainSourceId
       }))
       .filter((r) => r.endFrame > r.startFrame)
     // Timeline seconds, not file seconds: cutting a track changes how long the
@@ -641,6 +677,23 @@ export class Deck {
       ? this.timelineFrames() / sr
       : this.sourceDurationSec
     this.post({ type: 'regions', regions: this.regions })
+    this.dropUnusedSources()
+  }
+
+  /**
+   * Let go of audio no region reads any more.
+   *
+   * A piece carried onto this row brought a whole file with it; once it has
+   * been moved on or deleted, nothing here plays it and the audio thread has
+   * no reason to keep holding tens of megabytes.
+   */
+  private dropUnusedSources(): void {
+    for (const id of [...this.sourceIds]) {
+      if (id === this.mainSourceId) continue
+      if (this.regions.some((r) => r.sourceId === id)) continue
+      this.sourceIds.delete(id)
+      this.post({ type: 'dropSource', id })
+    }
   }
 
   /** Timeline length in frames: the end of the last region, else the file. */

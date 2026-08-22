@@ -214,6 +214,18 @@ export interface DecksState {
    * on release, so what the drop will do is what is already on screen.
    */
   reorderClipTo(deck: DeckId, clipId: string, index: number): void
+  /**
+   * Move a piece onto another row, at a place in that row's order.
+   *
+   * The piece keeps the audio it always played, so the row it lands on has to
+   * be handed that audio too. Where it came from is left a hole, because the
+   * pieces around it were placed against each other and pulling them together
+   * is a separate decision.
+   *
+   * Refused when the target row has no track: a row with nothing in it has no
+   * timeline to drop onto yet.
+   */
+  moveClipToDeck(from: DeckId, clipId: string, to: DeckId, index: number): void
   /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
   /** Move the channel fader. See {@link DeckState.fader}. */
   setFader(deck: DeckId, position: number): void
@@ -304,6 +316,44 @@ function perDeck<T>(make: () => T): Record<DeckId, T> {
 }
 
 const runtime: Record<DeckId, DeckRuntime> = perDeck(newRuntime)
+
+/**
+ * Decoded audio and its waveform, by source.
+ *
+ * A piece dragged onto another row still plays what it always played, and is
+ * still drawn — so neither the audio nor the envelope can belong to the deck
+ * the piece happens to be sitting on. Keyed by the track the audio came from,
+ * which is what a piece carries with it.
+ */
+const sourceAudio = new Map<string, AudioBuffer>()
+const sourceWaves = new Map<string, WaveformData>()
+
+/** The audio a piece plays, whichever row it has ended up on. */
+export function audioForSource(sourceId: string): AudioBuffer | null {
+  return sourceAudio.get(sourceId) ?? null
+}
+
+/** The envelope a piece is drawn from, whichever row it has ended up on. */
+export function waveForSource(sourceId: string): WaveformData | null {
+  return sourceWaves.get(sourceId) ?? null
+}
+
+/**
+ * Let go of audio no row is using.
+ *
+ * Decoded audio is tens of megabytes a track, so it cannot simply accumulate
+ * for every track the session has touched. A source stays while some row is
+ * loaded from it or has a piece that plays it.
+ */
+function pruneSources(): void {
+  const live = new Set<string>()
+  for (const deck of Object.values(useDecks.getState().decks)) {
+    if (deck.trackId) live.add(deck.trackId)
+    for (const clip of deck.clips) if (clip.sourceId) live.add(clip.sourceId)
+  }
+  for (const id of [...sourceAudio.keys()]) if (!live.has(id)) sourceAudio.delete(id)
+  for (const id of [...sourceWaves.keys()]) if (!live.has(id)) sourceWaves.delete(id)
+}
 
 function emptyDeck(): DeckState {
   return {
@@ -689,7 +739,7 @@ export const useDecks = create<DecksState>()(() => ({
       const buffer = await decodeTrack(engine.ctx, track.path)
       if (runtime[id].loadToken !== token) return
 
-      deck.load(buffer)
+      deck.load(buffer, trackId)
       audioLoaded = true
       deck.setRate(1 + useDecks.getState().decks[id].pitchPercent / 100)
       // Load from track start.
@@ -699,13 +749,15 @@ export const useDecks = create<DecksState>()(() => ({
       // One clip covering the whole file. The engine is told about it like any
       // other set of clips, so a never-cut deck and a cut one follow the same
       // path from here on.
-      const clips = [wholeTrackClip(buffer.duration)]
+      const clips = [wholeTrackClip(buffer.duration, trackId)]
+      sourceAudio.set(trackId, buffer)
       patchDeck(id, { buffer, clips, selectedClipId: null })
       deck.setRegions(toRegions(clips))
 
       const [waveform, grid] = await Promise.all([resolveWaveform(track, buffer), resolveGrid(id, track, buffer)])
       if (runtime[id].loadToken !== token) return
 
+      if (waveform) sourceWaves.set(trackId, waveform)
       patchDeck(id, { waveform, status: 'ready' })
 
       // Detecting a grid can have forked the track, so bookkeeping goes to
@@ -782,6 +834,7 @@ export const useDecks = create<DecksState>()(() => ({
       selectedClipId: null,
       eq
     })
+    pruneSources()
   },
 
   togglePlay(id) {
@@ -1154,6 +1207,34 @@ export const useDecks = create<DecksState>()(() => ({
     // and re-pushing the same regions would wake every subscriber for nothing.
     if (clips.every((clip, i) => clip.id === ctx.state.clips[i]?.id)) return
     setClips(ctx, clips, {})
+  },
+
+  moveClipToDeck(from, clipId, to, index) {
+    if (from === to) return
+    const src = context(from)
+    const dst = context(to)
+    if (!src || !dst) return
+    const moving = src.state.clips.find((c) => c.id === clipId)
+    if (!moving) return
+
+    // A hole plays nothing, so there is nothing to carry over with it.
+    let landing = moving
+    if (!moving.silent) {
+      const sourceId = moving.sourceId ?? src.state.trackId
+      const audio = sourceId ? sourceAudio.get(sourceId) : null
+      if (!sourceId || !audio) return
+      dst.deck.addSource(sourceId, audio)
+      // Pinned to the piece from here on: it has left the row whose track it
+      // came from, and nothing else says what it plays.
+      landing = { ...moving, sourceId }
+    }
+
+    // Out of the row it came from, leaving a hole unless it was at an end.
+    const gone = deleteSegment(src.state.clips, clipId)
+    setClips(src, gone.clips, { selectedClipId: gone.selectId })
+
+    const landed = reorderClip([...dst.state.clips, landing], landing.id, index)
+    setClips(dst, landed, { selectedClipId: landing.id })
   },
 
   moveClipTo(id, clipId, toStartSec) {

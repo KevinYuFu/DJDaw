@@ -212,7 +212,15 @@ export function buildClipColumns(
   sampleRate: number,
   reuse?: WaveformColumns | null,
   /** Draw on a grid fixed to the track rather than to the view. */
-  grid?: ColumnGrid
+  grid?: ColumnGrid,
+  /**
+   * The envelope for a piece that came from another row.
+   *
+   * A piece keeps playing its own audio wherever it is dropped, so it has to
+   * be drawn from its own envelope too — the row's would show whatever happens
+   * to sit at that offset in a different file.
+   */
+  waveFor?: (sourceId: string) => WaveformData | null
 ): WaveformColumns {
   const count = Math.max(1, Math.floor(width))
   const cols = columnsFor(count, reuse)
@@ -247,8 +255,12 @@ export function buildClipColumns(
     // cut does not shift the envelope by half a column.
     const s0 = clip.sourceOffsetSec + columnTime(c0) - clip.startSec
     const s1 = clip.sourceOffsetSec + columnTime(c1) - clip.startSec
+    // A piece that came from another row is drawn from its own envelope: the
+    // row's would show whatever happens to sit at that offset in a different
+    // file.
+    const envelope = (clip.sourceId && waveFor ? waveFor(clip.sourceId) : null) ?? wave
     fillColumns(
-      wave,
+      envelope,
       s0,
       s1,
       cols,
@@ -296,7 +308,9 @@ export function buildClipExtents(
   sampleRate: number,
   reuse?: ColumnExtents | null,
   /** See the same argument on {@link buildClipColumns}. */
-  grid?: ColumnGrid
+  grid?: ColumnGrid,
+  /** The audio for a piece that came from another row. */
+  channelsFor?: (sourceId: string) => readonly Float32Array[] | null
 ): ColumnExtents {
   const count = Math.max(1, Math.floor(width))
   const out =
@@ -314,7 +328,6 @@ export function buildClipExtents(
   const span = toSec - fromSec
   if (!(span > 0) || channels.length === 0 || !(sampleRate > 0)) return out
   const scale = count / span
-  const frames = channels[0].length
 
   for (const clip of clips) {
     if (clip.startSec >= toSec) break
@@ -329,6 +342,10 @@ export function buildClipExtents(
     const c0 = Math.round((t0 - fromSec) * scale)
     const c1 = Math.round((t1 - fromSec) * scale)
     if (c1 <= c0) continue
+
+    // A piece that came from another row reads its own audio, not the row's.
+    const own = (clip.sourceId && channelsFor ? channelsFor(clip.sourceId) : null) ?? channels
+    const frames = own.length > 0 ? own[0].length : 0
 
     const sourceAt = (col: number): number =>
       clip.sourceOffsetSec +
@@ -346,8 +363,8 @@ export function buildClipExtents(
       let lo = 0
       let hi = 0
       let sum = 0
-      for (let ch = 0; ch < channels.length; ch++) {
-        const data = channels[ch]
+      for (let ch = 0; ch < own.length; ch++) {
+        const data = own[ch]
         for (let i = i0; i < i1; i++) {
           const v = data[i]
           if (v < lo) lo = v
@@ -357,7 +374,7 @@ export function buildClipExtents(
       }
       out.min[c] = lo
       out.max[c] = hi
-      out.rms[c] = Math.sqrt(sum / ((i1 - i0) * channels.length))
+      out.rms[c] = Math.sqrt(sum / ((i1 - i0) * own.length))
     }
   }
   return out
@@ -1133,6 +1150,48 @@ export function drawClipHighlight(
     ctx.restore()
     return
   }
+}
+
+/** Width of the line that shows where a piece dragged in from another row lands. */
+export const DROP_MARKER_WIDTH = 2
+const DROP_MARKER_COLOR = 'rgba(255,255,255,0.9)'
+
+/**
+ * Where the drop line sits on a strip, or null when the point is not in view.
+ *
+ * A point at either end is nudged in far enough to be drawn whole; a point
+ * outside the window gets no line at all, rather than one pinned to the edge
+ * pointing at a moment that is not there.
+ */
+export function dropMarkerX(
+  atSec: number,
+  from: number,
+  to: number,
+  width: number
+): number | null {
+  const span = to - from
+  if (!(span > 0) || width <= 0 || !Number.isFinite(atSec)) return null
+  const half = DROP_MARKER_WIDTH / 2
+  const x = ((atSec - from) / span) * width
+  if (x < -half || x > width + half) return null
+  return Math.min(Math.max(x, half), width - half)
+}
+
+/** The line showing where a piece dragged in from another row would land. */
+export function drawDropMarker(
+  ctx: CanvasRenderingContext2D,
+  atSec: number,
+  from: number,
+  to: number,
+  width: number,
+  height: number
+): void {
+  const x = dropMarkerX(atSec, from, to, width)
+  if (x === null) return
+  ctx.save()
+  ctx.fillStyle = DROP_MARKER_COLOR
+  ctx.fillRect(x - DROP_MARKER_WIDTH / 2, 0, DROP_MARKER_WIDTH, height)
+  ctx.restore()
 }
 
 /**

@@ -26,11 +26,26 @@ export interface RegionFrames {
   startFrame: number
   endFrame: number
   sourceOffsetFrame: number
+  /**
+   * Which audio this piece reads from. Left off, it is the deck's own track.
+   *
+   * A piece cut from one row and dropped on another keeps playing its own
+   * audio, so a row is an arrangement of samples rather than a window onto a
+   * single file.
+   */
+  sourceId?: string
 }
 
 export type DeckCommand =
   /** Hand the deck its audio. Replaces anything already loaded. */
-  | { type: 'load'; stems: StemPayload[]; frames: number; sampleRate: number }
+  | { type: 'load'; id: string; stems: StemPayload[]; frames: number; sampleRate: number }
+  /**
+   * Audio a piece brought with it from another row. Never touches the
+   * playhead: the row it landed on is still playing.
+   */
+  | { type: 'addSource'; id: string; stems: StemPayload[]; frames: number }
+  /** Forget audio nothing on this row plays any more. */
+  | { type: 'dropSource'; id: string }
   | { type: 'unload' }
   /** Start playback from the current position. */
   | { type: 'play' }

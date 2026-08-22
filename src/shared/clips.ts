@@ -23,6 +23,14 @@ export interface Clip {
   /** Where inside the source file this piece begins. */
   sourceOffsetSec: number
   /**
+   * Which audio this piece plays. Left off, it is the row's own track.
+   *
+   * A piece dragged from one row to another keeps this, so it goes on playing
+   * what it always played: a row is an arrangement of samples rather than a
+   * window onto one file.
+   */
+  sourceId?: string
+  /**
    * A hole in the row: it takes up time and plays nothing.
    *
    * Deleting a piece from the middle of a row leaves one of these rather than
@@ -161,8 +169,14 @@ export function makeClipId(): string {
 }
 
 /** The single clip a freshly loaded track starts as. */
-export function wholeTrackClip(durationSec: number): Clip {
-  return { id: makeClipId(), startSec: 0, durationSec, sourceOffsetSec: 0 }
+export function wholeTrackClip(durationSec: number, sourceId?: string): Clip {
+  return {
+    id: makeClipId(),
+    startSec: 0,
+    durationSec,
+    sourceOffsetSec: 0,
+    sourceId
+  }
 }
 
 /** Timeline end of a clip. */
@@ -367,6 +381,8 @@ export function moveClip(clips: readonly Clip[], id: string, toStartSec: number)
  * Zero-length clips are dropped so the engine never has to reason about them.
  */
 export interface Region {
+  /** Which audio to read. Left off, the row's own track. */
+  sourceId?: string
   startSec: number
   durationSec: number
   sourceOffsetSec: number
@@ -378,6 +394,7 @@ export function toRegions(clips: readonly Clip[]): Region[] {
     .map((clip) => ({
       startSec: clip.startSec,
       durationSec: clip.durationSec,
-      sourceOffsetSec: clip.sourceOffsetSec
+      sourceOffsetSec: clip.sourceOffsetSec,
+      sourceId: clip.sourceId
     }))
 }
