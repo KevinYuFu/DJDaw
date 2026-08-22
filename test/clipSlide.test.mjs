@@ -9,7 +9,24 @@ const after = [c('a', 0, 1), c('c', 1, 3), c('b', 4, 2)]
 
 eq('nothing to slide when nothing moved', beginSlide(before, before, 0), null)
 eq('nor when a piece was added', beginSlide(before, [...before, c('d', 6, 1)], 0), null)
-eq('nor when a piece was removed', beginSlide(before, before.slice(1), 0), null)
+eq('nor when a piece is removed but nothing else moves', beginSlide(before, before.slice(1), 0), null)
+
+// Closing a hole: the pieces after it come inwards, and that is the whole
+// point of watching it happen.
+{
+  const closed = [c('a', 0, 1), c('c', 1, 3)]
+  const slide = beginSlide(before, closed, 0)
+  ok('losing a piece slides the rest inwards', slide !== null)
+  const mid = slideClips(closed, slide, SLIDE_MS / 2)
+  const moved = mid.clips.find((x) => x.id === 'c')
+  ok(`and part way it is between the two — ${moved.startSec.toFixed(2)}`, moved.startSec > 1 && moved.startSec < 3)
+  eq('arriving where it belongs', slideClips(closed, slide, SLIDE_MS).clips.map((x) => x.startSec).join(','), '0,1')
+}
+{
+  // Losing the piece off the front pulls everything left.
+  const shorter = [c('b', 0, 2), c('c', 2, 3)]
+  ok('losing the first piece slides too', beginSlide(before, shorter, 0) !== null)
+}
 eq('nor when the ids are different', beginSlide(before, [c('x', 0, 1), c('b', 1, 2), c('c', 3, 3)], 0), null)
 ok('a reordering does slide', beginSlide(before, after, 0) !== null)
 

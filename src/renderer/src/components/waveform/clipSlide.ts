@@ -10,8 +10,14 @@ import type { Clip } from '@shared/clips'
  * to say which one moved.
  */
 
-/** How long a piece takes to reach its new place, in ms. */
-export const SLIDE_MS = 170
+/**
+ * How long a piece takes to reach its new place, in ms.
+ *
+ * The one number for every movement a row makes — reordering, closing a hole,
+ * losing an end. Slow enough to be watched: an edit that happens between two
+ * frames leaves nobody any wiser about what it did.
+ */
+export const SLIDE_MS = 260
 
 export interface Slide {
   /** Where each piece was before the change. */
@@ -20,16 +26,20 @@ export interface Slide {
 }
 
 /**
- * A slide to run, or null when the change was not a reordering — a cut, a
- * delete or a fresh track all rearrange the row, and sliding those would be
- * pieces flying in from nowhere.
+ * A slide to run, or null when there is nothing to watch.
+ *
+ * Anything that only moves pieces the row already had slides: trading two of
+ * them over, closing a hole, losing the piece off one end. Anything that brings
+ * a piece the row did not have does not — a cut, a fresh track, or the hole a
+ * delete leaves behind are all new pieces, and sliding those would be shapes
+ * flying in from nowhere.
  */
 export function beginSlide(
   before: readonly Clip[],
   after: readonly Clip[],
   now: number
 ): Slide | null {
-  if (before.length !== after.length || before.length === 0) return null
+  if (before.length === 0 || after.length === 0) return null
   const from = new Map<string, number>()
   for (const clip of before) from.set(clip.id, clip.startSec)
   let moved = false
