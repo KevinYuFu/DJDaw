@@ -3,15 +3,17 @@ import { createPortal } from 'react-dom'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from 'react'
 import type { DeckId, ExportFormat } from '@shared/types'
 import { DECK_IDS } from '@shared/types'
-import { timelineDuration } from '@shared/clips'
+import type { Clip } from '@shared/clips'
+import { sourceIdsOf, timelineDuration } from '@shared/clips'
 import { encodeWav } from '@shared/wav'
 import { renderTimeline } from '@renderer/audio/render'
 import type { DeckRenderSpec } from '@renderer/audio/render'
-import { useDecks } from '@renderer/state/useDecks'
+import { audioForSource, useDecks } from '@renderer/state/useDecks'
 import type { DeckState } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import { EditTrack } from '@renderer/components/edit/EditTrack'
+import { ClipGhost } from '@renderer/components/waveform/ClipGhost'
 import './edit.css'
 
 /**
@@ -27,9 +29,9 @@ const CUT_FAILED = 'Cannot cut here'
 const NOTICE_MS = 1800
 
 /**
- * 24-bit, always. An export is the master Kevin takes back into rekordbox, so
- * the bounce is the last place to lose depth; MP3 is encoded from these bytes
- * in main, and giving ffmpeg the better input costs nothing.
+ * 24-bit, always. An export is a master, so the bounce is the last place to
+ * lose depth; MP3 is encoded from these bytes in main, and giving ffmpeg the
+ * better input costs nothing.
  */
 const BIT_DEPTH = 24
 
@@ -37,9 +39,9 @@ const BIT_DEPTH = 24
 const FALLBACK_NAME = 'DJDaw edit'
 
 /**
- * The likeliest MP3 failure by far, and "export failed" would send Kevin
- * looking in the wrong place. Main sends its own line too, which is kept
- * underneath this one.
+ * The likeliest MP3 failure by far, and "export failed" would send anyone
+ * looking in the wrong place. Main sends its own line too, kept underneath
+ * this one.
  */
 const FFMPEG_MISSING = 'MP3 needs ffmpeg, and it was not found. Export WAV instead, or install ffmpeg.'
 
@@ -83,13 +85,29 @@ function useExportableDecks(): string {
  * performance mixer, and this view has none — the file is the edit, not the
  * mix position it was last heard at.
  */
+/** The audio for every piece on a row that came from somewhere else. */
+function sourcesFor(clips: readonly Clip[]): Map<string, AudioBuffer> {
+  const out = new Map<string, AudioBuffer>()
+  for (const id of sourceIdsOf(clips)) {
+    const buffer = audioForSource(id)
+    if (buffer) out.set(id, buffer)
+  }
+  return out
+}
+
 function buildSpecs(ids: readonly DeckId[]): DeckRenderSpec[] {
   const { decks } = useDecks.getState()
   const specs: DeckRenderSpec[] = []
   for (const id of ids) {
     const state = decks[id]
     if (!state.buffer || !isExportable(state)) continue
-    specs.push({ buffer: state.buffer, clips: state.clips, eq: state.eq })
+    specs.push({
+      buffer: state.buffer,
+      sourceId: state.trackId ?? undefined,
+      sources: sourcesFor(state.clips),
+      clips: state.clips,
+      eq: state.eq
+    })
   }
   return specs
 }
@@ -487,6 +505,8 @@ export function EditView(): ReactElement {
       {DECK_IDS.map((id) => (
         <EditTrack key={id} deckId={id} />
       ))}
+
+      <ClipGhost />
 
       {exportOpen ? (
         <ExportPanel loaded={loaded} onClose={() => setExportOpen(false)} />

@@ -41,8 +41,19 @@ function hermite(y0, y1, y2, y3, t) {
 class DeckProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super()
-    /** @type {{ id: string, gain: number, channels: Float32Array[] }[]} */
-    this.stems = []
+    /**
+     * The audio this deck can play, by id.
+     *
+     * More than one, because a piece cut from one track can be dropped onto
+     * another and has to keep playing its own audio: a row is an arrangement
+     * of samples, not a window onto a single file. Each source keeps its own
+     * stems, which stays the axis stem separation will use.
+     *
+     * @type {Map<string, { frames: number, stems: { id: string, gain: number, channels: Float32Array[] }[] }>}
+     */
+    this.sources = new Map()
+    /** The deck's own track: what an uncut row plays. */
+    this.mainSourceId = null
     this.frames = 0
     this.srcRate = sampleRate
 
@@ -57,6 +68,8 @@ class DeckProcessor extends AudioWorkletProcessor {
     this.regions = []
     /** End of the last region: where the timeline, and playback, stops. */
     this.timelineFrames = 0
+    /** The row's own length, when it is longer than the audio on it. */
+    this.rowFrames = 0
     /** Region the playhead was last in, or -1 for a gap. Drives the splice. */
     this.regionIndex = -1
     /** Search hint, so finding the region under the playhead is not a scan. */
@@ -90,6 +103,10 @@ class DeckProcessor extends AudioWorkletProcessor {
     // audio keeps reading the piece it was in even after the playhead has left.
     this.spliceLeft = 0
     this.splicePos = 0
+    /** Which source the outgoing side of a splice is reading. */
+    this.spliceSrcId = null
+    /** Which source the playhead was last reading. */
+    this.lastSrcId = null
     this.spliceRate = 0
 
     this.loopEnabled = false
@@ -117,12 +134,24 @@ class DeckProcessor extends AudioWorkletProcessor {
       if (init.stems) {
         this.onCommand({
           type: 'load',
+          id: init.sourceId,
           stems: init.stems,
           frames: init.frames,
           sampleRate: init.sampleRate
         })
       }
-      if (init.regions) this.onCommand({ type: 'regions', regions: init.regions })
+      if (Array.isArray(init.sources)) {
+        for (const src of init.sources) {
+          this.onCommand({ type: 'addSource', id: src.id, stems: src.stems, frames: src.frames })
+        }
+      }
+      if (init.regions) {
+        this.onCommand({
+          type: 'regions',
+          regions: init.regions,
+          timelineFrames: init.timelineFrames || 0
+        })
+      }
       if (typeof init.reportInterval === 'number') {
         this.onCommand({ type: 'reportInterval', quanta: init.reportInterval })
       }
@@ -133,7 +162,13 @@ class DeckProcessor extends AudioWorkletProcessor {
   onCommand(msg) {
     switch (msg.type) {
       case 'load': {
-        this.stems = msg.stems.map((s) => ({ id: s.id, gain: 1, channels: s.channels }))
+        const id = msg.id || 'main'
+        this.sources.clear()
+        this.sources.set(id, {
+          frames: msg.frames,
+          stems: msg.stems.map((s) => ({ id: s.id, gain: 1, channels: s.channels }))
+        })
+        this.mainSourceId = id
         this.frames = msg.frames
         this.srcRate = msg.sampleRate || sampleRate
         this.pos = 0
@@ -147,12 +182,27 @@ class DeckProcessor extends AudioWorkletProcessor {
         // A timeline belongs to the track it was cut from, so new audio starts
         // uncut. The renderer resends regions if the new track has any.
         this.regionList = []
+        this.rowFrames = 0
         this.rebuildRegions()
         this.port.postMessage({ type: 'loaded', frames: this.frames })
         break
       }
+      case 'addSource': {
+        // Audio a piece dropped here brought with it. Never touches the
+        // playhead: the row it landed on is still playing.
+        if (!msg.id || !Array.isArray(msg.stems)) break
+        this.sources.set(msg.id, {
+          frames: msg.frames,
+          stems: msg.stems.map((s) => ({ id: s.id, gain: 1, channels: s.channels }))
+        })
+        break
+      }
+      case 'dropSource':
+        if (msg.id && msg.id !== this.mainSourceId) this.sources.delete(msg.id)
+        break
       case 'unload':
-        this.stems = []
+        this.sources.clear()
+        this.mainSourceId = null
         this.frames = 0
         this.pos = 0
         this.playing = false
@@ -162,13 +212,16 @@ class DeckProcessor extends AudioWorkletProcessor {
         break
       case 'regions': {
         const before = this.lastSrcPos
+        const beforeId = this.lastSrcId
         this.regionList = Array.isArray(msg.regions) ? msg.regions : []
+        this.rowFrames = msg.timelineFrames > 0 ? msg.timelineFrames : 0
         this.rebuildRegions()
         // Re-cutting under a running playhead can move the source out from
         // under it — deleting the piece being played is the obvious case — so
         // splice from wherever it was reading a moment ago.
         if (this.env > 0.001 && this.lastSrcPos !== before) {
           this.splicePos = before
+          this.spliceSrcId = beforeId
           this.spliceRate = this.currentRate()
           this.spliceLeft = SPLICE_FRAMES
         }
@@ -204,7 +257,8 @@ class DeckProcessor extends AudioWorkletProcessor {
         this.gainTarget = msg.gain
         break
       case 'stemGain': {
-        const stem = this.stems.find((s) => s.id === msg.id)
+        const main = this.sources.get(this.mainSourceId)
+        const stem = main && main.stems.find((s) => s.id === msg.id)
         if (stem) stem.gain = msg.gain
         break
       }
@@ -251,13 +305,28 @@ class DeckProcessor extends AudioWorkletProcessor {
     const sent = this.regionList
       .filter((r) => r.endFrame > r.startFrame)
       .sort((a, b) => a.startFrame - b.startFrame)
-    if (sent.length > 0) this.regions = sent
-    else if (this.frames > 0) {
-      this.regions = [{ startFrame: 0, endFrame: this.frames, sourceOffsetFrame: 0 }]
+    if (sent.length > 0) {
+      this.regions = sent.map((r) => ({
+        startFrame: r.startFrame,
+        endFrame: r.endFrame,
+        sourceOffsetFrame: r.sourceOffsetFrame,
+        sourceId: r.sourceId || this.mainSourceId
+      }))
+    } else if (this.frames > 0) {
+      this.regions = [
+        {
+          startFrame: 0,
+          endFrame: this.frames,
+          sourceOffsetFrame: 0,
+          sourceId: this.mainSourceId
+        }
+      ]
     } else this.regions = []
 
+    // A row whose tail plays nothing is still that long, so the length the
+    // renderer sent wins over the end of the last region.
     const last = this.regions[this.regions.length - 1]
-    this.timelineFrames = last ? last.endFrame : 0
+    this.timelineFrames = Math.max(this.rowFrames, last ? last.endFrame : 0)
     if (this.pos > this.timelineFrames) this.pos = this.timelineFrames
     this.regionCursor = 0
     this.syncRegion()
@@ -290,10 +359,17 @@ class DeckProcessor extends AudioWorkletProcessor {
     return r.sourceOffsetFrame + (pos - r.startFrame)
   }
 
+  /** Which source a timeline position reads from, or null when it is a gap. */
+  sourceIdOf(index) {
+    if (index < 0) return null
+    return this.regions[index].sourceId
+  }
+
   /** Re-seat the region state on the current playhead without arming a splice. */
   syncRegion() {
     this.regionIndex = this.resolveRegion(this.pos)
     this.lastSrcPos = this.sourceOf(this.regionIndex, this.pos)
+    this.lastSrcId = this.sourceIdOf(this.regionIndex)
   }
 
   /**
@@ -310,6 +386,9 @@ class DeckProcessor extends AudioWorkletProcessor {
       if (this.env > 0.001) {
         const step = this.currentRate()
         this.splicePos = this.lastSrcPos === null ? null : this.lastSrcPos + step
+        // The outgoing side keeps reading whatever it was reading, which after
+        // a piece from another track is not the same audio as the incoming.
+        this.spliceSrcId = this.lastSrcId
         this.spliceRate = step
         this.spliceLeft = SPLICE_FRAMES
       }
@@ -317,6 +396,7 @@ class DeckProcessor extends AudioWorkletProcessor {
     }
     const src = this.sourceOf(index, this.pos)
     this.lastSrcPos = src
+    this.lastSrcId = this.sourceIdOf(index)
     return src
   }
 
@@ -325,6 +405,7 @@ class DeckProcessor extends AudioWorkletProcessor {
     const target = Math.max(0, Math.min(this.timelineFrames, frame))
     if (this.env > 0.001) {
       this.splicePos = this.lastSrcPos
+      this.spliceSrcId = this.lastSrcId
       this.spliceRate = this.currentRate()
       this.spliceLeft = SPLICE_FRAMES
     }
@@ -345,9 +426,9 @@ class DeckProcessor extends AudioWorkletProcessor {
   }
 
   /** One interpolated sample of one stem channel at a fractional source frame. */
-  readChannel(data, pos) {
+  readChannel(data, pos, frames) {
     const i = Math.floor(pos)
-    if (i < 0 || i >= this.frames) return 0
+    if (i < 0 || i >= frames) return 0
     const t = pos - i
     const n = data.length
     const y0 = i - 1 >= 0 ? data[i - 1] : data[0]
@@ -357,17 +438,22 @@ class DeckProcessor extends AudioWorkletProcessor {
     return hermite(y0, y1, y2, y3, t)
   }
 
-  /** Sum every stem at a source frame into `out` (a 2-slot scratch array). */
-  mixAt(pos, out) {
+  /** Sum one source's stems at a source frame into `out` (a 2-slot scratch). */
+  mixAt(sourceId, pos, out) {
+    out[0] = 0
+    out[1] = 0
+    const source = sourceId === null ? undefined : this.sources.get(sourceId)
+    if (!source) return
+    const stems = source.stems
     let l = 0
     let r = 0
-    for (let s = 0; s < this.stems.length; s++) {
-      const stem = this.stems[s]
+    for (let s = 0; s < stems.length; s++) {
+      const stem = stems[s]
       const g = stem.gain
       if (g === 0) continue
       const ch = stem.channels
-      const sl = this.readChannel(ch[0], pos)
-      const sr = ch.length > 1 ? this.readChannel(ch[1], pos) : sl
+      const sl = this.readChannel(ch[0], pos, source.frames)
+      const sr = ch.length > 1 ? this.readChannel(ch[1], pos, source.frames) : sl
       l += sl * g
       r += sr * g
     }
@@ -381,7 +467,7 @@ class DeckProcessor extends AudioWorkletProcessor {
     const right = out.length > 1 ? out[1] : out[0]
     const n = left.length
 
-    if (this.stems.length === 0 || this.frames === 0) {
+    if (this.sources.size === 0 || this.frames === 0) {
       left.fill(0)
       if (right !== left) right.fill(0)
       return true
@@ -414,7 +500,7 @@ class DeckProcessor extends AudioWorkletProcessor {
         // keeps moving, so a deleted piece is a hole rather than a stop.
         const src = this.sourceUnderPlayhead()
         if (src !== null) {
-          this.mixAt(src, scratch)
+          this.mixAt(this.lastSrcId, src, scratch)
           l = scratch[0]
           r = scratch[1]
         }
@@ -425,7 +511,7 @@ class DeckProcessor extends AudioWorkletProcessor {
           const fadeIn = Math.sin(t * Math.PI * 0.5)
           const fadeOut = Math.cos(t * Math.PI * 0.5)
           if (this.splicePos !== null) {
-            this.mixAt(this.splicePos, spliceScratch)
+            this.mixAt(this.spliceSrcId, this.splicePos, spliceScratch)
             l = l * fadeIn + spliceScratch[0] * fadeOut
             r = r * fadeIn + spliceScratch[1] * fadeOut
             this.splicePos += this.spliceRate
@@ -456,6 +542,7 @@ class DeckProcessor extends AudioWorkletProcessor {
           const len = this.loopEnd - this.loopStart
           if (this.pos >= this.loopEnd || this.pos < this.loopStart) {
             this.splicePos = this.lastSrcPos === null ? null : this.lastSrcPos + step
+            this.spliceSrcId = this.lastSrcId
             this.spliceRate = step
             this.spliceLeft = SPLICE_FRAMES
             // Wrap by modulo rather than by subtracting one loop length. A

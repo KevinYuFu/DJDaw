@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, WheelEvent as ReactWheelEvent } from 'react'
 import type { Clip } from '@shared/clips'
 import type { ColumnExtents } from '@renderer/components/waveform/waveformRender'
-import { clipAt, dropIndex } from '@shared/clips'
+import { clipAt } from '@shared/clips'
 import { beginSlide, slideClips } from '@renderer/components/waveform/clipSlide'
 import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { BeatGrid, DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
@@ -11,7 +11,18 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
 import { BAND_COLORS, WAVE_ZOOM_LEVELS } from '@renderer/core/constants'
 import { clamp } from '@renderer/core/format'
-import { useDecks } from '@renderer/state/useDecks'
+import { audioForSource, useDecks, waveForSource } from '@renderer/state/useDecks'
+import { registerDropZone, zoneAt } from './dropZones'
+import {
+  aimInRow,
+  clipDrag,
+  grabFraction,
+  dropLineFor,
+  newDragRowMemo,
+  rowForDrag,
+  rowWithout,
+  setClipDrag
+} from './clipDrag'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import {
@@ -26,7 +37,10 @@ import {
   drawClipEdges,
   DEFAULT_CLIP_STYLE,
   drawClipHighlight,
+  disabledMasks,
+  DISABLED_FILTER,
   drawCueMarkers,
+  drawDropMarker,
   drawLocators,
   drawLoopRegion,
   drawPlayhead,
@@ -91,23 +105,39 @@ const NO_LOCATORS: readonly MemoryCue[] = []
  * {@link CLICK_SLOP_PX} it is still a click, so nothing has moved and the
  * release can still select instead.
  */
-interface ClipDrag {
+interface HeldClip {
   pointerId: number
   startX: number
+  startY: number
   clip: Clip
   /** Geometry at press time, so a resize mid-drag cannot skew the maths. */
   width: number
+  height: number
   span: number
+  /** How far along the piece it was taken hold of, 0 at its start, 1 at its end. */
+  grab: number
   dragging: boolean
   /** Escape gives the drag up but keeps the gesture, so the release tidies up. */
   cancelled: boolean
-  /** Where the piece sat before any of this, to put it back on Escape. */
-  fromIndex: number
-  /** Where it sits now, so the row is only rearranged when that changes. */
-  atIndex: number
 }
 
-
+/**
+ * The audio a piece from another row plays, as plain channel arrays.
+ *
+ * Cached: `getChannelData` is not free to call sixty times a second, and a row
+ * can be carrying pieces from several files at once.
+ */
+const foreignChannels = new Map<string, readonly Float32Array[]>()
+function channelsForSource(sourceId: string): readonly Float32Array[] | null {
+  const cached = foreignChannels.get(sourceId)
+  if (cached) return cached
+  const buffer = audioForSource(sourceId)
+  if (!buffer) return null
+  const channels: Float32Array[] = []
+  for (let c = 0; c < buffer.numberOfChannels; c++) channels.push(buffer.getChannelData(c))
+  foreignChannels.set(sourceId, channels)
+  return channels
+}
 
 /** Pointer travel below this is a click, above it a scrub. */
 const CLICK_SLOP_PX = 3
@@ -143,8 +173,10 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const boxRef = useRef({ width: 0, height: 0 })
   const extentsRef = useRef<ColumnExtents | null>(null)
-  const clipDragRef = useRef<ClipDrag | null>(null)
+  const clipDragRef = useRef<HeldClip | null>(null)
   const slideRef = useRef<Slide | null>(null)
+  const gapRef = useRef(newDragRowMemo())
+  const shownRef = useRef<readonly Clip[]>(NO_CLIPS)
   const columnsRef = useRef<WaveformColumns | null>(null)
   const dirtyRef = useRef(true)
   const dragRef = useRef<{
@@ -197,11 +229,6 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   // No dependency list: this is the one place the slow-changing store values
   // cross into the render loop, and it must run after every render.
   useEffect(() => {
-    const before = frameRef.current.clips
-    if (before !== clips) {
-      const slide = beginSlide(before, clips, performance.now())
-      if (slide) slideRef.current = slide
-    }
     frameRef.current = {
       // `deck()` throws until the engine has initialised, which `ready` implies.
       deck: status === 'ready' ? AudioEngine.shared().deck(deckId) : null,
@@ -238,11 +265,38 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
     return () => observer.disconnect()
   }, [])
 
+  // A strip that goes away mid-drag takes the drag with it: left published, it
+  // would keep every other row showing a drop that is never coming.
+  useEffect(() => {
+    if (!selectClips) return
+    return () => {
+      const held = clipDrag()
+      if (held && held.fromDeck === deckId) setClipDrag(null)
+    }
+  }, [deckId, selectClips])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !selectClips) return
+    return registerDropZone({
+      deck: deckId,
+      canvas,
+      timeAt: (clientX) => {
+        const rect = canvas.getBoundingClientRect()
+        const { width } = boxRef.current
+        const { deck, span } = frameRef.current
+        if (!deck || width <= 0) return 0
+        return deck.positionSeconds() + (clientX - rect.left - width / 2) * (span / width)
+      }
+    })
+  }, [deckId, selectClips])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     let raf = 0
     let lastPosition = Number.NaN
+    let lastMark = -1
 
     const frame = (): void => {
       raf = requestAnimationFrame(frame)
@@ -250,22 +304,43 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       if (width <= 0 || height <= 0) return
       const dpr = window.devicePixelRatio || 1
       const settled = frameRef.current
-      let state = settled
-      if (slideRef.current) {
-        const { clips: sliding, done } = slideClips(
-          settled.clips,
-          slideRef.current,
-          performance.now()
-        )
-        if (done) slideRef.current = null
-        else {
-          state = { ...settled, clips: sliding }
-          dirtyRef.current = true
-        }
+      const now = performance.now()
+
+      // Room for a piece held over this row from another one. It is drawn, not
+      // stored: nothing about the row changes until the piece is let go.
+      const lineSec = selectClips ? dropLineFor(deckId) : null
+      const target = selectClips
+        ? rowForDrag(gapRef.current, deckId, settled.clips)
+        : settled.clips
+      // Every movement a row makes goes through here: reordering, closing a
+      // hole, opening room for a piece. Starting from where the pieces are
+      // being drawn rather than where they were headed keeps a slide that is
+      // interrupted by another from jumping.
+      if (target !== shownRef.current) {
+        const seen = slideRef.current
+          ? slideClips(shownRef.current, slideRef.current, now).clips
+          : shownRef.current
+        slideRef.current = beginSlide(seen, target, now)
+        shownRef.current = target
+        dirtyRef.current = true
       }
+      let drawn = target
+      if (slideRef.current) {
+        const { clips: sliding, done } = slideClips(target, slideRef.current, now)
+        // The frame a slide finishes on is the first one showing where the
+        // pieces actually are, so it has to be drawn like any other.
+        dirtyRef.current = true
+        if (done) slideRef.current = null
+        else drawn = sliding
+      }
+      const state = drawn === settled.clips ? settled : { ...settled, clips: drawn }
 
       const position = state.deck ? state.deck.positionSeconds() : 0
       const pxPerSecond = width / state.span
+      const markSec = lineSec ?? -1
+      if (markSec !== lastMark) dirtyRef.current = true
+      lastMark = markSec
+
       const resized = canvasNeedsResize(canvas, width, height, dpr)
       const moved = Math.abs(position - lastPosition) * pxPerSecond
       if (!dirtyRef.current && !resized && moved < MIN_PLAYHEAD_STEP_PX) return
@@ -314,7 +389,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           columns,
           state.waveform.sampleRate,
           columnsRef.current,
-          grid
+          grid,
+          waveForSource
         )
         columnsRef.current = cols
         // Reading samples is only worth it while a column covers few enough of
@@ -331,19 +407,36 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
                 columns,
                 state.waveform.sampleRate,
                 extentsRef.current,
-                grid
+                grid,
+                channelsForSource
               )
             : null
         extentsRef.current = extents
-        drawWaveform(ctx, cols, {
-          height,
-          colors: BAND_COLORS,
-          mono: state.mono ? MONO_COLOR : undefined,
-          rgb: state.rgb,
-          gain: WAVE_GAIN,
-          subpixel: dpr,
-          extents
-        })
+        const paint = (): void =>
+          drawWaveform(ctx, cols, {
+            height,
+            colors: BAND_COLORS,
+            mono: state.mono ? MONO_COLOR : undefined,
+            rgb: state.rgb,
+            gain: WAVE_GAIN,
+            subpixel: dpr,
+            extents
+          })
+        // Switched-off pieces are laid down in a second pass with the colour
+        // filtered out, so their shape stays but they read as off.
+        const masks = selectClips ? disabledMasks(state.clips, from, to, width, height) : null
+        if (!masks) paint()
+        else {
+          ctx.save()
+          ctx.clip(masks.on)
+          paint()
+          ctx.restore()
+          ctx.save()
+          ctx.clip(masks.off)
+          ctx.filter = DISABLED_FILTER
+          paint()
+          ctx.restore()
+        }
       }
       if (state.loop?.active) {
         drawLoopRegion(ctx, state.loop.startSec, state.loop.endSec, from, to, width, height)
@@ -354,12 +447,13 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       drawLocators(ctx, state.locators, from, to, width, height, DETAIL_LOCATOR_STYLE)
       drawCueMarkers(ctx, state.hotCues, state.cuePoint, from, to, width, height, DETAIL_CUE_STYLE)
       drawClipEdges(ctx, state.clips, state.selectedClipId, from, to, width, height)
+      if (lineSec !== null) drawDropMarker(ctx, lineSec, from, to, width, height)
       drawPlayhead(ctx, width / 2, height)
     }
 
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [deckId, selectClips])
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>): void => {
@@ -381,20 +475,22 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           const grabbed = clipAt(state.clips, at)
           if (grabbed) {
             event.currentTarget.setPointerCapture(event.pointerId)
-            const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
             // Mark the piece rather than the pointer: the row rearranges under
             // the hand, so the highlight has to travel with the piece.
             useDecks.getState().selectClip(deckId, grabbed.id)
+            const perSec = width / state.span
+            const left = rect.left + width / 2 + (grabbed.startSec - centre) * perSec
             clipDragRef.current = {
               pointerId: event.pointerId,
               startX: event.clientX,
+              startY: event.clientY,
               clip: grabbed,
               width,
+              height: rect.height,
               span: state.span,
+              grab: grabFraction(event.clientX - left, grabbed.durationSec * perSec),
               dragging: false,
-              cancelled: false,
-              fromIndex: index,
-              atIndex: index
+              cancelled: false
             }
             return
           }
@@ -415,34 +511,63 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
     [selectClips]
   )
 
+  /**
+   * Point the drag at whatever is under the hand, and say so.
+   *
+   * The same answer whether the hand is over the row the piece came from or
+   * another one: the piece comes out of the order, and the row it is over says
+   * where it would go back in. Nothing is written until the hand opens.
+   */
+  const aim = useCallback(
+    (held: HeldClip, clientX: number, clientY: number): void => {
+      const zone = zoneAt(clientX, clientY)
+      const decks = useDecks.getState().decks
+      const ghost = {
+        clip: held.clip,
+        x: clientX,
+        y: clientY,
+        grab: held.grab,
+        width: Math.min((held.clip.durationSec / held.span) * held.width, held.width),
+        height: held.height
+      }
+      // Empty room has no audio to carry, so a row with nothing in it is not
+      // somewhere it can go.
+      const usable =
+        zone && (zone.deck === deckId || !held.clip.silent || decks[zone.deck].trackId)
+      if (!zone || !usable) {
+        setClipDrag({ fromDeck: deckId, toDeck: null, index: 0, holeId: null, atSec: 0, ...ghost })
+        return
+      }
+      const ownRow = zone.deck === deckId
+      const row = ownRow ? rowWithout(decks[deckId].clips, held.clip.id) : decks[zone.deck].clips
+      const at = aimInRow(row, held.clip, zone.timeAt(clientX), !ownRow)
+      setClipDrag({ fromDeck: deckId, toDeck: zone.deck, ...at, ...ghost })
+    },
+    [deckId]
+  )
+
   const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>): void => {
       const held = clipDragRef.current
       if (held && held.pointerId === event.pointerId) {
         if (held.cancelled) return
         if (!held.dragging) {
-          if (Math.abs(event.clientX - held.startX) <= CLICK_SLOP_PX) return
+          // Either direction: a piece taken to another row moves mostly down.
+          if (
+            Math.abs(event.clientX - held.startX) <= CLICK_SLOP_PX &&
+            Math.abs(event.clientY - held.startY) <= CLICK_SLOP_PX
+          ) {
+            return
+          }
           held.dragging = true
         }
-        const moved = Math.max(
-          0,
-          held.clip.startSec + ((event.clientX - held.startX) * held.span) / held.width
-        )
-        // Rearrange the row as the hand crosses each neighbour, not on release.
-        // The neighbours slide out of the way while the piece is still held, so
-        // what the drop will do is already on screen and can be dragged back.
-        const clips = useDecks.getState().decks[deckId].clips
-        const to = dropIndex(clips, held.clip.id, moved)
-        if (to !== held.atIndex) {
-          held.atIndex = to
-          useDecks.getState().reorderClipTo(deckId, held.clip.id, to)
-        }
+        aim(held, event.clientX, event.clientY)
         dirtyRef.current = true
         return
       }
       onScrubMove(event)
     },
-    [deckId]
+    [aim]
   )
 
   const onScrubMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>): void => {
@@ -461,13 +586,21 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       if (held && held.pointerId === event.pointerId) {
         clipDragRef.current = null
         dirtyRef.current = true
+        const drag = clipDrag()
+        setClipDrag(null)
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
         }
         // A press that went nowhere is a click on the handle, which picks the
-        // piece rather than moving it. The row has already been rearranged, so
-        // a release has nothing left to commit.
+        // piece rather than moving it.
         if (!held.dragging) useDecks.getState().selectClip(deckId, held.clip.id)
+        else if (!held.cancelled && drag && drag.toDeck) {
+          useDecks.getState().dropClip(deckId, held.clip.id, drag.toDeck, {
+            index: drag.index,
+            holeId: drag.holeId,
+            atSec: drag.atSec
+          })
+        }
         return
       }
 
@@ -505,10 +638,7 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       const held = clipDragRef.current
       if (!held || !held.dragging || held.cancelled) return
       held.cancelled = true
-      // Put it back where it was picked up, since the row has been rearranging
-      // all the way along.
-      useDecks.getState().reorderClipTo(deckId, held.clip.id, held.fromIndex)
-      held.atIndex = held.fromIndex
+      setClipDrag(null)
       dirtyRef.current = true
     }
     window.addEventListener('keydown', onKeyDown)

@@ -1,5 +1,5 @@
 import type { Clip } from '@shared/clips'
-import { timelineDuration, toRegions } from '@shared/clips'
+import { sourceIdsOf, timelineDuration, toRegions } from '@shared/clips'
 import { flatChannel } from '@shared/eq'
 import { applyChannelStrip, createChannelStrip } from '@renderer/audio/Deck'
 import type { ChannelEq, EqMode } from '@shared/eq'
@@ -35,6 +35,15 @@ import {
 export interface DeckRenderSpec {
   /** The decoded source file. Not modified: its channel data is copied. */
   buffer: AudioBuffer
+  /** Which file that is, so a piece carried from another row names its own. */
+  sourceId?: string
+  /**
+   * The audio for pieces carried in from other rows, by source.
+   *
+   * A row is an arrangement of samples, so what it plays is not all one file
+   * and the bounce has to be handed every file it reads from.
+   */
+  sources?: ReadonlyMap<string, AudioBuffer>
   /** The pieces this deck plays, in timeline order. Empty means the whole file. */
   clips: readonly Clip[]
   /** Trim, three-band EQ and filter positions. Defaults to flat. */
@@ -98,9 +107,33 @@ function regionFrames(spec: DeckRenderSpec): RegionFrames[] {
     .map((r) => ({
       startFrame: Math.round(r.startSec * sr),
       endFrame: Math.round((r.startSec + r.durationSec) * sr),
-      sourceOffsetFrame: Math.round(r.sourceOffsetSec * sr)
+      sourceOffsetFrame: Math.round(r.sourceOffsetSec * sr),
+      sourceId: r.sourceId
     }))
     .filter((r) => r.endFrame > r.startFrame)
+}
+
+/** Channel copies of one file, for handing to a worklet. */
+function stemsOf(buffer: AudioBuffer): Array<{ id: string; channels: Float32Array[] }> {
+  const count = Math.min(buffer.numberOfChannels, RENDER_CHANNELS)
+  const channels: Float32Array[] = []
+  for (let c = 0; c < count; c++) channels.push(buffer.getChannelData(c).slice())
+  return [{ id: 'master', channels }]
+}
+
+/** The files a row's pieces read from, other than its own. */
+function carriedSources(
+  spec: DeckRenderSpec
+): Array<{ id: string; stems: ReturnType<typeof stemsOf>; frames: number }> {
+  const out: Array<{ id: string; stems: ReturnType<typeof stemsOf>; frames: number }> = []
+  if (!spec.sources) return out
+  for (const id of sourceIdsOf(spec.clips)) {
+    if (id === spec.sourceId) continue
+    const buffer = spec.sources.get(id)
+    if (!buffer) continue
+    out.push({ id, stems: stemsOf(buffer), frames: buffer.length })
+  }
+  return out
 }
 
 /**
@@ -112,9 +145,7 @@ function buildDeck(ctx: OfflineAudioContext, spec: DeckRenderSpec, mode: EqMode)
   // Copies, always. `getChannelData` hands back a view onto the AudioBuffer's
   // own memory, and handing that over would risk the buffer the live decks and
   // the waveforms are still using.
-  const channelCount = Math.min(spec.buffer.numberOfChannels, RENDER_CHANNELS)
-  const channels: Float32Array[] = []
-  for (let c = 0; c < channelCount; c++) channels.push(spec.buffer.getChannelData(c).slice())
+  const stems = stemsOf(spec.buffer)
 
   // Everything the processor needs goes through processorOptions, NOT the
   // port. An offline context renders as fast as it can while port messages are
@@ -127,10 +158,13 @@ function buildDeck(ctx: OfflineAudioContext, spec: DeckRenderSpec, mode: EqMode)
     numberOfOutputs: 1,
     outputChannelCount: [RENDER_CHANNELS],
     processorOptions: {
-      stems: [{ id: 'master', channels }],
+      sourceId: spec.sourceId,
+      stems,
       frames: spec.buffer.length,
       sampleRate: spec.buffer.sampleRate,
+      sources: carriedSources(spec),
       regions: regionFrames(spec),
+      timelineFrames: Math.round(deckDurationSec(spec) * spec.buffer.sampleRate),
       reportInterval: NO_STATE_REPORTS,
       playing: true
     }

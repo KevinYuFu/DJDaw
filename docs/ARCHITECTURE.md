@@ -343,6 +343,7 @@ Deck A unshifted, deck B with the right-hand cluster. `Shift` modifies.
 | `-` / `=` | Waveform zoom out / in |
 | `←` / `→` | Nudge the playhead by one beat |
 | `Tab` | Switch the focused deck |
+| `0` | Edit view: switch the picked clip off or back on |
 
 Text inputs must swallow these — check `event.target` before handling.
 
