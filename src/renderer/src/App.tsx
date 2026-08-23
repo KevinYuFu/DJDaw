@@ -18,6 +18,7 @@ import { Browser } from '@renderer/components/browser/Browser'
 import { analyzeTrackOffDeck } from '@renderer/components/browser/TrackTable'
 import { Deck } from '@renderer/components/deck/Deck'
 import { EditView } from '@renderer/components/edit/EditView'
+import { EditV2View } from '@renderer/components/editv2/EditV2View'
 import { Mixer } from '@renderer/components/Mixer'
 import { Toolbar } from '@renderer/components/Toolbar'
 import { clamp } from '@renderer/core/format'
@@ -62,6 +63,10 @@ const EDIT_ROW_H = 126
 const VIEW_HEIGHTS: Record<ViewName, { min: number; preferred: number }> = {
   performance: { min: 360, preferred: DECK_CHROME_H + DEFAULT_WAVE_H },
   edit: {
+    min: EDIT_CHROME_H + 4 * EDIT_ROW_MIN_H,
+    preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
+  },
+  editv2: {
     min: EDIT_CHROME_H + 4 * EDIT_ROW_MIN_H,
     preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
   }
@@ -283,7 +288,11 @@ export function App(): ReactElement {
     <div className={classes.join(' ')} style={layout}>
       <Toolbar />
 
-      {view === 'edit' ? (
+      {view === 'editv2' ? (
+        <main className="edit-area">
+          <EditV2View />
+        </main>
+      ) : view === 'edit' ? (
         <main className="edit-area">
           <EditView />
         </main>

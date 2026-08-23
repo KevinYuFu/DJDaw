@@ -224,6 +224,16 @@ export function Toolbar(): ReactElement {
         >
           EDIT
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'editv2'}
+          className={view === 'editv2' ? 'active' : undefined}
+          title="Four tracks stacked, for building an edit"
+          onClick={() => setView('editv2')}
+        >
+          EDIT V2
+        </button>
       </div>
 
       <div className="toolbar__spacer" />

@@ -16,9 +16,9 @@ export type WaveformColorMode = '3band' | 'rgb' | 'mono'
 
 /**
  * Which view is on screen. `performance` is the two-deck rekordbox layout;
- * `edit` stacks four tracks for building an edit.
+ * `edit` and `editv2` each stack four tracks for building an edit.
  */
-export type ViewName = 'performance' | 'edit'
+export type ViewName = 'performance' | 'edit' | 'editv2'
 
 /**
  * The decks a view shows. Focus and `Tab` stay inside this set, so the
@@ -26,7 +26,7 @@ export type ViewName = 'performance' | 'edit'
  * could not see they were controlling.
  */
 function decksInView(view: ViewName): readonly DeckId[] {
-  return view === 'edit' ? DECK_IDS : DECK_IDS.slice(0, 2)
+  return view === 'edit' || view === 'editv2' ? DECK_IDS : DECK_IDS.slice(0, 2)
 }
 
 /** App-wide preferences, persisted to localStorage. */

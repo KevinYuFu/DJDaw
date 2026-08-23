@@ -133,7 +133,8 @@ function focusedDeck(): DeckId {
 
 /** Whether the editing view is on screen, which is the only place clips exist. */
 function inEditView(): boolean {
-  return useSettings.getState().view === 'edit'
+  const view = useSettings.getState().view
+  return view === 'edit' || view === 'editv2'
 }
 
 /**
