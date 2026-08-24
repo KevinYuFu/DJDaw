@@ -17,6 +17,7 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { Browser } from '@renderer/components/browser/Browser'
 import { analyzeTrackOffDeck } from '@renderer/components/browser/TrackTable'
 import { Deck } from '@renderer/components/deck/Deck'
+import { Busy } from '@renderer/components/Busy'
 import { EditView } from '@renderer/components/edit/EditView'
 import { EditV2View } from '@renderer/components/editv2/EditV2View'
 import { Mixer } from '@renderer/components/Mixer'
@@ -287,6 +288,7 @@ export function App(): ReactElement {
   return (
     <div className={classes.join(' ')} style={layout}>
       <Toolbar />
+      <Busy />
 
       {view === 'editv2' ? (
         <main className="edit-area">

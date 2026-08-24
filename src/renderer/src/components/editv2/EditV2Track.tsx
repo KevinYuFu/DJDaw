@@ -337,8 +337,6 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
   // A boolean, not the knobs themselves: this only has to re-render the row
   // when the channel crosses between flat and not, which is rare.
   const eqOn = useDecks((s) => !isFlat(s.decks[deckId].eq))
-  const warping = useEditV2((s) => Boolean(s.warping[deckId]))
-
   // A track that has just landed is warped onto the master tempo, or names it
   // when it is the first one here.
   useEffect(() => {
@@ -498,7 +496,6 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
         {status === 'ready' ? (
           <>
             <DetailWaveform deckId={deckId} selectClips />
-            {warping ? <span className="v2-edit-note v2-edit-warp">Warping…</span> : null}
           </>
         ) : (
           <div className="v2-edit-track__empty">

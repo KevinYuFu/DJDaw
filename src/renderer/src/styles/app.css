@@ -736,3 +736,45 @@
   outline: none;
   border-color: var(--accent);
 }
+
+/* Something is happening: a thin bar along the bottom edge, in the middle.
+   Quiet enough to miss unless it is being looked for. */
+.busy {
+  position: fixed;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.busy__bar {
+  width: 38%;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--text-faint);
+  opacity: 0.55;
+  animation: busy-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes busy-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(263%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy__bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
+}

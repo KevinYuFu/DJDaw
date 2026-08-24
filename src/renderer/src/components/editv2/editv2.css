@@ -761,10 +761,3 @@
   color: var(--text-dim);
 }
 
-/* Shown on a row while its audio is being warped onto the master tempo. */
-.v2-edit-warp {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  z-index: 2;
-}

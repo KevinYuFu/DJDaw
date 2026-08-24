@@ -111,3 +111,33 @@ const rms = (x, from = 0.2, to = 0.8) => {
   ok(`a four minute 175 track keeps its ${beatsBefore} beats at 150 — ${beatsAfter.toFixed(1)}`,
     Math.abs(beatsAfter - beatsBefore) < 0.01)
 }
+
+// --- a stereo file goes through in one pass -------------------------------
+{
+  // Both channels ride through the same transforms, so the two have to come
+  // out exactly as they would have done one at a time.
+  const left = tone(440, 2, 0.5)
+  const right = tone(660, 2, 0.3)
+  const factor = 175 / 150
+  const [pl, pr] = stretchChannels([left, right], factor)
+  const sl = stretchChannel(left, factor)
+  const sr = stretchChannel(right, factor)
+  eq('both come out the right length', `${pl.length},${pr.length}`, `${sl.length},${sr.length}`)
+
+  const diff = (a, b) => {
+    let worst = 0
+    const from = Math.floor(a.length * 0.2)
+    const to = Math.floor(a.length * 0.8)
+    for (let i = from; i < to; i++) worst = Math.max(worst, Math.abs(a[i] - b[i]))
+    return worst
+  }
+  ok(`the left channel matches doing it alone — worst ${diff(pl, sl).toFixed(5)}`, diff(pl, sl) < 0.002)
+  ok(`and the right one does too — worst ${diff(pr, sr).toFixed(5)}`, diff(pr, sr) < 0.002)
+  ok(`the two channels stay apart — left ${pitchOf(pl).toFixed(0)}Hz, right ${pitchOf(pr).toFixed(0)}Hz`,
+    Math.abs(pitchOf(pl) - 440) / 440 < 0.02 && Math.abs(pitchOf(pr) - 660) / 660 < 0.02)
+  ok(`and keep their own levels — ${rms(pl).toFixed(3)} and ${rms(pr).toFixed(3)}`,
+    Math.abs(rms(pl) - rms(left)) / rms(left) < 0.1 && Math.abs(rms(pr) - rms(right)) / rms(right) < 0.1)
+
+  eq('a mono file still goes through on its own', stretchChannels([left], factor).length, 1)
+  eq('and so does anything that is not a pair', stretchChannels([left, right, left], factor).length, 3)
+}
