@@ -108,6 +108,18 @@ for the performance view.
 If a library already does the job, use it. Something already built and
 maintained beats anything written here. Check before writing.
 
+## Testing must not disturb Kevin
+
+He is working on the same machine. Tests run around him, not over him.
+
+- **Silence the output.** Set the master to 0 and tap the meter upstream of
+  it. The signal is still there to measure; the speakers are not.
+- **Never steal focus.** Dispatch key events into the page instead of through
+  the OS. They reach the app with the window unfocused.
+- Screenshots and anything about drawing need the window rendering. Try
+  `Page.setWebLifecycleState('active')` first; only ask him to bring the app
+  forward if that fails, and say why.
+
 ## Save every rule Kevin gives me
 
 When Kevin gives me an instruction about how to work, I add it to this file
