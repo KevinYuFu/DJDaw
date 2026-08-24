@@ -7,7 +7,8 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { ArrangementEngine } from '@renderer/audio/ArrangementEngine'
 import { decodeTrack } from '@renderer/audio/decode'
 import { playbackRate } from '@renderer/analysis/playbackRate'
-import { resolveWaveform } from '@renderer/analysis/waveformCache'
+import { placeClip } from '@renderer/arrangement/placement'
+import { peekWaveform, resolveWaveform } from '@renderer/analysis/waveformCache'
 import { WorkletPlayout, type ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
 import { useLibrary } from '@renderer/state/useLibrary'
 
@@ -44,6 +45,22 @@ export interface ClipSelection {
   clipId: string
 }
 
+/**
+ * What is about to be dropped, drawn where it will land.
+ *
+ * In the store rather than the lane that draws it, because it is a promise
+ * about what a drop will do and has to be checkable against what the drop
+ * actually did.
+ */
+export interface DropPreview {
+  lane: string
+  sourceId: string
+  startSample: number
+  durationSamples: number
+  offsetSamples: number
+  rate: number
+}
+
 /** A lane's channel knobs, which the timeline library does not model. */
 export interface LaneChannel {
   eq: ChannelEq
@@ -52,6 +69,11 @@ export interface LaneChannel {
 
 export interface ArrangementState {
   ready: boolean
+  /**
+   * Frames per second of the engine's clock. Every clip position is in these,
+   * so anything drawing one has to convert with this and not a guess.
+   */
+  sampleRate: number
   /** The grid everything is warped onto. */
   masterBpm: number
   /** Mirror of the library's tracks, for rendering. */
@@ -68,6 +90,8 @@ export interface ArrangementState {
   channels: Record<string, LaneChannel>
   /** The clip CUT and DELETE act on, or null when nothing is picked. */
   selection: ClipSelection | null
+  /** The clip about to be dropped, and the lane it will land on. */
+  preview: DropPreview | null
 
   init(): Promise<void>
   /** Lay a library track into a lane, warped onto the grid. */
@@ -75,7 +99,16 @@ export interface ArrangementState {
   moveClip(lane: string, clipId: string, deltaSeconds: number): void
   splitClip(lane: string, clipId: string, atSeconds: number): void
   removeClip(lane: string, clipId: string): void
+  /** Peaks for a track that is not loaded, so a preview of it can be drawn. */
+  ensurePeaks(trackId: string): Promise<void>
   select(selection: ClipSelection | null): void
+  setPreview(preview: DropPreview | null): void
+  /**
+   * Length of a track's audio in frames: the decoded file once it is here, the
+   * library's reading of it before that. The preview needs a number before
+   * anything has been decoded, and this is the same one the drop will use.
+   */
+  sourceFrames(trackId: string): number
   /** Delete the picked clip. Does nothing when nothing is picked. */
   removeSelected(): void
   /** Cut the picked clip at the playhead. */
@@ -143,6 +176,7 @@ function inheritSource(lane: ClipTrack, source: ArrangementClip): ClipTrack {
 
 export const useArrangement = create<ArrangementState>()((set, get) => ({
   ready: false,
+  sampleRate: 48000,
   masterBpm: 120,
   lanes: [],
   version: 0,
@@ -152,6 +186,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   waveforms: {},
   channels: {},
   selection: null,
+  preview: null,
 
   async init() {
     if (engine) return
@@ -183,6 +218,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     for (const lane of lanes) channels[lane.id] = { eq: flatChannel(), mode: 'eq' }
 
     engine.setTracks(lanes)
+    set({ sampleRate: ArrangementEngine.shared().sampleRate })
     engine.on('statechange', (state) => {
       set({
         lanes: state.tracks,
@@ -225,30 +261,26 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     if (empty && trackBpm(track) > 0) get().setMasterBpm(trackBpm(track))
 
     const sr = ArrangementEngine.shared().sampleRate
-    const masterBpm = get().masterBpm
-    const rate = rateFor(track, masterBpm)
-
-    // The clip is placed so the track's first downbeat lands on the drop point,
-    // which is what puts it in phase with everything else on the grid. The
-    // intro before that downbeat keeps its place ahead of the clip, the way it
-    // does in a DAW, and is trimmed off only where it would run before zero.
-    const introFrames = (downbeatSec(track) * sr) / rate
-    const wholeFrames = buffer.length / rate
-    const dropFrame = Math.max(0, Math.round(atSeconds * sr))
-    const startSample = Math.max(0, Math.round(dropFrame - introFrames))
-    const offsetSamples = Math.round(Math.max(0, introFrames - dropFrame))
+    const placed = placeClip({
+      sourceFrames: buffer.length,
+      downbeatSec: downbeatSec(track),
+      trackBpm: trackBpm(track),
+      masterBpm: get().masterBpm,
+      atSeconds,
+      sampleRate: sr
+    })
 
     const clip: ArrangementClip = {
       ...createClip({
-        startSample,
-        durationSamples: Math.max(1, Math.round(wholeFrames - offsetSamples)),
-        offsetSamples,
+        startSample: placed.startSample,
+        durationSamples: placed.durationSamples,
+        offsetSamples: placed.offsetSamples,
         sampleRate: sr,
-        sourceDurationSamples: Math.round(wholeFrames),
+        sourceDurationSamples: placed.sourceDurationSamples,
         name: track.title
       }),
       sourceId: trackId,
-      rate
+      rate: placed.rate
     }
 
     const existing = laneById(playlist.getState().tracks, lane)
@@ -285,8 +317,29 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     if (picked && picked.lane === lane && picked.clipId === clipId) set({ selection: null })
   },
 
+  async ensurePeaks(trackId) {
+    if (get().waveforms[trackId]) return
+    const track = useLibrary.getState().trackById(trackId)
+    if (!track) return
+    const peaks = await peekWaveform(track.audioKey)
+    if (peaks && !get().waveforms[trackId]) {
+      set({ waveforms: { ...get().waveforms, [trackId]: peaks } })
+    }
+  },
+
   select(selection) {
     set({ selection })
+  },
+
+  setPreview(preview) {
+    set({ preview })
+  },
+
+  sourceFrames(trackId) {
+    const loaded = sources.get(trackId)
+    if (loaded) return loaded.length
+    const track = useLibrary.getState().trackById(trackId)
+    return Math.max(0, Math.round((track?.durationSec ?? 0) * get().sampleRate))
   },
 
   removeSelected() {

@@ -108,6 +108,21 @@ for the performance view.
 If a library already does the job, use it. Something already built and
 maintained beats anything written here. Check before writing.
 
+## The picture must match what happens
+
+Whatever the UI shows is what the app must do. If they disagree, one of them
+is wrong and it has to be fixed — never left.
+
+This cuts both ways:
+
+- If the app puts a clip where the cursor is, the UI must show it landing
+  there, not highlight the whole lane.
+- If the UI shows something landing somewhere, that is where it must land.
+
+So a preview is not decoration. It is a promise, and it has to be drawn from
+the same numbers the real thing uses — not from a second copy of the maths that
+can drift.
+
 ## Testing must not disturb Kevin
 
 He is working on the same machine. Tests run around him, not over him.

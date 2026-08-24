@@ -4,7 +4,7 @@ import { DECK_IDS } from '@shared/types'
 import type { DeckId, Track } from '@shared/types'
 import { describeDecks } from '@shared/deckList'
 import { formatBpm, formatDuration } from '@renderer/core/format'
-import { TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
+import { beginTrackDrag, endTrackDrag, TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
 import { makeGrid } from '@renderer/core/beatgrid'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { decodeTrack } from '@renderer/audio/decode'
@@ -267,7 +267,9 @@ const TrackRow = memo(function TrackRow({
       onDragStart={(event) => {
         event.dataTransfer.setData(TRACK_DRAG_MIME, track.id)
         event.dataTransfer.effectAllowed = 'copy'
+        beginTrackDrag(track.id)
       }}
+      onDragEnd={endTrackDrag}
     >
       <span className="tt-art-cell">
         {track.artwork ? (

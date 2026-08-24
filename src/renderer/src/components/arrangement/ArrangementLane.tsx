@@ -1,13 +1,18 @@
-import { useRef, useState, type DragEvent, type PointerEvent, type ReactElement } from 'react'
+import { useRef, type DragEvent, type PointerEvent, type ReactElement } from 'react'
 import type { ClipTrack } from '@waveform-playlist/core'
 import { flatChannel } from '@shared/eq'
 import { faderGain, faderPositionForDb } from '@shared/fader'
-import { TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
+import { draggedTrackId, TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
 import { ChannelFader, ChannelKnobs } from '@renderer/components/mixer/ChannelKnobs'
 import { useSettings } from '@renderer/state/useSettings'
 import { useArrangement, type ClipSelection } from '@renderer/state/useArrangement'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
-import { ArrangementClips } from '@renderer/components/arrangement/ArrangementClips'
+import {
+  ArrangementClips,
+  type ClipGhost
+} from '@renderer/components/arrangement/ArrangementClips'
+import { placeClip } from '@renderer/arrangement/placement'
+import { useLibrary } from '@renderer/state/useLibrary'
 
 /** How far a pointer moves before a click on a clip becomes a drag. */
 const DRAG_SLOP_PX = 3
@@ -56,7 +61,8 @@ export function ArrangementLane({
 }: ArrangementLaneProps): ReactElement {
   const eqMode = useSettings((s) => s.eqMode)
   const channel = useArrangement((s) => s.channels[lane.id])
-  const [over, setOver] = useState(false)
+  const sampleRate = useArrangement((s) => s.sampleRate)
+  const preview = useArrangement((s) => s.preview)
   const drag = useRef<{
     pointerId: number
     clipId: string
@@ -66,7 +72,6 @@ export function ArrangementLane({
   } | null>(null)
   const stripRef = useRef<HTMLDivElement>(null)
 
-  const sampleRate = 48000
   const snap = (sec: number): number => Math.max(0, Math.round(sec / barSec) * barSec)
   const secAt = (clientX: number): number => {
     const box = stripRef.current?.getBoundingClientRect()
@@ -114,16 +119,41 @@ export function ArrangementLane({
     drag.current = null
   }
 
+  /**
+   * Draw the clip where it is going to land, at the size it is going to be.
+   *
+   * From the same placement the drop itself uses, so the shape under the
+   * cursor is a promise rather than a hint.
+   */
   const onDragOver = (e: DragEvent<HTMLDivElement>): void => {
     if (!e.dataTransfer.types.includes(TRACK_DRAG_MIME)) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
-    setOver(true)
+    const trackId = draggedTrackId()
+    const track = trackId ? useLibrary.getState().trackById(trackId) : undefined
+    if (!trackId || !track) return
+
+    const arrangement = useArrangement.getState()
+    void arrangement.ensurePeaks(trackId)
+    const own = track.grid?.anchors?.[0]?.bpm ?? track.bpm ?? 0
+    // Dropping into an empty arrangement sets the grid to this track, so the
+    // preview has to show it unwarped, exactly as the drop will place it.
+    const empty = arrangement.lanes.every((l) => l.clips.length === 0)
+    const masterBpm = empty && own > 0 ? own : arrangement.masterBpm
+    const placed = placeClip({
+      sourceFrames: arrangement.sourceFrames(trackId),
+      downbeatSec: track.grid?.anchors?.[0]?.time ?? 0,
+      trackBpm: own,
+      masterBpm,
+      atSeconds: snap(secAt(e.clientX)),
+      sampleRate
+    })
+    arrangement.setPreview({ lane: lane.id, sourceId: trackId, ...placed })
   }
 
   const onDrop = (e: DragEvent<HTMLDivElement>): void => {
     const trackId = e.dataTransfer.getData(TRACK_DRAG_MIME)
-    setOver(false)
+    useArrangement.getState().setPreview(null)
     if (!trackId) return
     e.preventDefault()
     void useArrangement.getState().dropTrack(lane.id, trackId, snap(secAt(e.clientX)))
@@ -131,6 +161,7 @@ export function ArrangementLane({
 
   const knobs = channel ?? { eq: flatChannel(), mode: eqMode }
   const laneSelected = selected?.lane === lane.id ? selected.clipId : null
+  const ghost: ClipGhost | null = preview?.lane === lane.id ? preview : null
 
   return (
     <section className={`arr-lane${lane.soloed ? ' is-soloed' : ''}`} data-lane={lane.name}>
@@ -163,13 +194,13 @@ export function ArrangementLane({
 
       <div
         ref={stripRef}
-        className={`arr-lane__strip${over ? ' is-over' : ''}`}
+        className="arr-lane__strip"
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
         onDragOver={onDragOver}
-        onDragLeave={() => setOver(false)}
+        onDragLeave={() => useArrangement.getState().setPreview(null)}
         onDrop={onDrop}
       >
         <ArrangementClips
@@ -179,8 +210,9 @@ export function ArrangementLane({
           width={width}
           height={height}
           selectedClipId={laneSelected}
+          ghost={ghost}
         />
-        {lane.clips.length === 0 ? (
+        {lane.clips.length === 0 && !ghost ? (
           <span className="arr-lane__empty">Drag a track here</span>
         ) : null}
       </div>

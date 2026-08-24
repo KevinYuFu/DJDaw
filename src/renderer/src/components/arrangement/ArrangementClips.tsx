@@ -15,6 +15,15 @@ import {
 /** Height of the clip's title strip, above the waveform. */
 const HEADER_H = 14
 
+/** A clip about to be dropped, drawn where it will actually land. */
+export interface ClipGhost {
+  sourceId: string
+  startSample: number
+  durationSamples: number
+  offsetSamples: number
+  rate: number
+}
+
 export interface ArrangementClipsProps {
   lane: ClipTrack
   /** Arrangement seconds at the left edge of the strip. */
@@ -24,6 +33,7 @@ export interface ArrangementClipsProps {
   height: number
   width: number
   selectedClipId: string | null
+  ghost: ClipGhost | null
 }
 
 /** Where a clip reads from its source file, in file seconds. */
@@ -63,7 +73,8 @@ export function ArrangementClips({
   secPerPx,
   height,
   width,
-  selectedClipId
+  selectedClipId,
+  ghost
 }: ArrangementClipsProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const columnsRef = useRef<WaveformColumns | null>(null)
@@ -72,6 +83,7 @@ export function ArrangementClips({
   const waveforms = useArrangement((s) => s.waveforms)
   const tracks = useLibrary((s) => s.tracks)
   const colorMode = useSettings((s) => s.waveformColorMode)
+  const sampleRate = useArrangement((s) => s.sampleRate)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -86,18 +98,16 @@ export function ArrangementClips({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
 
-    const sampleRate = 48000
-    for (const raw of lane.clips) {
-      const clip = raw as ArrangementClip
+    const paint = (clip: ArrangementClip, selected: boolean, preview: boolean): void => {
       const startSec = clip.startSample / sampleRate
       const lengthSec = clip.durationSamples / sampleRate
       const x = Math.round((startSec - fromSec) / secPerPx)
       const px = Math.max(1, Math.round(lengthSec / secPerPx))
-      if (x > w || x + px < 0) continue
+      if (x > w || x + px < 0) return
 
-      const selected = clip.id === selectedClipId
       const track = tracks[clip.sourceId]
       const wave = waveforms[clip.sourceId]
+      if (preview) ctx.globalAlpha = 0.5
 
       ctx.save()
       ctx.beginPath()
@@ -147,10 +157,37 @@ export function ArrangementClips({
       ctx.textBaseline = 'middle'
       ctx.fillText(clip.name ?? track?.title ?? 'Clip', x + 5, HEADER_H / 2 + 0.5)
 
-      ctx.strokeStyle = selected ? 'rgba(160, 195, 255, 0.95)' : 'rgba(150, 170, 200, 0.45)'
-      ctx.lineWidth = selected ? 2 : 1
+      if (preview) {
+        // Dashed, so it reads as a place rather than a thing that is there.
+        ctx.strokeStyle = 'rgba(190, 215, 255, 0.95)'
+        ctx.lineWidth = 2
+        ctx.setLineDash([5, 3])
+      } else {
+        ctx.strokeStyle = selected ? 'rgba(160, 195, 255, 0.95)' : 'rgba(150, 170, 200, 0.45)'
+        ctx.lineWidth = selected ? 2 : 1
+      }
       ctx.strokeRect(x + 0.5, 0.5, px - 1, h - 1)
       ctx.restore()
+      ctx.globalAlpha = 1
+    }
+
+    for (const raw of lane.clips) {
+      const clip = raw as ArrangementClip
+      paint(clip, clip.id === selectedClipId, false)
+    }
+    if (ghost) {
+      paint(
+        {
+          ...(ghost as unknown as ArrangementClip),
+          id: 'ghost',
+          sampleRate,
+          sourceDurationSamples: ghost.durationSamples + ghost.offsetSamples,
+          gain: 1,
+          name: tracks[ghost.sourceId]?.title
+        },
+        false,
+        true
+      )
     }
   }, [
     lane,
@@ -159,6 +196,8 @@ export function ArrangementClips({
     width,
     height,
     selectedClipId,
+    ghost,
+    sampleRate,
     version,
     masterBpm,
     waveforms,
