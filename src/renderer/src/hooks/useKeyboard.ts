@@ -63,7 +63,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Tab', action: 'Move the focus to the next deck' },
   { keys: 'Shift + Tab', action: 'Move the focus back one deck' },
   { keys: 'Cmd / Ctrl + E', action: 'Edit view: cut the track at the playhead' },
-  { keys: 'Delete', action: 'Edit view: delete the picked clip, leaving a gap' },
+  { keys: 'Delete', action: 'Edit and V3: delete the picked clip' },
   { keys: 'Shift + Delete', action: 'Edit view: delete it and close the gap' }
 ] as const
 
@@ -252,7 +252,7 @@ function isBound(code: string): boolean {
   if (hotCueIndex(code) !== null) return true
   // Held down in the performance view these are not ours, so they must reach
   // the browser rather than being quietly eaten on every repeat.
-  if (code === 'Delete' || code === 'Backspace') return inEditView()
+  if (code === 'Delete' || code === 'Backspace') return inEditView() || inArrangement()
   return (
     REPEATABLE.has(code) ||
     code === 'Space' ||
@@ -426,7 +426,8 @@ export function useKeyboard(): void {
         case 'Backspace':
           // Shift closes the gap the deleted clip leaves; on its own the gap
           // stays and plays as silence.
-          if (inEditView()) decks.deleteSelectedClip(deck)
+          if (inArrangement()) useArrangement.getState().removeSelected()
+          else if (inEditView()) decks.deleteSelectedClip(deck)
           else handled = false
           break
 

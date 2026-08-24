@@ -38,6 +38,12 @@ function laneId(index: number): string {
   return `lane-${index + 1}`
 }
 
+/** The clip the next edit acts on. */
+export interface ClipSelection {
+  lane: string
+  clipId: string
+}
+
 /** A lane's channel knobs, which the timeline library does not model. */
 export interface LaneChannel {
   eq: ChannelEq
@@ -60,6 +66,8 @@ export interface ArrangementState {
   /** Peaks for every source laid into the arrangement, for drawing clips. */
   waveforms: Record<string, WaveformData>
   channels: Record<string, LaneChannel>
+  /** The clip CUT and DELETE act on, or null when nothing is picked. */
+  selection: ClipSelection | null
 
   init(): Promise<void>
   /** Lay a library track into a lane, warped onto the grid. */
@@ -67,6 +75,11 @@ export interface ArrangementState {
   moveClip(lane: string, clipId: string, deltaSeconds: number): void
   splitClip(lane: string, clipId: string, atSeconds: number): void
   removeClip(lane: string, clipId: string): void
+  select(selection: ClipSelection | null): void
+  /** Delete the picked clip. Does nothing when nothing is picked. */
+  removeSelected(): void
+  /** Cut the picked clip at the playhead. */
+  cutSelected(): void
   setMasterBpm(bpm: number): void
   play(): void
   pause(): void
@@ -138,6 +151,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   loading: [],
   waveforms: {},
   channels: {},
+  selection: null,
 
   async init() {
     if (engine) return
@@ -267,6 +281,24 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
       ...existing,
       clips: existing.clips.filter((clip) => clip.id !== clipId)
     })
+    const picked = get().selection
+    if (picked && picked.lane === lane && picked.clipId === clipId) set({ selection: null })
+  },
+
+  select(selection) {
+    set({ selection })
+  },
+
+  removeSelected() {
+    const picked = get().selection
+    if (picked) get().removeClip(picked.lane, picked.clipId)
+  },
+
+  cutSelected() {
+    const picked = get().selection
+    if (!picked) return
+    get().splitClip(picked.lane, picked.clipId, get().positionSeconds())
+    set({ selection: null })
   },
 
   /**

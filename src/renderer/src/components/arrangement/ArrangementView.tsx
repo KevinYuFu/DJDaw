@@ -9,7 +9,7 @@ import {
 import { clamp } from '@renderer/core/format'
 import { useRaf } from '@renderer/hooks/useRaf'
 import { useArrangement } from '@renderer/state/useArrangement'
-import { ArrangementLane, type Selection } from '@renderer/components/arrangement/ArrangementLane'
+import { ArrangementLane } from '@renderer/components/arrangement/ArrangementLane'
 import './arrangement.css'
 
 /** Height of one lane's clip strip, in CSS pixels. */
@@ -36,7 +36,7 @@ export function ArrangementView(): ReactElement {
   const masterBpm = useArrangement((s) => s.masterBpm)
   const playing = useArrangement((s) => s.playing)
   const loading = useArrangement((s) => s.loading)
-  const [selected, setSelected] = useState<Selection | null>(null)
+  const selected = useArrangement((s) => s.selection)
   const [width, setWidth] = useState(900)
   const [barsInView, setBarsInView] = useState(DEFAULT_BARS_IN_VIEW)
   const [fromBar, setFromBar] = useState(0)
@@ -123,22 +123,6 @@ export function ArrangementView(): ReactElement {
     head.style.transform = `translateX(${(at - fromSec) / secPerPx}px)`
   }, true)
 
-  const cutSelected = (): void => {
-    if (!selected) return
-    useArrangement.getState().splitClip(
-      selected.lane,
-      selected.clipId,
-      useArrangement.getState().positionSeconds()
-    )
-    setSelected(null)
-  }
-
-  const removeSelected = (): void => {
-    if (!selected) return
-    useArrangement.getState().removeClip(selected.lane, selected.clipId)
-    setSelected(null)
-  }
-
   return (
     <div className="arr-view">
       <div className="arr-view__bar">
@@ -155,7 +139,7 @@ export function ArrangementView(): ReactElement {
             type="button"
             className="arr-btn"
             disabled={!selected}
-            onClick={cutSelected}
+            onClick={() => useArrangement.getState().cutSelected()}
             title="Cut the selected clip at the playhead"
           >
             <span>CUT</span>
@@ -164,7 +148,7 @@ export function ArrangementView(): ReactElement {
             type="button"
             className="arr-btn"
             disabled={!selected}
-            onClick={removeSelected}
+            onClick={() => useArrangement.getState().removeSelected()}
             title="Delete the selected clip"
           >
             <span>DELETE</span>
@@ -211,7 +195,7 @@ export function ArrangementView(): ReactElement {
             height={LANE_H}
             barSec={barSec}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={(next) => useArrangement.getState().select(next)}
             onScrub={(sec) => useArrangement.getState().seek(sec)}
           />
         ))}

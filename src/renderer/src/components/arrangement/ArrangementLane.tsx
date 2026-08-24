@@ -5,17 +5,12 @@ import { faderGain, faderPositionForDb } from '@shared/fader'
 import { TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
 import { ChannelFader, ChannelKnobs } from '@renderer/components/mixer/ChannelKnobs'
 import { useSettings } from '@renderer/state/useSettings'
-import { useArrangement } from '@renderer/state/useArrangement'
+import { useArrangement, type ClipSelection } from '@renderer/state/useArrangement'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
 import { ArrangementClips } from '@renderer/components/arrangement/ArrangementClips'
 
 /** How far a pointer moves before a click on a clip becomes a drag. */
 const DRAG_SLOP_PX = 3
-
-export interface Selection {
-  lane: string
-  clipId: string
-}
 
 export interface ArrangementLaneProps {
   lane: ClipTrack
@@ -25,8 +20,8 @@ export interface ArrangementLaneProps {
   height: number
   /** Arrangement seconds in one bar, for snapping. */
   barSec: number
-  selected: Selection | null
-  onSelect(selection: Selection | null): void
+  selected: ClipSelection | null
+  onSelect(selection: ClipSelection | null): void
   onScrub(seconds: number): void
 }
 
