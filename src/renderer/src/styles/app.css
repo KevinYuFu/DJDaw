@@ -707,3 +707,14 @@
   font-size: 12px;
   color: var(--text-dim);
 }
+
+/* In EDIT V2 the master tempo is set rather than reported. */
+.toolbar__bpm--set {
+  width: 76px;
+  text-align: right;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1px 5px;
+}

@@ -7,6 +7,7 @@ import { timelineDuration } from '@shared/clips'
 import { encodeWav } from '@shared/wav'
 import { renderTimeline } from '@renderer/audio/render'
 import type { DeckRenderSpec } from '@renderer/audio/render'
+import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { useDecks } from '@renderer/state/useDecks'
 import type { DeckState } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
@@ -440,6 +441,29 @@ export function EditV2View(): ReactElement {
     noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
   }
 
+  /**
+   * Every loaded row at once, from the same moment.
+   *
+   * They are all on the master tempo by the time they get here, so starting
+   * them together is all it takes for their grids to line up.
+   */
+  const playAll = (): void => {
+    const decks = useDecks.getState().decks
+    const loaded = DECK_IDS.filter((id) => decks[id].status === 'ready')
+    if (loaded.length === 0) return
+    const engine = AudioEngine.shared()
+    if (playing) {
+      for (const id of loaded) engine.deck(id).pause()
+      return
+    }
+    const at = engine.deck(TRANSPORT_DECK).positionSeconds()
+    for (const id of loaded) {
+      const deck = engine.deck(id)
+      deck.seekSeconds(at)
+      deck.play()
+    }
+  }
+
   return (
     <div className="v2-edit-view">
       <header className="v2-edit-view__bar">
@@ -451,7 +475,7 @@ export function EditV2View(): ReactElement {
           type="button"
           className={`v2-edit-btn v2-edit-btn--play${playing ? ' is-lit' : ''}`}
           disabled={!canPlay}
-          onClick={() => useDecks.getState().togglePlay(TRANSPORT_DECK)}
+          onClick={playAll}
           title="Play / pause (Space)"
         >
           <svg className="v2-edit-btn__icon" viewBox="0 0 12 12" aria-hidden="true">

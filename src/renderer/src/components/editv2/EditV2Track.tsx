@@ -14,10 +14,10 @@ import { HOT_CUE_COUNT, HOT_CUE_LABELS } from '@renderer/core/constants'
 import { clamp, formatBpm, formatTime } from '@renderer/core/format'
 import { useRaf, useTextRef } from '@renderer/hooks/useRaf'
 import { useDecks } from '@renderer/state/useDecks'
+import { useEditV2 } from '@renderer/state/useEditV2'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import { DetailWaveform } from '@renderer/components/waveform/DetailWaveform'
-import { OverviewWaveform } from '@renderer/components/waveform/OverviewWaveform'
 
 export interface EditTrackProps {
   deckId: DeckId
@@ -337,6 +337,14 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
   // A boolean, not the knobs themselves: this only has to re-render the row
   // when the channel crosses between flat and not, which is rare.
   const eqOn = useDecks((s) => !isFlat(s.decks[deckId].eq))
+  const warping = useEditV2((s) => Boolean(s.warping[deckId]))
+
+  // A track that has just landed is warped onto the master tempo, or names it
+  // when it is the first one here.
+  useEffect(() => {
+    if (status !== 'ready' || !trackId) return
+    void useEditV2.getState().matchDeck(deckId)
+  }, [deckId, status, trackId])
   // The pointers holding CUE and a pad down. Only the pointer that started a
   // hold may end it, so a second pointer cannot release someone else's press.
   const heldCue = useRef<number | null>(null)
@@ -489,12 +497,8 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
       <div className="v2-edit-track__wave">
         {status === 'ready' ? (
           <>
-            {/* The MACRO view: the whole row at once, which is the only place
-                a piece can be dragged somewhere else in the track — the MICRO
-                view below shows a few seconds and cannot see where it is
-                going. */}
-            <OverviewWaveform deckId={deckId} draggableClips />
             <DetailWaveform deckId={deckId} selectClips />
+            {warping ? <span className="v2-edit-note v2-edit-warp">Warping…</span> : null}
           </>
         ) : (
           <div className="v2-edit-track__empty">

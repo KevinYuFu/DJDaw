@@ -234,10 +234,6 @@
 /* The MACRO strip: the whole row at a glance, and where clips are dragged. A
    shade shorter than the deck's, because four of them cost four times the
    height — but not much, because a piece has to be grabbable. */
-.v2-edit-track__wave .waveform-overview {
-  flex: 0 0 30px;
-  height: 30px;
-}
 
 /* waveform.css sizes the detail view for a deck, where it sits under an
    overview strip and can afford a floor. Here it takes what is left. */
@@ -763,4 +759,12 @@
   font-size: 9px;
   line-height: 1;
   color: var(--text-dim);
+}
+
+/* Shown on a row while its audio is being warped onto the master tempo. */
+.v2-edit-warp {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 2;
 }

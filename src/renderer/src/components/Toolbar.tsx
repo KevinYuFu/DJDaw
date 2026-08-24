@@ -5,6 +5,7 @@ import { formatBpm } from '@renderer/core/format'
 import { KEYBOARD_SHORTCUTS } from '@renderer/hooks/useKeyboard'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
+import { useEditV2 } from '@renderer/state/useEditV2'
 import { useSettings } from '@renderer/state/useSettings'
 import type { WaveformColorMode } from '@renderer/state/useSettings'
 
@@ -194,6 +195,7 @@ export function Toolbar(): ReactElement {
   const view = useSettings((s) => s.view)
   const setView = useSettings((s) => s.setView)
   const bpm = useMasterBpm()
+  const masterBpm = useEditV2((s) => s.masterBpm)
   const [helpOpen, setHelpOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -240,9 +242,23 @@ export function Toolbar(): ReactElement {
 
       <div className="toolbar__readout" title={`Tempo of the focused deck (${focused}), tempo fader included`}>
         <span className="label">Master BPM</span>
-        <span className="mono toolbar__bpm" data-deck={focused}>
-          {formatBpm(bpm)}
-        </span>
+        {view === 'editv2' ? (
+          <input
+            className="mono toolbar__bpm toolbar__bpm--set"
+            type="number"
+            min={20}
+            max={300}
+            step={0.01}
+            value={masterBpm ?? ''}
+            placeholder="--"
+            title="The tempo every row is warped onto"
+            onChange={(event) => useEditV2.getState().setMasterBpm(Number(event.target.value))}
+          />
+        ) : (
+          <span className="mono toolbar__bpm" data-deck={focused}>
+            {formatBpm(bpm)}
+          </span>
+        )}
       </div>
 
       <label className="toolbar__volume">
