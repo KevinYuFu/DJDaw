@@ -12,13 +12,15 @@
       script-src for Vite's dev-mode React Refresh preamble, which is injected
       as an inline module script; nothing in a packaged build depends on it.
       Style attributes are how the mixer positions its faders, so style-src
-      needs it too.
+      needs it too. 'wasm-unsafe-eval' is what lets the time stretcher compile
+      its WebAssembly inside the audio worklet; it permits WebAssembly only,
+      not eval of script.
     -->
     <meta
       http-equiv="Content-Security-Policy"
       content="
         default-src 'self';
-        script-src 'self' blob: 'unsafe-inline';
+        script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval';
         worker-src 'self' blob:;
         child-src 'self' blob:;
         style-src 'self' 'unsafe-inline';

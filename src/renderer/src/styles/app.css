@@ -707,3 +707,74 @@
   font-size: 12px;
   color: var(--text-dim);
 }
+
+/* In EDIT V2 the master tempo is set rather than reported: dragged up and
+   down, or double-clicked to type. */
+.toolbar__bpm--set,
+.toolbar__bpm--typing {
+  width: 86px;
+  text-align: right;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1px 6px;
+}
+
+.toolbar__bpm--set {
+  cursor: ns-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.toolbar__bpm--set:hover {
+  border-color: var(--border-strong);
+}
+
+.toolbar__bpm--typing {
+  font: inherit;
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Something is happening: a thin bar along the bottom edge, in the middle.
+   Quiet enough to miss unless it is being looked for. */
+.busy {
+  position: fixed;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.busy__bar {
+  width: 38%;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--text-faint);
+  opacity: 0.55;
+  animation: busy-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes busy-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(263%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy__bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
+}

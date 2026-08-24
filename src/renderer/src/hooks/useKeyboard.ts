@@ -5,6 +5,7 @@ import { BEAT_JUMP_SIZES, HOT_CUE_COUNT, LOOP_SIZES } from '@renderer/core/const
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
+import { useEditV2 } from '@renderer/state/useEditV2'
 import { useSettings } from '@renderer/state/useSettings'
 
 /**
@@ -40,7 +41,7 @@ export interface ShortcutHelp {
 
 /** The key map as shown to the user, in the order docs/ARCHITECTURE.md lists it. */
 export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
-  { keys: 'Space', action: 'Play / pause the focused deck' },
+  { keys: 'Space', action: 'Play / pause the focused deck — every row in Edit V2' },
   { keys: 'Q / W', action: 'Beat jump back / forward (16 beats by default)' },
   { keys: 'Shift + Q / W', action: 'Halve / double the beat-jump size' },
   { keys: '1 – 8', action: 'Hot cue A–H: set if empty, jump if set, hold to preview' },
@@ -131,9 +132,15 @@ function focusedDeck(): DeckId {
   return useSettings.getState().focusedDeck
 }
 
-/** Whether the editing view is on screen, which is the only place clips exist. */
+/** Whether the view that plays every row at once is on screen. */
+function inEditV2(): boolean {
+  return useSettings.getState().view === 'editv2'
+}
+
+/** Whether an editing view is on screen, which is the only place clips exist. */
 function inEditView(): boolean {
-  return useSettings.getState().view === 'edit'
+  const view = useSettings.getState().view
+  return view === 'edit' || view === 'editv2'
 }
 
 /**
@@ -313,7 +320,10 @@ export function useKeyboard(): void {
 
       switch (event.code) {
         case 'Space':
-          decks.togglePlay(deck)
+          // EDIT V2 has no such thing as playing one row: there, space starts
+          // and stops all of them together.
+          if (inEditV2()) useEditV2.getState().toggleAll()
+          else decks.togglePlay(deck)
           break
 
         case 'Tab':

@@ -5,6 +5,12 @@ import { formatBpm } from '@renderer/core/format'
 import { KEYBOARD_SHORTCUTS } from '@renderer/hooks/useKeyboard'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
+import {
+  clampMasterBpm,
+  MASTER_BPM_MAX,
+  MASTER_BPM_MIN,
+  useEditV2
+} from '@renderer/state/useEditV2'
 import { useSettings } from '@renderer/state/useSettings'
 import type { WaveformColorMode } from '@renderer/state/useSettings'
 
@@ -94,6 +100,100 @@ function Modal({ title, onClose, children }: ModalProps): ReactElement {
       </div>
     </div>,
     document.body
+  )
+}
+
+/** How far the pointer travels for one beat per minute. */
+const BPM_DRAG_PX = 6
+
+/**
+ * The master tempo, dragged or typed.
+ *
+ * Dragging shows the value moving but only sets it on release: every row is
+ * warped onto this number, and warping on each pointer move — or on each
+ * keystroke of a typed one — would put the whole session through the stretcher
+ * for values nobody meant.
+ */
+function MasterBpmField({ value }: { value: number | null }): ReactElement {
+  const [dragged, setDragged] = useState<number | null>(null)
+  const [typing, setTyping] = useState<string | null>(null)
+  const drag = useRef<{ pointerId: number; startY: number; startValue: number } | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Only as the field opens. Selecting again on every keystroke would make each
+  // character replace the last one.
+  const editing = typing !== null
+  useEffect(() => {
+    if (editing) inputRef.current?.select()
+  }, [editing])
+
+  const commit = (text: string): void => {
+    const bpm = text.trim() === '' ? NaN : Number(text)
+    if (Number.isFinite(bpm)) useEditV2.getState().setMasterBpm(clampMasterBpm(bpm))
+  }
+
+  if (typing !== null) {
+    return (
+      <input
+        ref={inputRef}
+        className="mono toolbar__bpm toolbar__bpm--typing"
+        value={typing}
+        onChange={(event) => setTyping(event.target.value)}
+        onBlur={() => {
+          commit(typing)
+          setTyping(null)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            commit(typing)
+            setTyping(null)
+          } else if (event.key === 'Escape') {
+            setTyping(null)
+          }
+          event.stopPropagation()
+        }}
+      />
+    )
+  }
+
+  const shown = dragged ?? value
+
+  return (
+    <span
+      className="mono toolbar__bpm toolbar__bpm--set"
+      role="slider"
+      aria-label="Master tempo"
+      aria-valuemin={MASTER_BPM_MIN}
+      aria-valuemax={MASTER_BPM_MAX}
+      aria-valuenow={shown ?? undefined}
+      title="Drag up or down to set the tempo every row is warped onto, double-click to type it"
+      onPointerDown={(event) => {
+        if (event.button !== 0 || value === null) return
+        event.currentTarget.setPointerCapture(event.pointerId)
+        drag.current = { pointerId: event.pointerId, startY: event.clientY, startValue: value }
+        setDragged(value)
+      }}
+      onPointerMove={(event) => {
+        const held = drag.current
+        if (!held || held.pointerId !== event.pointerId) return
+        const moved = (held.startY - event.clientY) / BPM_DRAG_PX
+        setDragged(clampMasterBpm(Math.round((held.startValue + moved) * 100) / 100))
+      }}
+      onPointerUp={(event) => {
+        const held = drag.current
+        if (!held || held.pointerId !== event.pointerId) return
+        drag.current = null
+        if (dragged !== null) commit(String(dragged))
+        setDragged(null)
+      }}
+      onPointerCancel={() => {
+        drag.current = null
+        setDragged(null)
+      }}
+      onDoubleClick={() => setTyping(value === null ? '' : String(value))}
+    >
+      {formatBpm(shown)}
+    </span>
   )
 }
 
@@ -194,6 +294,7 @@ export function Toolbar(): ReactElement {
   const view = useSettings((s) => s.view)
   const setView = useSettings((s) => s.setView)
   const bpm = useMasterBpm()
+  const masterBpm = useEditV2((s) => s.masterBpm)
   const [helpOpen, setHelpOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -224,15 +325,33 @@ export function Toolbar(): ReactElement {
         >
           EDIT
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'editv2'}
+          className={view === 'editv2' ? 'active' : undefined}
+          title="Four tracks stacked, for building an edit"
+          onClick={() => setView('editv2')}
+        >
+          EDIT V2
+        </button>
       </div>
 
       <div className="toolbar__spacer" />
 
-      <div className="toolbar__readout" title={`Tempo of the focused deck (${focused}), tempo fader included`}>
+      <div className="toolbar__readout">
         <span className="label">Master BPM</span>
-        <span className="mono toolbar__bpm" data-deck={focused}>
-          {formatBpm(bpm)}
-        </span>
+        {view === 'editv2' ? (
+          <MasterBpmField value={masterBpm} />
+        ) : (
+          <span
+            className="mono toolbar__bpm"
+            data-deck={focused}
+            title={`Tempo of the focused deck (${focused}), tempo fader included`}
+          >
+            {formatBpm(bpm)}
+          </span>
+        )}
       </div>
 
       <label className="toolbar__volume">
