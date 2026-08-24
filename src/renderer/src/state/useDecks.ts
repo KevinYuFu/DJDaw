@@ -691,7 +691,7 @@ export const useDecks = create<DecksState>()(() => ({
 
       deck.load(buffer)
       audioLoaded = true
-      deck.setRate(1 + useDecks.getState().decks[id].pitchPercent / 100)
+      deck.setPitchRate(1 + useDecks.getState().decks[id].pitchPercent / 100)
       // Load from track start.
       const start = 0
       deck.seekSeconds(start)
@@ -874,7 +874,7 @@ export const useDecks = create<DecksState>()(() => ({
     const state = useDecks.getState().decks[id]
     const clamped = clamp(percent, -state.tempoRange, state.tempoRange)
     patchDeck(id, { pitchPercent: clamped })
-    if (state.status === 'ready') AudioEngine.shared().deck(id).setRate(1 + clamped / 100)
+    if (state.status === 'ready') AudioEngine.shared().deck(id).setPitchRate(1 + clamped / 100)
   },
 
   setTempoRange(id, range) {
@@ -883,7 +883,7 @@ export const useDecks = create<DecksState>()(() => ({
     // A narrower range pulls the fader in with it, as the hardware does.
     const pitchPercent = clamp(state.pitchPercent, -range, range)
     patchDeck(id, { tempoRange: range, pitchPercent })
-    if (state.status === 'ready') AudioEngine.shared().deck(id).setRate(1 + pitchPercent / 100)
+    if (state.status === 'ready') AudioEngine.shared().deck(id).setPitchRate(1 + pitchPercent / 100)
   },
 
   toggleQuantize(id) {

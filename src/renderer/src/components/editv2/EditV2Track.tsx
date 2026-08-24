@@ -276,7 +276,7 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
             onDoubleClick={() => onKnobReset(spec)}
           >
             <svg
-              className="edit-knob__dial"
+              className="v2-edit-knob__dial"
               width={KNOB_SIZE}
               height={KNOB_SIZE}
               viewBox={`0 0 ${KNOB_SIZE} ${KNOB_SIZE}`}
@@ -337,15 +337,17 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
   // A boolean, not the knobs themselves: this only has to re-render the row
   // when the channel crosses between flat and not, which is rare.
   const eqOn = useDecks((s) => !isFlat(s.decks[deckId].eq))
+  // The tempo the warp is computed from, so a re-tap or a re-analysis puts the
+  // row back on the master grid rather than leaving it on the old reading.
+  const trackBpm = track?.grid?.anchors?.[0]?.bpm ?? track?.bpm ?? 0
   // A track that has just landed is warped onto the master tempo, or names it
   // when it is the first one here.
   useEffect(() => {
     if (status !== 'ready' || !trackId) return
     void useEditV2.getState().matchDeck(deckId)
-  }, [deckId, status, trackId])
-  // The pointers holding CUE and a pad down. Only the pointer that started a
-  // hold may end it, so a second pointer cannot release someone else's press.
-  const heldCue = useRef<number | null>(null)
+  }, [deckId, status, trackId, trackBpm])
+  // The pointer holding a pad down. Only the pointer that started a hold may
+  // end it, so a second pointer cannot release someone else's press.
   const heldPad = useRef<HeldPad | null>(null)
 
   const [bpmRef, setBpm] = useTextRef<HTMLSpanElement>()
@@ -372,7 +374,9 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
 
     setElapsed(formatTime(pos))
     setRemaining(formatTime(pos - duration))
-    setBpm(formatBpm(grid ? bpmAt(grid, pos) * (1 + state.pitchPercent / 100) : null))
+    setBpm(
+      formatBpm(grid ? bpmAt(grid, pos) * deck.warpRate * (1 + state.pitchPercent / 100) : null)
+    )
   }, deck !== null)
 
   // An emptied row keeps whatever the last frame wrote unless it is cleared.
@@ -397,8 +401,7 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
   // pointerup, and a stuck preview outlives the component that started it.
   useEffect(
     () => () => {
-      if (heldCue.current === null && heldPad.current === null) return
-      heldCue.current = null
+      if (heldPad.current === null) return
       heldPad.current = null
       useDecks.getState().endPreview(deckId)
     },
@@ -434,7 +437,7 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
     useDecks.getState().triggerHotCue(deckId, index)
   }
 
-  /** The pad counterpart of {@link onCueEnd}, released by cue index. */
+  /** Ends a pad's hold, and only for the pointer that started it. */
   const onPadEnd = (e: ReactPointerEvent<HTMLButtonElement>): void => {
     const hold = heldPad.current
     if (!hold || hold.pointerId !== e.pointerId) return
@@ -494,9 +497,7 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
 
       <div className="v2-edit-track__wave">
         {status === 'ready' ? (
-          <>
-            <DetailWaveform deckId={deckId} selectClips />
-          </>
+          <DetailWaveform deckId={deckId} selectClips />
         ) : (
           <div className="v2-edit-track__empty">
             {status === 'loading' ? (

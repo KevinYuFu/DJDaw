@@ -255,7 +255,7 @@ function ExportPanel({ loaded, onClose }: ExportPanelProps): ReactElement {
   return createPortal(
     <div className="modal-backdrop" onPointerDown={running ? undefined : onClose}>
       <div
-        className="modal edit-export"
+        className="modal v2-edit-export"
         role="dialog"
         aria-modal="true"
         aria-label="Export"

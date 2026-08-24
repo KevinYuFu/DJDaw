@@ -228,12 +228,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
 }
-
-/* The MACRO strip: the whole row at a glance, and where clips are dragged. A
-   shade shorter than the deck's, because four of them cost four times the
-   height — but not much, because a piece has to be grabbable. */
 
 /* waveform.css sizes the detail view for a deck, where it sits under an
    overview strip and can afford a floor. Here it takes what is left. */
@@ -335,9 +330,6 @@
 .v2-edit-btn--play:not(.is-lit) .v2-edit-btn__icon {
   fill: var(--play);
 }
-.v2-edit-btn--cue:not(.is-lit) .v2-edit-btn__icon {
-  fill: var(--cue);
-}
 
 /* Cut carries its shortcut instead of an icon: the shortcut is the point of
    the button, and the row is too narrow to spend width on both. */
@@ -365,13 +357,6 @@
   border-color: var(--play);
   color: var(--text-inverse);
   box-shadow: 0 0 12px var(--play-glow);
-}
-.v2-edit-btn--cue.is-lit,
-.v2-edit-btn--cue.is-lit:hover:not(:disabled) {
-  background: var(--cue);
-  border-color: var(--cue);
-  color: var(--text-inverse);
-  box-shadow: 0 0 12px var(--cue-glow);
 }
 
 /* One row of eight rather than the deck's 2x4: the row is wide and short, so
@@ -637,66 +622,6 @@
 }
 .v2-edit-export__go:not(:disabled):hover {
   filter: brightness(1.1);
-}
-
-/* Trim, as a horizontal slider rather than a knob: an edit row is an
-   arrangement track, and a level on one reads better as a bar than a dial. */
-.v2-edit-trim {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 2px;
-  cursor: ew-resize;
-  touch-action: none;
-}
-.v2-edit-trim.is-disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.v2-edit-trim__track {
-  position: relative;
-  width: 100%;
-  height: 11px;
-  border-radius: 2px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
-  overflow: hidden;
-}
-
-.v2-edit-trim__fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: var(--text-dim);
-  opacity: 0.55;
-}
-.v2-edit-trim:not(.is-disabled):hover .v2-edit-trim__fill {
-  opacity: 0.75;
-}
-.v2-edit-trim.is-moved .v2-edit-trim__fill {
-  background: var(--deck-color, var(--accent));
-  opacity: 0.85;
-}
-
-/* 0 dB. Trim cuts and boosts, so the slider needs the flat point marked. */
-.v2-edit-trim__unity {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.v2-edit-trim__cap {
-  position: absolute;
-  top: -1px;
-  bottom: -1px;
-  width: 3px;
-  margin-left: -1.5px;
-  border-radius: 1px;
-  background: var(--text);
 }
 
 /* Channel fader: level, kept apart from the EQ because it is not part of it. */

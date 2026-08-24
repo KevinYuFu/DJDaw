@@ -132,11 +132,12 @@ function focusedDeck(): DeckId {
   return useSettings.getState().focusedDeck
 }
 
-/** Whether the editing view is on screen, which is the only place clips exist. */
+/** Whether the view that plays every row at once is on screen. */
 function inEditV2(): boolean {
   return useSettings.getState().view === 'editv2'
 }
 
+/** Whether an editing view is on screen, which is the only place clips exist. */
 function inEditView(): boolean {
   const view = useSettings.getState().view
   return view === 'edit' || view === 'editv2'

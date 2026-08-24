@@ -15,8 +15,7 @@ import {
   MID_BELL_Q,
   SHELF_CORNER_HZ
 } from '@shared/eq'
-import SignalsmithStretch from 'signalsmith-stretch'
-import type { StretchNode } from '@renderer/audio/stretchNode'
+import SignalsmithStretch, { type StretchNode } from 'signalsmith-stretch'
 import { clamp } from '@renderer/core/format'
 import {
   DECK_PROCESSOR_NAME,
@@ -66,6 +65,9 @@ const MAX_GAIN = 4
 
 /** Rate ceiling. The tempo fader tops out at 2x; this is pure sanity. */
 const MAX_RATE = 4
+
+/** Rate floor, the same distance the other way. */
+const MIN_RATE = 1 / MAX_RATE
 
 /**
  * Time constant for every EQ, trim and filter move.
@@ -398,11 +400,6 @@ function applyFilter(filter: BiquadFilterNode, knob: number, now: number): void 
 
 export class Deck {
   readonly id: DeckId
-
-  /** How fast the file is read, 1 when the deck plays at its own tempo. */
-  private warpRatio = 1
-  private stretch: StretchNode | null = null
-  private stretchReady: Promise<void> | null = null
   readonly node: AudioWorkletNode
   readonly output: GainNode
 
@@ -436,6 +433,12 @@ export class Deck {
   private pendingUntil = 0
   private readonly stateListeners = new Set<(s: DeckSnapshot) => void>()
   private readonly endedListeners = new Set<() => void>()
+  /** How much faster the file is read to sit on the master tempo. */
+  private warpRatio = 1
+  /** How much faster the file is read for the tempo fader. */
+  private pitchRatio = 1
+  private stretch: StretchNode | null = null
+  private stretchReady: Promise<void> | null = null
 
   constructor(id: DeckId, ctx: AudioContext, destination: AudioNode) {
     this.id = id
@@ -505,6 +508,10 @@ export class Deck {
     this.emitState()
   }
 
+  /** The warp alone, without the tempo fader: what a readout has to multiply by. */
+  get warpRate(): number {
+    return this.warpRatio
+  }
 
   /**
    * Play at a different tempo without moving the pitch.
@@ -518,9 +525,11 @@ export class Deck {
    * 0.86, and the stretcher shifts it back up by the same amount.
    */
   setWarp(rate: number): void {
-    const next = Number.isFinite(rate) && rate > 0 ? rate : 1
+    // Clamped here rather than on the way to the worklet, so the shift that
+    // cancels it is computed from the speed the deck actually runs at.
+    const next = Number.isFinite(rate) && rate > 0 ? clamp(rate, MIN_RATE, MAX_RATE) : 1
     this.warpRatio = next
-    this.setRate(next)
+    this.applyRate()
     void this.applyWarp()
   }
 
@@ -558,6 +567,9 @@ export class Deck {
     this.sourceDurationSec = 0
     this.regions = []
     this.fileSampleRate = this.ctx.sampleRate
+    this.warpRatio = 1
+    this.applyRate()
+    this.stretch?.schedule({ semitones: 0 })
     this.resetState()
     this.emitState()
   }
@@ -645,10 +657,22 @@ export class Deck {
   // Parameters
   // -------------------------------------------------------------------------
 
-  /** 1 = original tempo. The worklet ramps to it, so tempo moves never zipper. */
-  setRate(rate: number): void {
+  /** 1 = the deck's own tempo. The worklet ramps to it, so moves never zipper. */
+  setPitchRate(rate: number): void {
     if (!Number.isFinite(rate)) return
-    this.post({ type: 'rate', rate: clamp(rate, 0, MAX_RATE) })
+    this.pitchRatio = rate
+    this.applyRate()
+  }
+
+  /**
+   * The one place the read rate is written.
+   *
+   * The warp and the tempo fader are separate controls on the same speed, so
+   * they multiply: riding the fader on a warped deck moves it around the master
+   * tempo instead of dropping it back to its own.
+   */
+  private applyRate(): void {
+    this.post({ type: 'rate', rate: clamp(this.warpRatio * this.pitchRatio, 0, MAX_RATE) })
   }
 
   /**

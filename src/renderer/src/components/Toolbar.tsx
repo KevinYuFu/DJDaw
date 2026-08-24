@@ -5,7 +5,12 @@ import { formatBpm } from '@renderer/core/format'
 import { KEYBOARD_SHORTCUTS } from '@renderer/hooks/useKeyboard'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
-import { useEditV2 } from '@renderer/state/useEditV2'
+import {
+  clampMasterBpm,
+  MASTER_BPM_MAX,
+  MASTER_BPM_MIN,
+  useEditV2
+} from '@renderer/state/useEditV2'
 import { useSettings } from '@renderer/state/useSettings'
 import type { WaveformColorMode } from '@renderer/state/useSettings'
 
@@ -101,14 +106,6 @@ function Modal({ title, onClose, children }: ModalProps): ReactElement {
 /** How far the pointer travels for one beat per minute. */
 const BPM_DRAG_PX = 6
 
-/** The range a tempo can be dragged or typed into. */
-const BPM_MIN = 20
-const BPM_MAX = 300
-
-function clampBpm(bpm: number): number {
-  return Math.min(BPM_MAX, Math.max(BPM_MIN, bpm))
-}
-
 /**
  * The master tempo, dragged or typed.
  *
@@ -130,8 +127,9 @@ function MasterBpmField({ value }: { value: number | null }): ReactElement {
     if (editing) inputRef.current?.select()
   }, [editing])
 
-  const commit = (bpm: number): void => {
-    if (Number.isFinite(bpm)) useEditV2.getState().setMasterBpm(clampBpm(bpm))
+  const commit = (text: string): void => {
+    const bpm = text.trim() === '' ? NaN : Number(text)
+    if (Number.isFinite(bpm)) useEditV2.getState().setMasterBpm(clampMasterBpm(bpm))
   }
 
   if (typing !== null) {
@@ -142,12 +140,12 @@ function MasterBpmField({ value }: { value: number | null }): ReactElement {
         value={typing}
         onChange={(event) => setTyping(event.target.value)}
         onBlur={() => {
-          commit(Number(typing))
+          commit(typing)
           setTyping(null)
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
-            commit(Number(typing))
+            commit(typing)
             setTyping(null)
           } else if (event.key === 'Escape') {
             setTyping(null)
@@ -164,10 +162,9 @@ function MasterBpmField({ value }: { value: number | null }): ReactElement {
     <span
       className="mono toolbar__bpm toolbar__bpm--set"
       role="slider"
-      tabIndex={0}
       aria-label="Master tempo"
-      aria-valuemin={BPM_MIN}
-      aria-valuemax={BPM_MAX}
+      aria-valuemin={MASTER_BPM_MIN}
+      aria-valuemax={MASTER_BPM_MAX}
       aria-valuenow={shown ?? undefined}
       title="Drag up or down to set the tempo every row is warped onto, double-click to type it"
       onPointerDown={(event) => {
@@ -180,13 +177,13 @@ function MasterBpmField({ value }: { value: number | null }): ReactElement {
         const held = drag.current
         if (!held || held.pointerId !== event.pointerId) return
         const moved = (held.startY - event.clientY) / BPM_DRAG_PX
-        setDragged(clampBpm(Math.round((held.startValue + moved) * 100) / 100))
+        setDragged(clampMasterBpm(Math.round((held.startValue + moved) * 100) / 100))
       }}
       onPointerUp={(event) => {
         const held = drag.current
         if (!held || held.pointerId !== event.pointerId) return
         drag.current = null
-        if (dragged !== null) commit(dragged)
+        if (dragged !== null) commit(String(dragged))
         setDragged(null)
       }}
       onPointerCancel={() => {
@@ -195,7 +192,7 @@ function MasterBpmField({ value }: { value: number | null }): ReactElement {
       }}
       onDoubleClick={() => setTyping(value === null ? '' : String(value))}
     >
-      {shown === null ? '--.--' : formatBpm(shown)}
+      {formatBpm(shown)}
     </span>
   )
 }
@@ -342,12 +339,16 @@ export function Toolbar(): ReactElement {
 
       <div className="toolbar__spacer" />
 
-      <div className="toolbar__readout" title={`Tempo of the focused deck (${focused}), tempo fader included`}>
+      <div className="toolbar__readout">
         <span className="label">Master BPM</span>
         {view === 'editv2' ? (
           <MasterBpmField value={masterBpm} />
         ) : (
-          <span className="mono toolbar__bpm" data-deck={focused}>
+          <span
+            className="mono toolbar__bpm"
+            data-deck={focused}
+            title={`Tempo of the focused deck (${focused}), tempo fader included`}
+          >
             {formatBpm(bpm)}
           </span>
         )}
