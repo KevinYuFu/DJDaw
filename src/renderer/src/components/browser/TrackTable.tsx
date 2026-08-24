@@ -4,6 +4,7 @@ import { DECK_IDS } from '@shared/types'
 import type { DeckId, Track } from '@shared/types'
 import { describeDecks } from '@shared/deckList'
 import { formatBpm, formatDuration } from '@renderer/core/format'
+import { TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
 import { makeGrid } from '@renderer/core/beatgrid'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { decodeTrack } from '@renderer/audio/decode'
@@ -262,6 +263,11 @@ const TrackRow = memo(function TrackRow({
       onClick={() => onSelect(track.id)}
       onDoubleClick={() => onOpen(track.id)}
       onContextMenu={(event) => onMenu(event, track.id)}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData(TRACK_DRAG_MIME, track.id)
+        event.dataTransfer.effectAllowed = 'copy'
+      }}
     >
       <span className="tt-art-cell">
         {track.artwork ? (

@@ -2,10 +2,11 @@ import { create } from 'zustand'
 import { createClip, type ClipTrack } from '@waveform-playlist/core'
 import { PlaylistEngine } from '@waveform-playlist/engine'
 import { type ChannelEq, type EqMode, flatChannel } from '@shared/eq'
-import type { Track } from '@shared/types'
+import type { Track, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { ArrangementEngine } from '@renderer/audio/ArrangementEngine'
 import { decodeTrack } from '@renderer/audio/decode'
+import { resolveWaveform } from '@renderer/analysis/waveformCache'
 import { WorkletPlayout, type ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
 import { useLibrary } from '@renderer/state/useLibrary'
 
@@ -55,6 +56,8 @@ export interface ArrangementState {
   duration: number
   /** Sources being decoded right now, by library track id. */
   loading: string[]
+  /** Peaks for every source laid into the arrangement, for drawing clips. */
+  waveforms: Record<string, WaveformData>
   channels: Record<string, LaneChannel>
 
   init(): Promise<void>
@@ -115,7 +118,10 @@ function inheritSource(lane: ClipTrack, source: ArrangementClip): ClipTrack {
   return {
     ...lane,
     clips: lane.clips.map((clip) =>
-      'sourceId' in clip ? clip : { ...clip, sourceId: source.sourceId, rate: source.rate }
+      'sourceId' in clip
+        ? clip
+        : // The name comes back numbered; both halves are the same track.
+          { ...clip, name: source.name, sourceId: source.sourceId, rate: source.rate }
     )
   }
 }
@@ -128,6 +134,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   playing: false,
   duration: 0,
   loading: [],
+  waveforms: {},
   channels: {},
 
   async init() {
@@ -181,7 +188,10 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     if (!sources.has(trackId)) {
       set({ loading: [...get().loading, trackId] })
       try {
-        sources.set(trackId, await decodeTrack(AudioEngine.shared().ctx, track.path))
+        const decoded = await decodeTrack(AudioEngine.shared().ctx, track.path)
+        sources.set(trackId, decoded)
+        const peaks = await resolveWaveform(track, decoded)
+        if (peaks) set({ waveforms: { ...get().waveforms, [trackId]: peaks } })
       } catch (err) {
         console.error('[arrangement] could not decode', track.path, err)
         return

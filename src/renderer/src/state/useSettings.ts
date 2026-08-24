@@ -18,7 +18,7 @@ export type WaveformColorMode = '3band' | 'rgb' | 'mono'
  * Which view is on screen. `performance` is the two-deck rekordbox layout;
  * `edit` and `editv2` each stack four tracks for building an edit.
  */
-export type ViewName = 'performance' | 'edit' | 'editv2'
+export type ViewName = 'performance' | 'edit' | 'editv2' | 'v3'
 
 /**
  * The decks a view shows. Focus and `Tab` stay inside this set, so the

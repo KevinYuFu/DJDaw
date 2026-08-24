@@ -5,6 +5,7 @@ import { formatBpm } from '@renderer/core/format'
 import { KEYBOARD_SHORTCUTS } from '@renderer/hooks/useKeyboard'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
+import { useArrangement } from '@renderer/state/useArrangement'
 import {
   clampMasterBpm,
   MASTER_BPM_MAX,
@@ -114,7 +115,13 @@ const BPM_DRAG_PX = 6
  * keystroke of a typed one — would put the whole session through the stretcher
  * for values nobody meant.
  */
-function MasterBpmField({ value }: { value: number | null }): ReactElement {
+function MasterBpmField({
+  value,
+  onCommit
+}: {
+  value: number | null
+  onCommit(bpm: number): void
+}): ReactElement {
   const [dragged, setDragged] = useState<number | null>(null)
   const [typing, setTyping] = useState<string | null>(null)
   const drag = useRef<{ pointerId: number; startY: number; startValue: number } | null>(null)
@@ -129,7 +136,7 @@ function MasterBpmField({ value }: { value: number | null }): ReactElement {
 
   const commit = (text: string): void => {
     const bpm = text.trim() === '' ? NaN : Number(text)
-    if (Number.isFinite(bpm)) useEditV2.getState().setMasterBpm(clampMasterBpm(bpm))
+    if (Number.isFinite(bpm)) onCommit(clampMasterBpm(bpm))
   }
 
   if (typing !== null) {
@@ -295,6 +302,7 @@ export function Toolbar(): ReactElement {
   const setView = useSettings((s) => s.setView)
   const bpm = useMasterBpm()
   const masterBpm = useEditV2((s) => s.masterBpm)
+  const arrangementBpm = useArrangement((s) => s.masterBpm)
   const [helpOpen, setHelpOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -335,14 +343,32 @@ export function Toolbar(): ReactElement {
         >
           EDIT V2
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'v3'}
+          className={view === 'v3' ? 'active' : undefined}
+          title="Lanes of clips on one grid, the way an arrangement works"
+          onClick={() => setView('v3')}
+        >
+          V3
+        </button>
       </div>
 
       <div className="toolbar__spacer" />
 
       <div className="toolbar__readout">
         <span className="label">Master BPM</span>
-        {view === 'editv2' ? (
-          <MasterBpmField value={masterBpm} />
+        {view === 'v3' ? (
+          <MasterBpmField
+            value={arrangementBpm}
+            onCommit={(bpm) => useArrangement.getState().setMasterBpm(bpm)}
+          />
+        ) : view === 'editv2' ? (
+          <MasterBpmField
+            value={masterBpm}
+            onCommit={(bpm) => useEditV2.getState().setMasterBpm(bpm)}
+          />
         ) : (
           <span
             className="mono toolbar__bpm"

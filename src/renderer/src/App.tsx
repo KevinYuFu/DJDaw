@@ -20,6 +20,7 @@ import { Deck } from '@renderer/components/deck/Deck'
 import { Busy } from '@renderer/components/Busy'
 import { EditView } from '@renderer/components/edit/EditView'
 import { EditV2View } from '@renderer/components/editv2/EditV2View'
+import { ArrangementView } from '@renderer/components/arrangement/ArrangementView'
 import { Mixer } from '@renderer/components/Mixer'
 import { Toolbar } from '@renderer/components/Toolbar'
 import { clamp } from '@renderer/core/format'
@@ -56,6 +57,10 @@ const EDIT_CHROME_H = 38
 const EDIT_ROW_MIN_H = 110
 const EDIT_ROW_H = 126
 
+/** Transport bar plus the bar ruler. */
+const ARRANGEMENT_CHROME_H = 58
+const ARRANGEMENT_LANE_H = 85
+
 /**
  * The two views want different amounts of height and get their own, so the
  * performance view can run a short waveform over a tall browser while the
@@ -70,6 +75,12 @@ const VIEW_HEIGHTS: Record<ViewName, { min: number; preferred: number }> = {
   editv2: {
     min: EDIT_CHROME_H + 4 * EDIT_ROW_MIN_H,
     preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
+  },
+  // The arrangement's chrome is a transport bar and a bar ruler, over lanes
+  // that are shorter than an editing row because there is no deck on them.
+  v3: {
+    min: ARRANGEMENT_CHROME_H + 4 * ARRANGEMENT_LANE_H,
+    preferred: ARRANGEMENT_CHROME_H + 4 * ARRANGEMENT_LANE_H
   }
 }
 
@@ -290,7 +301,11 @@ export function App(): ReactElement {
       <Toolbar />
       <Busy />
 
-      {view === 'editv2' ? (
+      {view === 'v3' ? (
+        <main className="edit-area">
+          <ArrangementView />
+        </main>
+      ) : view === 'editv2' ? (
         <main className="edit-area">
           <EditV2View />
         </main>
