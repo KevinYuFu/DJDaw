@@ -6,6 +6,7 @@ import type { Track, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { ArrangementEngine } from '@renderer/audio/ArrangementEngine'
 import { decodeTrack } from '@renderer/audio/decode'
+import { playbackRate } from '@renderer/analysis/playbackRate'
 import { resolveWaveform } from '@renderer/analysis/waveformCache'
 import { WorkletPlayout, type ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
 import { useLibrary } from '@renderer/state/useLibrary'
@@ -96,11 +97,12 @@ function trackBpm(track: Track): number {
   return track.grid?.anchors?.[0]?.bpm ?? track.bpm ?? 0
 }
 
-/** Source frames consumed per arrangement frame, so its beats sit on the grid. */
+/**
+ * Source frames consumed per arrangement frame, so a track's beats sit on the
+ * grid. Below 1 is slower: a 150 track on a 120 grid reads at 0.8.
+ */
 function rateFor(track: Track, masterBpm: number): number {
-  const own = trackBpm(track)
-  if (!(own > 0) || !(masterBpm > 0)) return 1
-  return own / masterBpm
+  return playbackRate(trackBpm(track), masterBpm)
 }
 
 function laneById(lanes: ClipTrack[], id: string): ClipTrack | undefined {
@@ -201,6 +203,12 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     }
     const buffer = sources.get(trackId)
     if (!buffer) return
+
+    // The first track into an empty arrangement names the tempo instead of
+    // being warped to it, the way dropping the first clip into an empty set
+    // does. Everything after it is warped onto that.
+    const empty = playlist.getState().tracks.every((t) => t.clips.length === 0)
+    if (empty && trackBpm(track) > 0) get().setMasterBpm(trackBpm(track))
 
     const sr = ArrangementEngine.shared().sampleRate
     const masterBpm = get().masterBpm
