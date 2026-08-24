@@ -708,13 +708,31 @@
   color: var(--text-dim);
 }
 
-/* In EDIT V2 the master tempo is set rather than reported. */
-.toolbar__bpm--set {
-  width: 76px;
+/* In EDIT V2 the master tempo is set rather than reported: dragged up and
+   down, or double-clicked to type. */
+.toolbar__bpm--set,
+.toolbar__bpm--typing {
+  width: 86px;
   text-align: right;
   color: var(--text);
   background: var(--bg-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1px 5px;
+  padding: 1px 6px;
+}
+
+.toolbar__bpm--set {
+  cursor: ns-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.toolbar__bpm--set:hover {
+  border-color: var(--border-strong);
+}
+
+.toolbar__bpm--typing {
+  font: inherit;
+  outline: none;
+  border-color: var(--accent);
 }
