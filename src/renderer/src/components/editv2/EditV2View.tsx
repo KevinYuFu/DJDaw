@@ -7,19 +7,13 @@ import { timelineDuration } from '@shared/clips'
 import { encodeWav } from '@shared/wav'
 import { renderTimeline } from '@renderer/audio/render'
 import type { DeckRenderSpec } from '@renderer/audio/render'
-import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { useDecks } from '@renderer/state/useDecks'
+import { anyPlaying, useEditV2 } from '@renderer/state/useEditV2'
 import type { DeckState } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import { EditV2Track } from '@renderer/components/editv2/EditV2Track'
 import './editv2.css'
-
-/**
- * The row the one transport drives, for now. An arrangement has a single
- * playhead; wiring the other three to follow it is the next step.
- */
-const TRANSPORT_DECK: DeckId = 'A'
 
 /** Shown when a cut is refused and no reason came back with it. */
 const CUT_FAILED = 'Cannot cut here'
@@ -419,8 +413,9 @@ export function EditV2View(): ReactElement {
   const focused = useSettings((s) => s.focusedDeck)
   // Transport for the whole edit rather than for a row: an arrangement has one
   // playhead, and the rows are parts of one piece rather than four decks.
-  const playing = useDecks((s) => s.decks[TRANSPORT_DECK].playing)
-  const canPlay = useDecks((s) => s.decks[TRANSPORT_DECK].status === 'ready')
+  // Any row, not one particular row: play here means all of them.
+  const playing = useDecks((s) => anyPlaying(s.decks))
+  const canPlay = useDecks((s) => DECK_IDS.some((id) => s.decks[id].status === 'ready'))
   const canCut = useDecks((s) => s.decks[focused].status === 'ready')
   const [notice, setNotice] = useState<string | null>(null)
   const noticeTimer = useRef(0)
@@ -441,29 +436,6 @@ export function EditV2View(): ReactElement {
     noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
   }
 
-  /**
-   * Every loaded row at once, from the same moment.
-   *
-   * They are all on the master tempo by the time they get here, so starting
-   * them together is all it takes for their grids to line up.
-   */
-  const playAll = (): void => {
-    const decks = useDecks.getState().decks
-    const loaded = DECK_IDS.filter((id) => decks[id].status === 'ready')
-    if (loaded.length === 0) return
-    const engine = AudioEngine.shared()
-    if (playing) {
-      for (const id of loaded) engine.deck(id).pause()
-      return
-    }
-    const at = engine.deck(TRANSPORT_DECK).positionSeconds()
-    for (const id of loaded) {
-      const deck = engine.deck(id)
-      deck.seekSeconds(at)
-      deck.play()
-    }
-  }
-
   return (
     <div className="v2-edit-view">
       <header className="v2-edit-view__bar">
@@ -475,8 +447,8 @@ export function EditV2View(): ReactElement {
           type="button"
           className={`v2-edit-btn v2-edit-btn--play${playing ? ' is-lit' : ''}`}
           disabled={!canPlay}
-          onClick={playAll}
-          title="Play / pause (Space)"
+          onClick={() => useEditV2.getState().toggleAll()}
+          title="Play / pause every row (Space)"
         >
           <svg className="v2-edit-btn__icon" viewBox="0 0 12 12" aria-hidden="true">
             {playing ? <path d="M2 1h3v10H2zM7 1h3v10H7z" /> : <path d="M2.5 1L10.5 6L2.5 11z" />}

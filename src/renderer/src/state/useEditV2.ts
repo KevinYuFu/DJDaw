@@ -25,6 +25,25 @@ export interface EditV2State {
   matchDeck(deck: DeckId): Promise<void>
   /** Put every loaded deck back on the master tempo. */
   matchAll(): Promise<void>
+  /**
+   * Start or stop every loaded row at once.
+   *
+   * There is no such thing as playing one row here: the point of the view is
+   * hearing the tracks over each other, the way they are heard when they are
+   * being mixed. Which row is picked changes nothing.
+   */
+  toggleAll(): void
+}
+
+/** Every row with a track on it. */
+function loadedDecks(): DeckId[] {
+  const decks = useDecks.getState().decks
+  return DECK_IDS.filter((id) => decks[id].status === 'ready')
+}
+
+/** Whether any row is running. */
+export function anyPlaying(decks: Record<DeckId, { playing: boolean }>): boolean {
+  return DECK_IDS.some((id) => decks[id].playing)
 }
 
 /** What each deck's audio was before it was warped, so a re-warp starts clean. */
@@ -97,5 +116,23 @@ export const useEditV2 = create<EditV2State>()((set, get) => ({
 
   async matchAll() {
     for (const deck of DECK_IDS) await get().matchDeck(deck)
+  },
+
+  toggleAll() {
+    const loaded = loadedDecks()
+    if (loaded.length === 0) return
+    const engine = AudioEngine.shared()
+    if (loaded.some((id) => engine.deck(id).playing)) {
+      for (const id of loaded) engine.deck(id).pause()
+      return
+    }
+    // They all start from where the rows already are, which is the same moment
+    // for all of them once one of them has been moved.
+    const at = engine.deck(loaded[0]).positionSeconds()
+    for (const id of loaded) {
+      const deck = engine.deck(id)
+      deck.seekSeconds(at)
+      deck.play()
+    }
   }
 }))
