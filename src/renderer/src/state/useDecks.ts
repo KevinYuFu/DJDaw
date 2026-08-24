@@ -126,13 +126,6 @@ export interface DecksState {
   crossfade: number
   loadTrack(deck: DeckId, trackId: string): Promise<void>
   /**
-   * Swap a deck's audio for a warped copy of it.
-   *
-   * The row goes back to one whole-track piece, because the piece boundaries
-   * were in the old timing and mean nothing in the new one.
-   */
-  replaceAudio(deck: DeckId, buffer: AudioBuffer): void
-  /**
    * Eject: stop the deck, drop its audio and put it back to empty. Also how a
    * deck recovers when its track leaves the library, because every other
    * action needs that track to find anything to act on.
@@ -754,20 +747,6 @@ export const useDecks = create<DecksState>()(() => ({
         })
       }
     }
-  },
-
-  replaceAudio(id, buffer) {
-    const ctx = context(id)
-    if (!ctx) return
-    const wasPlaying = ctx.deck.playing
-    if (wasPlaying) ctx.deck.pause()
-    ctx.deck.load(buffer)
-    ctx.deck.setRate(1 + useDecks.getState().decks[id].pitchPercent / 100)
-    ctx.deck.seekSeconds(0)
-    runtime[id].commandedSec = 0
-    const clips = [wholeTrackClip(buffer.duration)]
-    patchDeck(id, { buffer, clips, selectedClipId: null })
-    ctx.deck.setRegions(toRegions(clips))
   },
 
   unloadDeck(id) {

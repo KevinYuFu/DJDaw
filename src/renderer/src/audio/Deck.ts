@@ -15,6 +15,8 @@ import {
   MID_BELL_Q,
   SHELF_CORNER_HZ
 } from '@shared/eq'
+import SignalsmithStretch from 'signalsmith-stretch'
+import type { StretchNode } from '@renderer/audio/stretchNode'
 import { clamp } from '@renderer/core/format'
 import {
   DECK_PROCESSOR_NAME,
@@ -396,6 +398,11 @@ function applyFilter(filter: BiquadFilterNode, knob: number, now: number): void 
 
 export class Deck {
   readonly id: DeckId
+
+  /** How fast the file is read, 1 when the deck plays at its own tempo. */
+  private warpRatio = 1
+  private stretch: StretchNode | null = null
+  private stretchReady: Promise<void> | null = null
   readonly node: AudioWorkletNode
   readonly output: GainNode
 
@@ -496,6 +503,51 @@ export class Deck {
       transfer
     )
     this.emitState()
+  }
+
+
+  /**
+   * Play at a different tempo without moving the pitch.
+   *
+   * The deck reads its file faster or slower, which is what puts its beats on
+   * the master grid, and a stretcher after it puts the pitch back. Both are
+   * live: nothing is re-rendered, so the tempo can be changed while the deck is
+   * playing and it keeps playing.
+   *
+   * `rate` is how fast to read the file: a 174 track on a 150 master runs at
+   * 0.86, and the stretcher shifts it back up by the same amount.
+   */
+  setWarp(rate: number): void {
+    const next = Number.isFinite(rate) && rate > 0 ? rate : 1
+    this.warpRatio = next
+    this.setRate(next)
+    void this.applyWarp()
+  }
+
+  /**
+   * Put a stretcher in front of the channel strip, once.
+   *
+   * Every warped deck gets one even at its own tempo, because the stretcher
+   * adds a little latency: a deck without one would run ahead of the others.
+   */
+  private async applyWarp(): Promise<void> {
+    if (!this.stretchReady) {
+      this.stretchReady = SignalsmithStretch(this.ctx)
+        .then((node: StretchNode) => {
+          this.stretch = node
+          this.node.disconnect(this.strip.input)
+          this.node.connect(node)
+          node.connect(this.strip.input)
+          node.start()
+        })
+        .catch((err: unknown) => {
+          console.error('[deck] stretcher failed to start', err)
+          this.stretchReady = null
+        })
+    }
+    await this.stretchReady
+    // The shift that cancels the speed change.
+    this.stretch?.schedule({ active: true, semitones: -12 * Math.log2(this.warpRatio) })
   }
 
   /** Drop the audio and report an empty deck to every listener. */
