@@ -97,6 +97,17 @@ and it is still that even when the addition is genuinely good.
 The same goes for measuring: when I claim something matches, the measurement
 has to be of the thing itself, not of something that correlates with it.
 
+## Ableton is the reference for the arrangement view
+
+The arrangement view (V3) is Ableton Live's arrangement view. When a decision
+is unclear, the answer is how Ableton does it. Rekordbox is still the reference
+for the performance view.
+
+## Use what already exists
+
+If a library already does the job, use it. Something already built and
+maintained beats anything written here. Check before writing.
+
 ## Save every rule Kevin gives me
 
 When Kevin gives me an instruction about how to work, I add it to this file
