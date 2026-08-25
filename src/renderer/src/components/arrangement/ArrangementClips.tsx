@@ -77,7 +77,14 @@ export function ArrangementClips({
   ghost
 }: ArrangementClipsProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const columnsRef = useRef<WaveformColumns | null>(null)
+  /**
+   * Peaks already reduced to pixel columns, per clip.
+   *
+   * Building these is the expensive half of a redraw and the answer only
+   * changes when a clip's window onto its file changes or the zoom does — not
+   * when something else on the lane moves, which is most redraws.
+   */
+  const columnsRef = useRef(new Map<string, { key: string; cols: WaveformColumns }>())
   const version = useArrangement((s) => s.version)
   const masterBpm = useArrangement((s) => s.masterBpm)
   const waveforms = useArrangement((s) => s.waveforms)
@@ -98,6 +105,7 @@ export function ArrangementClips({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
 
+    const seen = new Set<string>()
     const paint = (clip: ArrangementClip, selected: boolean, preview: boolean): void => {
       const startSec = clip.startSample / sampleRate
       const lengthSec = clip.durationSamples / sampleRate
@@ -123,15 +131,17 @@ export function ArrangementClips({
         const [srcFrom, srcTo] = sourceRange(clip, sampleRate)
         const visibleFrom = Math.max(0, -x)
         const visibleTo = Math.min(px, w - x)
-        const cols = buildColumns(
-          wave,
-          srcFrom + (visibleFrom / px) * (srcTo - srcFrom),
-          srcFrom + (visibleTo / px) * (srcTo - srcFrom),
-          Math.max(1, visibleTo - visibleFrom),
-          wave.sampleRate,
-          columnsRef.current
-        )
-        columnsRef.current = cols
+        const from = srcFrom + (visibleFrom / px) * (srcTo - srcFrom)
+        const to = srcFrom + (visibleTo / px) * (srcTo - srcFrom)
+        const count = Math.max(1, visibleTo - visibleFrom)
+        const key = `${clip.sourceId}|${from.toFixed(4)}|${to.toFixed(4)}|${count}`
+        let held = columnsRef.current.get(clip.id)
+        if (!held || held.key !== key) {
+          held = { key, cols: buildColumns(wave, from, to, count, wave.sampleRate, held?.cols) }
+          columnsRef.current.set(clip.id, held)
+        }
+        seen.add(clip.id)
+        const cols = held.cols
         drawWaveform(ctx, cols, {
           height: h - HEADER_H,
           y: HEADER_H,
@@ -188,6 +198,10 @@ export function ArrangementClips({
         false,
         true
       )
+    }
+    // A clip that is gone, or off screen, has no peaks worth keeping.
+    for (const id of columnsRef.current.keys()) {
+      if (!seen.has(id)) columnsRef.current.delete(id)
     }
   }, [
     lane,

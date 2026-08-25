@@ -7,10 +7,7 @@ import { ChannelFader, ChannelKnobs } from '@renderer/components/mixer/ChannelKn
 import { useSettings } from '@renderer/state/useSettings'
 import { useArrangement, type ClipSelection } from '@renderer/state/useArrangement'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
-import {
-  ArrangementClips,
-  type ClipGhost
-} from '@renderer/components/arrangement/ArrangementClips'
+import { ArrangementClips } from '@renderer/components/arrangement/ArrangementClips'
 import { placeClip } from '@renderer/arrangement/placement'
 import { useLibrary } from '@renderer/state/useLibrary'
 
@@ -62,7 +59,7 @@ export function ArrangementLane({
   const eqMode = useSettings((s) => s.eqMode)
   const channel = useArrangement((s) => s.channels[lane.id])
   const sampleRate = useArrangement((s) => s.sampleRate)
-  const preview = useArrangement((s) => s.preview)
+  const ghost = useArrangement((s) => (s.preview?.lane === lane.id ? s.preview : null))
   const drag = useRef<{
     pointerId: number
     clipId: string
@@ -104,6 +101,7 @@ export function ArrangementLane({
     if (!held || held.pointerId !== e.pointerId) return
     const travel = e.clientX - held.startX
     if (!held.moved && Math.abs(travel) < DRAG_SLOP_PX) return
+    if (!held.moved) useArrangement.getState().beginDrag()
     held.moved = true
     // Snapped where it lands rather than by how far it came, so a clip that
     // started on a bar line stays on one.
@@ -116,6 +114,7 @@ export function ArrangementLane({
   }
 
   const onUp = (): void => {
+    if (drag.current?.moved) useArrangement.getState().endDrag()
     drag.current = null
   }
 
@@ -134,7 +133,7 @@ export function ArrangementLane({
     if (!trackId || !track) return
 
     const arrangement = useArrangement.getState()
-    void arrangement.ensurePeaks(trackId)
+    if (arrangement.preview?.sourceId !== trackId) void arrangement.ensurePeaks(trackId)
     const own = track.grid?.anchors?.[0]?.bpm ?? track.bpm ?? 0
     // Dropping into an empty arrangement sets the grid to this track, so the
     // preview has to show it unwarped, exactly as the drop will place it.
@@ -148,6 +147,18 @@ export function ArrangementLane({
       atSeconds: snap(secAt(e.clientX)),
       sampleRate
     })
+    // Snapping puts most of these on the same bar as the last one; redrawing
+    // for a shape that has not moved is the bulk of the work in a drag.
+    const shown = arrangement.preview
+    if (
+      shown &&
+      shown.lane === lane.id &&
+      shown.sourceId === trackId &&
+      shown.startSample === placed.startSample &&
+      shown.durationSamples === placed.durationSamples
+    ) {
+      return
+    }
     arrangement.setPreview({ lane: lane.id, sourceId: trackId, ...placed })
   }
 
@@ -161,7 +172,6 @@ export function ArrangementLane({
 
   const knobs = channel ?? { eq: flatChannel(), mode: eqMode }
   const laneSelected = selected?.lane === lane.id ? selected.clipId : null
-  const ghost: ClipGhost | null = preview?.lane === lane.id ? preview : null
 
   return (
     <section className={`arr-lane${lane.soloed ? ' is-soloed' : ''}`} data-lane={lane.name}>

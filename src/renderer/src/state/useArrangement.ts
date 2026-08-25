@@ -97,6 +97,9 @@ export interface ArrangementState {
   /** Lay a library track into a lane, warped onto the grid. */
   dropTrack(lane: string, trackId: string, atSeconds: number): Promise<void>
   moveClip(lane: string, clipId: string, deltaSeconds: number): void
+  /** Group everything a drag does into one undo step. */
+  beginDrag(): void
+  endDrag(): void
   splitClip(lane: string, clipId: string, atSeconds: number): void
   removeClip(lane: string, clipId: string): void
   /** Peaks for a track that is not loaded, so a preview of it can be drawn. */
@@ -132,6 +135,14 @@ const sources = new Map<string, AudioBuffer>()
 
 let engine: PlaylistEngine | null = null
 let playout: WorkletPlayout | null = null
+/**
+ * Whether a drag is open.
+ *
+ * The timeline library takes a full copy of every track for undo on each edit,
+ * and a drag is one edit repeated on every pointer move. A transaction makes
+ * it one copy and one undo step for the whole gesture.
+ */
+let dragging = false
 
 /** Seconds into the file where its first downbeat is. */
 function downbeatSec(track: Track): number {
@@ -290,8 +301,19 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
 
   moveClip(lane, clipId, deltaSeconds) {
     if (!engine) return
-    const sr = ArrangementEngine.shared().sampleRate
-    engine.moveClip(lane, clipId, Math.round(deltaSeconds * sr))
+    engine.moveClip(lane, clipId, Math.round(deltaSeconds * get().sampleRate))
+  },
+
+  beginDrag() {
+    if (!engine || dragging) return
+    dragging = true
+    engine.beginTransaction()
+  },
+
+  endDrag() {
+    if (!engine || !dragging) return
+    dragging = false
+    engine.commitTransaction()
   },
 
   splitClip(lane, clipId, atSeconds) {
