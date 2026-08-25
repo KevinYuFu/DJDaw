@@ -10,7 +10,7 @@ import {
 import { clamp } from '@renderer/core/format'
 import { useRaf } from '@renderer/hooks/useRaf'
 import { useSettings } from '@renderer/state/useSettings'
-import { canvasChrome, themeById } from '@renderer/styles/themes'
+import { canvasChrome } from '@renderer/styles/themes'
 import { useArrangement } from '@renderer/state/useArrangement'
 import { ArrangementLane } from '@renderer/components/arrangement/ArrangementLane'
 import './arrangement.css'
@@ -44,9 +44,9 @@ export function ArrangementView(): ReactElement {
   const notice = useArrangement((s) => s.notice)
   const themeId = useSettings((s) => s.themeId)
   const chrome = useMemo(() => canvasChrome(themeId), [themeId])
-  // The ruler's numbers read as body text, so they come from the token the rest
-  // of the chrome uses rather than from a second colour.
-  const rulerText = useMemo(() => themeById(themeId).tokens['text-dim'], [themeId])
+  // The ruler shares the lanes' dark surface, so its numbers take the label
+  // colour that surface uses.
+  const rulerText = useMemo(() => canvasChrome(themeId).laneText, [themeId])
   const selected = useArrangement((s) => s.selection)
   const [width, setWidth] = useState(900)
   const [barsInView, setBarsInView] = useState(DEFAULT_BARS_IN_VIEW)
