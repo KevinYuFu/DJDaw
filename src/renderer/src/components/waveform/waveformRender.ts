@@ -143,8 +143,8 @@ export function fillColumns(
 
   const { low, mid, high } = wave
   for (let c = first; c < last; c++) {
-    // Recomputed from `fromSec` rather than accumulated: a per-column step
-    // drifts audibly over a five-minute overview.
+    // Recomputed from `fromSec`, not accumulated: a per-column step drifts
+    // over a five-minute overview.
     const n = c - colFrom
     const b0 = bucketGrid
       ? (bucketGrid.index + n) * bucketGrid.bucketsPerColumn + bucketGrid.offsetBuckets
@@ -371,8 +371,8 @@ export interface WaveformDrawOptions {
    */
   subpixel?: number
   /**
-   * Signal edges from {@link buildClipExtents}, drawn instead of the band
-   * envelope. The bands still decide the colour; this only decides the shape.
+   * Signal edges from {@link buildClipExtents}, drawn in place of the band
+   * envelope. The bands still decide the colour; this decides the shape.
    */
   extents?: ColumnExtents | null
 }
@@ -403,9 +403,8 @@ export function drawWaveform(
     return
   }
 
-  // Mono mode paints all three bands in one colour rather than computing a
-  // separate envelope: mirrored bars drawn from the centre union to exactly
-  // the per-column maximum of the three.
+  // Mono mode paints all three bands in one colour: mirrored bars drawn from
+  // the centre union to the per-column maximum of the three.
   const colors = opts.mono ? { low: opts.mono, mid: opts.mono, high: opts.mono } : opts.colors
 
   ctx.save()
@@ -678,9 +677,7 @@ export const DETAIL_LOCATOR_STYLE: LocatorStyle = {
   color: LOCATOR_COLOR,
   lineWidth: 1,
   lineAlpha: 0.72,
-  // Dashed, because colour alone is not enough to separate a locator from a
-  // hot cue at a glance: a dashed guide line reads as a marker you navigate
-  // to, a solid one as a cue you fire.
+  // Dashed: a guide line to navigate to, against a hot cue's solid line.
   dash: [5, 4],
   // Below the hot cue flags, so the two bands never overlap and a locator name
   // is never hidden behind a pad letter.
@@ -1059,9 +1056,8 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
 /** The MACRO view spreads these, so both strips mark a piece the same amount. */
 export const OVERVIEW_CLIP_STYLE: ClipStyle = {
   ...DEFAULT_CLIP_STYLE,
-  // No handle here. The strip is thirty pixels tall, and a press anywhere on a
-  // piece already picks it up — the handle exists in the zoomed view only
-  // because a press there means scrub.
+  // No handle here: on a thirty-pixel strip a press anywhere on a piece picks
+  // it up. The zoomed view needs one, where a press means scrub.
   handleHeight: 0
 }
 
@@ -1189,8 +1185,7 @@ export function drawClipEdges(
       ctx.fill()
     }
 
-    // The grab bar, rounded all the way round so it reads as its own thing
-    // sitting on the piece rather than as the top of the card.
+    // The grab bar, rounded all the way round: its own thing on the piece.
     const h = style.handleHeight
     if (h > 0) {
       ctx.beginPath()

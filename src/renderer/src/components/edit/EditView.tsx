@@ -64,9 +64,7 @@ function isExportable(state: DeckState): boolean {
 /**
  * The rows that have something to export, as a string like `AB`.
  *
- * A string rather than an array because zustand compares selector results by
- * identity: a fresh array every store change would re-render the view sixty
- * times a second while a deck plays.
+ * A string, not an array: zustand compares selector results by identity.
  */
 function useExportableDecks(): string {
   return useDecks((s) => DECK_IDS.filter((id) => isExportable(s.decks[id])).join(''))
@@ -74,12 +72,9 @@ function useExportableDecks(): string {
 
 /**
  * One render spec per row that has audio, in deck order. Empty rows are
- * skipped rather than refused: exporting all four with one row loaded should
- * give you that row.
+ * skipped, so exporting all four with one row loaded gives that row.
  *
- * No `gain` is passed. The channel faders are a monitoring control on the
- * performance mixer, and this view has none — the file is the edit, not the
- * mix position it was last heard at.
+ * No `gain` is passed: the file is the edit, not a mix position.
  */
 function buildSpecs(ids: readonly DeckId[]): DeckRenderSpec[] {
   const { decks } = useDecks.getState()
@@ -106,7 +101,7 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-/** Plain headline plus the raw line underneath, rather than one or the other. */
+/** Plain headline with the raw line underneath it. */
 function describeFailure(message: string, format: ExportFormat): { message: string; detail?: string } {
   if (format === 'mp3' && /ffmpeg/i.test(message)) return { message: FFMPEG_MISSING, detail: message }
   return { message }
@@ -135,10 +130,8 @@ interface ExportPanelProps {
  * The export panel: format, what to export, a name, and a report of what
  * happened.
  *
- * It is modal because an export reads the decks as they are now — a cut or a
- * clip drag half way through a render would not be in the file, and there is
- * no honest way to show that. Nothing here can be touched while a render runs,
- * closing included.
+ * Modal: an export reads the decks as they are when it starts. Nothing here can
+ * be touched while a render runs, closing included.
  */
 function ExportPanel({ loaded, onClose }: ExportPanelProps): ReactElement {
   const focused = useSettings((s) => s.focusedDeck)
@@ -212,8 +205,8 @@ function ExportPanel({ loaded, onClose }: ExportPanelProps): ReactElement {
         setPhase({ kind: 'error', ...describeFailure(result.error, format) })
         return
       }
-      // No path and no error is main saying it wrote nothing on purpose, which
-      // is not a failure to report.
+      // No path and no error means main wrote nothing, and there is nothing to
+      // report.
       if (!result.path) {
         setPhase({ kind: 'idle' })
         return
@@ -401,21 +394,18 @@ function ExportPanel({ loaded, onClose }: ExportPanelProps): ReactElement {
  * The editing view: the four decks stacked as rows, for building an edit.
  *
  * Every row is a full deck, not a preview — the same store, the same engine,
- * the same key map. Stacking them is what makes an edit readable: four
- * playheads at the same horizontal centre, so the same pixel is "now" on all
- * of them.
+ * the same key map. Their playheads share a horizontal centre, so the same
+ * pixel is "now" on all four.
  *
  * Exactly one row is focused, and the unshifted keys act on it. `Tab` and
- * `Shift+Tab` walk the four; clicking a row focuses it. The ring itself lives
- * in `useSettings`, so this view holds no state of its own beyond the export
- * panel, which is a thing being done to the rows rather than part of one.
+ * `Shift+Tab` walk the four; clicking a row focuses it. The ring lives in
+ * `useSettings`; the export panel is the only state held here.
  */
 export function EditView(): ReactElement {
   const [exportOpen, setExportOpen] = useState(false)
   const loaded = useExportableDecks()
   const focused = useSettings((s) => s.focusedDeck)
-  // Transport for the whole edit rather than for a row: an arrangement has one
-  // playhead, and the rows are parts of one piece rather than four decks.
+  // Transport for the whole edit, not for a row: one playhead over four rows.
   const playing = useDecks((s) => s.decks[TRANSPORT_DECK].playing)
   const canPlay = useDecks((s) => s.decks[TRANSPORT_DECK].status === 'ready')
   const canCut = useDecks((s) => s.decks[focused].status === 'ready')
@@ -424,9 +414,8 @@ export function EditView(): ReactElement {
 
   useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
 
-  // A cut on a clip boundary or in a gap is an ordinary thing to ask for by
-  // accident, so `cutAtPlayhead` refuses with a reason rather than throwing,
-  // and the bar shows it for a moment instead of looking broken.
+  // `cutAtPlayhead` refuses a cut on a clip boundary or in a gap and returns a
+  // reason, which the bar shows for a moment.
   const onCut = (): void => {
     const result = useDecks.getState().cutAtPlayhead(focused)
     window.clearTimeout(noticeTimer.current)

@@ -29,28 +29,20 @@ export const CROSSOVER_HZ = { low: 250, high: 2500 } as const
  * Q for each stage of the crossover.
  *
  * A Linkwitz-Riley 24 dB/oct split is two cascaded Butterworth sections, and
- * Butterworth is Q = 1/sqrt(2). LR is used rather than plain Butterworth
- * because LR bands sum flat: a Butterworth split leaves a +3 dB bump sitting on
- * each crossover even with every band centred, which is exactly the artefact
- * EQ Three is measured to have.
+ * Butterworth is Q = 1/sqrt(2). LR bands sum flat; a plain Butterworth split
+ * leaves a +3 dB bump on each crossover with every band centred.
  */
 export const CROSSOVER_Q = Math.SQRT1_2
 
 /**
  * Shelf **corner** frequencies for EQ mode, in Hz.
  *
- * A corner is not a crossover point, and the two must never be swapped again:
- * a crossover splits the signal in two, a shelf leans on everything past its
- * corner while leaving the rest alone. That difference is the whole reason EQ
- * mode exists — a shelf at 0 dB is mathematically an identity, so a centred
- * channel passes the signal through untouched, while a crossover-and-sum
- * rotates phase between its bands whatever the knobs say and grew a loud master
- * by +7.3 dB with every knob centred.
+ * A corner is not a crossover point: a crossover splits the signal in two, a
+ * shelf leans on everything past its corner and leaves the rest alone. A shelf
+ * at 0 dB is an identity, so a centred channel passes the signal untouched.
  *
- * The numbers are deliberately {@link CROSSOVER_HZ}'s, so the low knob moves
- * the same part of the spectrum in either mode. Pioneer quotes 70 Hz / 1 kHz /
- * 13 kHz for a DJM channel EQ, but those come from a different split and 13 kHz
- * leaves most of the highs unmoved, so they are not the numbers to copy.
+ * The numbers are {@link CROSSOVER_HZ}'s, so the low knob moves the same part
+ * of the spectrum in either mode.
  */
 export const SHELF_CORNER_HZ = { low: CROSSOVER_HZ.low, high: CROSSOVER_HZ.high } as const
 
@@ -68,11 +60,9 @@ export const MID_BELL_HZ = Math.sqrt(SHELF_CORNER_HZ.low * SHELF_CORNER_HZ.high)
  * Web Audio low-pass reads in decibels.
  *
  * Q is centre frequency over bandwidth, so this is the Q whose half-gain points
- * land exactly on the two shelf corners: the bell covers the band the shelves
- * leave to it and no more. Much wider than a mixing EQ's mid, on purpose — a
- * narrower bell leaves the octave either side of it barely touched, so a full
- * cut on all three knobs measured -17 dB in the gaps instead of the -26 dB the
- * knobs claim.
+ * land on the two shelf corners: the bell covers the band the shelves leave to
+ * it and no more. Wider than a mixing EQ's mid, so a full cut on all three
+ * knobs reaches the floor the knobs claim.
  */
 export const MID_BELL_Q =
   MID_BELL_HZ / (SHELF_CORNER_HZ.high - SHELF_CORNER_HZ.low)
@@ -82,7 +72,7 @@ export type EqMode = 'eq' | 'isolator'
 /** Full boost, in dB. Both modes, and the same as every mixer worth copying. */
 export const EQ_MAX_BOOST_DB = 6
 
-/** Full cut in EQ mode. A DJM channel EQ bottoms out here rather than at silence. */
+/** Full cut in EQ mode. A channel EQ bottoms out here, short of silence. */
 export const EQ_MAX_CUT_DB = -26
 
 /** Trim range, in dB. Not published by Pioneer; derived from LINE input headroom. */
@@ -116,10 +106,9 @@ function clamp01(v: number): number {
 /**
  * dB for a band knob. 0.5 is flat, 1 is full boost, 0 is full cut.
  *
- * In isolator mode a full cut is -Infinity, which is a real value to return
- * here: {@link bandGain} turns it into a gain of exactly zero. Cut and boost
- * are scaled separately because a mixer gives far more cut than boost, and
- * pretending otherwise wastes half the knob's travel.
+ * In isolator mode a full cut is -Infinity, and {@link bandGain} turns it into
+ * a gain of zero. Cut and boost are scaled separately: there is far more cut
+ * than boost to cover.
  */
 export function eqGainDb(knob: number, mode: EqMode = 'eq'): number {
   const k = clamp01(knob)
@@ -160,9 +149,8 @@ export interface FilterSetting {
  * The filter knob is one control covering two filters, as on a DJM: centred is
  * off, left sweeps a low-pass down, right sweeps a high-pass up.
  *
- * The sweep is exponential because pitch is. A linear sweep spends most of its
- * travel in the top octave, where nothing audible happens. Resonance fades in
- * with the sweep so a parked knob stays clean.
+ * The sweep is exponential, as pitch is. Resonance fades in with it, so a
+ * parked knob stays clean.
  */
 export function filterSetting(knob: number): FilterSetting {
   const k = clamp01(knob)

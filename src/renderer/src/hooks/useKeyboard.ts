@@ -15,20 +15,15 @@ import { useSettings } from '@renderer/state/useSettings'
  * dispatched from a single window-level listener that reads the stores with
  * `getState()`, so the handler is installed once and can never go stale.
  *
- * The transport map is the same in both views. What changes is how many decks
- * `Tab` walks: the ring is owned by `useSettings.cycleFocusedDeck`, which knows
- * the performance view draws two decks and the editing view four, so nothing
- * here has to branch on the view.
+ * The transport map is the same in every view. How many decks `Tab` walks is
+ * owned by `useSettings.cycleFocusedDeck`, so nothing here branches on the
+ * view.
  *
- * The clip keys — cut and delete — are the exception. They only exist in the
- * editing view, because the performance view draws no clips to act on. There
- * they are fully inert: not handled, not swallowed, so `Backspace` still means
- * whatever the browser thinks it means.
+ * The clip keys — cut and delete — exist in the editing views only. Elsewhere
+ * they are inert: not handled, not swallowed.
  *
- * Bindings are matched on `event.code`, not `event.key`, for two reasons: the
- * map is positional the way a controller is, and `Shift+1` reports a key of
- * `'!'` on a US layout and something else again on every other layout, while
- * the code stays `Digit1`.
+ * Bindings are matched on `event.code`, not `event.key`: the map is positional
+ * like a controller's, and a code stays `Digit1` on every layout.
  */
 
 /** The grid nudge step, matching rekordbox's fine alignment buttons. */
@@ -68,11 +63,11 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
 ] as const
 
 /**
- * Whether a key event belongs to something the user is typing into. Range
- * sliders, checkboxes and buttons are explicitly not text: they ignore the
- * letter keys anyway, and swallowing shortcuts because the master volume
- * happens to hold focus would be maddening. The arrows are the exception —
- * see {@link consumesArrowKeys}.
+ * Whether a key event belongs to something the user is typing into.
+ *
+ * Range sliders, checkboxes and buttons are not text: the letter bindings still
+ * reach the decks while one holds focus. The arrows are the exception — see
+ * {@link consumesArrowKeys}.
  */
 const NON_TEXT_INPUT_TYPES = new Set([
   'range',
@@ -94,10 +89,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * Input types that act on the arrow keys themselves. They are not text, so the
- * letter bindings still reach the decks while one holds focus — but a range
- * slider whose arrows nudge the playhead instead of its own value is a control
- * the keyboard cannot work, which is what the master volume was.
+ * Input types that act on the arrow keys themselves, so a focused one keeps
+ * its arrows. The letter bindings still reach the decks.
  */
 const ARROW_CONSUMING_INPUT_TYPES = new Set([
   'range',
@@ -247,8 +240,7 @@ function isRepeatable(event: KeyboardEvent): boolean {
 /** Whether a code is bound at all, so auto-repeat can be swallowed too. */
 function isBound(code: string): boolean {
   if (hotCueIndex(code) !== null) return true
-  // Held down in the performance view these are not ours, so they must reach
-  // the browser rather than being quietly eaten on every repeat.
+  // Outside the editing views these are not ours, and must reach the browser.
   if (code === 'Delete' || code === 'Backspace') return inEditView() || inArrangement()
   return (
     REPEATABLE.has(code) ||
@@ -269,14 +261,12 @@ function isBound(code: string): boolean {
  * Install the global key map. Call once, from the app shell.
  *
  * Press-and-hold bindings — the hot cue pads and `Z`, which is CUE — need the
- * keyup as well, so the deck knows to stop previewing. The deck each held key was pressed on
- * is remembered, because `Tab` can move the focus while a pad is down, and the
- * release has to go back to the deck that actually started playing, not to
- * whichever one is focused by the time the DJ lets go.
+ * keyup as well, so the deck stops previewing. The deck each held key was
+ * pressed on is remembered, and the release goes back to that deck: `Tab` can
+ * move the focus while a pad is down.
  *
- * The keyup that never comes is covered too: losing the window mid-hold ends
- * every deck's preview, since a deck left previewing plays on with nothing
- * left to stop it.
+ * Losing the window mid-hold ends every deck's preview, covering a keyup that
+ * never arrives.
  */
 export function useKeyboard(): void {
   useEffect(() => {
@@ -305,8 +295,7 @@ export function useKeyboard(): void {
         if (!event.repeat) cutAtPlayhead(focusedDeck())
         return
       }
-      // Cmd/Ctrl/Alt combinations belong to the application menu — Cmd+Q must
-      // quit rather than beat jump.
+      // Cmd/Ctrl/Alt combinations belong to the application menu.
       if (event.metaKey || event.ctrlKey || event.altKey) return
       // An arrow belongs to whatever has focus if that thing acts on arrows.
       if (ARROW_CODES.has(event.code) && consumesArrowKeys(event.target)) return

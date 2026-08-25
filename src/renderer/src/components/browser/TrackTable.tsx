@@ -94,9 +94,8 @@ function messageOf(err: unknown): string {
 
 
 /**
- * Track ids with an off-deck analysis running. The guard is module level
- * because the row menu and the app menu both come through here, and two
- * detections of one file would decode it twice and race two grids into it.
+ * Track ids with an off-deck analysis running. Module level, so the row menu
+ * and the app menu share one guard and a file is only ever detected once.
  */
 const analyzingOffDeck = new Set<string>()
 
@@ -106,7 +105,7 @@ export interface AnalyzeResult {
   /** The BPM the track ended up with, which is not the detected one when a
    *  hand-corrected grid won. */
   bpm: number
-  /** True when a grid edited while detection ran was kept instead of replaced. */
+  /** True when a grid edited while detection ran was kept. */
   keptEditedGrid: boolean
 }
 
@@ -133,13 +132,12 @@ export async function analyzeTrackOffDeck(track: Track): Promise<AnalyzeResult |
 
     const buffer = await decodeTrack(engine.ctx, track.path)
     const [waveform, tempo] = await Promise.all([analyzeWaveform(buffer), detectTempo(buffer)])
-    // Keyed on the audio key rather than the id, so a mirrored record and any
-    // fork of it — the same file either way — share one cached analysis.
+    // Keyed on the audio key, so a mirrored record and any fork of it share
+    // one cached analysis.
     await window.api.writeWaveformCache(track.audioKey, encodeWaveform(waveform))
 
-    // Detection takes seconds, so the library is re-read rather than written
-    // back from the stale record this started with: the track may be gone, and
-    // a grid the user corrected in the meantime is their answer, not ours.
+    // Detection takes seconds, so the library is re-read: the track may be
+    // gone, and a grid corrected in the meantime stands.
     const current = useLibrary.getState().trackById(track.id)
     if (!current) return null
     const keptEditedGrid = current.grid !== gridBefore
@@ -179,7 +177,7 @@ function SortArrow({ dir }: { dir: 'asc' | 'desc' }): ReactElement {
   )
 }
 
-/** Stand-in cover: a note glyph rather than an empty hole in the column. */
+/** Stand-in cover: a note glyph, for a track with no artwork. */
 function ArtworkPlaceholder(): ReactElement {
   return (
     <span className="tt-art tt-art--empty" aria-hidden="true">
@@ -249,8 +247,7 @@ const TrackRow = memo(function TrackRow({
   if (mirrored) classes.push('tt-row--mirrored')
   if (selected) classes.push('tt-row--selected')
 
-  // Analysis is what produces a tempo worth beat matching to, so a value a tag
-  // claimed before then is shown a shade back rather than as fact.
+  // A tempo from a tag, before analysis has run, is shown a shade back.
   const soft = track.analyzed ? undefined : 'tt-unanalyzed'
 
   return (
@@ -334,10 +331,9 @@ export function TrackTable({ onNotice }: TrackTableProps): ReactElement {
   const loadTrack = useDecks((s) => s.loadTrack)
   const focusedDeck = useSettings((s) => s.focusedDeck)
 
-  // visibleTracks() is a method rather than stored state, so the inputs it
-  // reads are subscribed to individually and the result recomputed from them.
-  // That now includes the mirror and the scope: switching collections has to
-  // rebuild the rows even though nothing about the local records changed.
+  // visibleTracks() is a method, not stored state, so its inputs are
+  // subscribed to individually — the mirror and the scope included, since
+  // switching collections rebuilds the rows.
   const rows = useMemo(
     () => useLibrary.getState().visibleTracks(),
     [
