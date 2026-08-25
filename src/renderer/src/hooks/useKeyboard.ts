@@ -150,13 +150,10 @@ function inEditView(): boolean {
 }
 
 /**
- * `Cmd+E` / `Ctrl+E` — cut the focused row in two at the playhead, the way
- * Ableton does. Kevin is on a Mac and will reach for Cmd; Ctrl is here so the
- * binding is the same on every platform.
+ * `Cmd+E` / `Ctrl+E` — cut the focused row in two at the playhead. Both
+ * modifiers are bound, so the shortcut is the same on every platform.
  *
- * A refused cut — nothing loaded, or the playhead sitting on a clip edge — is
- * not worth interrupting anyone for. The Cut button is where a reason belongs;
- * from the keyboard it only goes to the log.
+ * A refusal goes to the log. The Cut button carries the reason on screen.
  */
 function cutAtPlayhead(deck: DeckId): void {
   const result = useDecks.getState().cutAtPlayhead(deck)

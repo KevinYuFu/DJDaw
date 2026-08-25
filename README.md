@@ -120,8 +120,8 @@ silence; isolator-style full kill needs a crossover and is not built.
 A **point of interest** is a locator, a hot cue or the CUE point. `D` and `F`
 walk all of them in time order.
 
-**Locators** are markers you drop while a track plays, the way locators work in
-Ableton. Drop one with `X`, jump between them with `D` and `F`. They are drawn
+**Locators** are markers you drop while a track plays. Drop one with `X`, jump
+between them with `D` and `F`. They are drawn
 on both waveforms, with their name where there is room. They are the same thing
 rekordbox calls a memory cue, so an import brings yours over.
 

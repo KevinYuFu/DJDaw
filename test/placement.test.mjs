@@ -1,8 +1,7 @@
 /**
  * Where a dropped track lands.
  *
- * The preview under the cursor and the clip that is actually made both come
- * from here, so these are the numbers the picture promises.
+ * The preview under the cursor and the clip that is made both come from here.
  */
 import { placeClip } from './.build/placement.mjs'
 

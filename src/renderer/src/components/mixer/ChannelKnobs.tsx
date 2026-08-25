@@ -15,18 +15,14 @@ import { clamp } from '@renderer/core/format'
 /**
  * Trim, three-band EQ and filter for one channel.
  *
- * Shared by every view that has a channel strip, and told what to draw rather
- * than reading a store, because the arrangement's lanes and the editing view's
- * rows keep their knobs in different places.
+ * Shared by every view with a channel strip. Told what to draw, so a caller
+ * can keep its knobs wherever it likes.
  *
- * Its own component so that a knob move re-renders five small SVGs instead of
- * the whole row: the waveform beside it is the expensive neighbour, and a drag
- * writes on every pointer move.
+ * Its own component, so a knob move re-renders five small SVGs and not the
+ * whole row.
  *
- * Knobs are dragged vertically — up is more — and a double-click puts one back
- * to centre, which is how every mixer plugin behaves. The live value goes in a
- * readout floating above the strip rather than under each knob, because 26px
- * of width cannot hold `-26 dB`.
+ * Knobs drag vertically, up for more; a double-click returns one to centre.
+ * The live value goes in a readout above the strip, which has room for it.
  */
 
 /** Pointer travel, in px, for the whole sweep of a knob. */
@@ -80,8 +76,8 @@ function arcPath(radius: number, fromDeg: number, toDeg: number): string {
 /**
  * What the knob is doing, in the units the knob is in.
  *
- * The mode only reaches the three bands: it decides how deep a full cut goes,
- * so in isolator mode the bottom of a band reads `KILL` rather than a number.
+ * The mode reaches the three bands only, where it sets how deep a full cut
+ * goes: in isolator mode the bottom of a band reads `KILL`.
  */
 function knobReadout(id: keyof ChannelEq, value: number, mode: EqMode): string {
   if (id === 'filter') return formatFilter(value)
@@ -112,10 +108,8 @@ export interface ChannelFaderProps {
 /**
  * The channel fader for one row or lane.
  *
- * Vertical, and tapered like a DAW fader rather than a mixer's trim: silent at
- * the bottom, 0 dB near the top and a little headroom over it. Sits between the
- * waveform and the rest of the controls because it is the one thing on the row
- * that is about the level of the track rather than about editing it.
+ * Vertical and tapered: silent at the bottom, 0 dB near the top, a little
+ * headroom over it.
  */
 export function ChannelFader({
   position,
@@ -210,8 +204,7 @@ export function ChannelKnobs({
 
   const onKnobDown = (e: ReactPointerEvent<HTMLDivElement>, spec: EqKnobSpec): void => {
     if (disabled || e.button !== 0) return
-    // Capture, so a drag that wanders off a 22px knob — most of them — keeps
-    // feeding this knob until the button comes up.
+    // Capture, so a drag that wanders off the knob keeps feeding it.
     e.currentTarget.setPointerCapture(e.pointerId)
     const startValue = eq[spec.id]
     drag.current = { ...spec, pointerId: e.pointerId, start: e.clientY, startValue }

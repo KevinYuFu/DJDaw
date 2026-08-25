@@ -19,12 +19,11 @@ export interface LaneSource {
 /**
  * One track of the arrangement.
  *
- * A lane owns a voice per source laid into it and sums them through a single
- * channel strip, so the EQ, the fader and mute/solo apply to the lane as a
- * whole however many different songs are sitting on it.
+ * Owns a voice per source laid into it and sums them through one channel
+ * strip, so the EQ, fader and mute/solo apply to the whole lane.
  *
  *   voice ─┐
- *   voice ─┼─> trim ─> EQ ─> filter ─> fader ─> (master)
+ *   voice ─┼─> trim ─> EQ ─> filter ─> fader ─> pan ─> (master)
  *   voice ─┘
  */
 export class Lane {
@@ -35,7 +34,7 @@ export class Lane {
   private readonly fader: GainNode
   private readonly panner: StereoPannerNode
   private readonly voices = new Map<string, Voice>()
-  /** Fader position, kept apart from the mute/solo gate that also scales it. */
+  /** Fader position, separate from the mute/solo gate. */
   private volume = 1
   private audible = true
 
@@ -53,10 +52,8 @@ export class Lane {
   /**
    * Put the lane's sources in place, adding, updating and dropping voices.
    *
-   * Called on every structural change. A source that is already here keeps its
-   * voice — and therefore its loaded audio — so moving a clip does not reload
-   * anything. The voices that had to be built are returned, because those are
-   * the only ones a running transport has to start.
+   * A source already here keeps its voice and its loaded audio. Returns the
+   * voices that had to be built, which are the ones a running transport starts.
    */
   setSources(sources: readonly LaneSource[]): Voice[] {
     const wanted = new Set(sources.map((s) => s.sourceId))
@@ -102,8 +99,7 @@ export class Lane {
   /**
    * Whether the lane is heard at all.
    *
-   * Mute and solo are one answer rather than two gates: with anything soloed,
-   * everything else is silent, and the store is what works that out.
+   * One gate for mute and solo together. The store resolves which wins.
    */
   setAudible(audible: boolean): void {
     this.audible = audible

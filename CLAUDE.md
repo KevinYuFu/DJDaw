@@ -55,13 +55,17 @@ Branch names: `feat/short-description`, `fix/short-description`.
 
 ## How to comment code
 
-A comment says **what the code is for**, to someone seeing it for the first
-time. Nobody remembers the history of the code, so do not write it down.
+A comment says **what the code is for and what it does**, to someone seeing it
+for the first time. Nothing about how it came to be that way.
 
 - No explaining the bug that was fixed.
 - No explaining what the code used to do.
 - No justifying the change, or arguing with an alternative.
-- No naming Kevin, or any decision he made.
+- No naming Kevin, any decision he made, or his hardware.
+- No naming another product as the reason for a choice.
+
+The same goes for the docs and the README. They describe what the app does,
+not the path taken to get there.
 
 Most comments are one line. If a line of code is obvious, it gets no comment.
 
@@ -97,11 +101,15 @@ and it is still that even when the addition is genuinely good.
 The same goes for measuring: when I claim something matches, the measurement
 has to be of the thing itself, not of something that correlates with it.
 
-## Ableton is the reference for the arrangement view
+## Follow the conventions of the tool being built
 
-The arrangement view (V3) is Ableton Live's arrangement view. When a decision
-is unclear, the answer is how Ableton does it. Rekordbox is still the reference
-for the performance view.
+The arrangement view follows standard DAW arrangement conventions: lanes of
+clips on one grid, clips that do not overlap, snapping, one transport. The
+performance view follows DJ player conventions.
+
+When a decision is unclear, the answer is whichever of those a user of that
+kind of tool would already expect. Do not name a specific product in the
+codebase, the docs or the UI.
 
 ## Use what already exists
 

@@ -307,13 +307,11 @@ deletes.
 **Quantize** — on by default, 1 beat. Applies to hot cue set/trigger, loops,
 beat jump and dropping a locator.
 
-**Locators** — memory cues are treated as locators, the way Ableton does:
-markers you drop while listening and then navigate between, rather than pads
-you trigger. `D` and `F` walk the *points of interest*, which means every
-locator, hot cue and the CUE point, in time order
-(`src/shared/pointsOfInterest.ts`). Jumping right from a marker you are sitting
-on reaches the next one rather than sitting still, which is what the epsilon in
-that module is for.
+**Locators** — memory cues are locators: markers dropped while listening and
+navigated between, not pads to trigger. `D` and `F` walk the *points of
+interest* — every locator, hot cue and the CUE point, in time order
+(`src/shared/pointsOfInterest.ts`). Jumping right from a marker lands on the
+next one, which is what the epsilon in that module is for.
 
 **Tempo fader** — `rate = 1 + pitchPercent / 100`; displayed BPM is
 `grid bpm * rate`.
@@ -461,9 +459,8 @@ dance music), 78.3 on GTZAN.
 
 Channel EQ, filter and trim are real. Each deck runs
 trim -> three-way Linkwitz-Riley crossover -> a gain per band -> summed ->
-filter -> fader. It is a crossover-and-sum rather than shelving filters,
-because only a crossover can take a band to silence — which is what an isolator
-is. Ableton's EQ Three works the same way.
+filter -> fader. A crossover-and-sum, not shelving filters: only a crossover
+takes a band to silence, which is what an isolator does.
 
 Crossovers at 250 Hz and 2.5 kHz. Two modes, as rekordbox exposes them:
 EQ cuts to -26 dB like a DJM channel EQ, ISO cuts to silence. Both boost +6 dB.

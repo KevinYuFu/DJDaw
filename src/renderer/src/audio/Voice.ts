@@ -8,13 +8,9 @@ import {
 /**
  * One audio source playing inside one lane.
  *
- * A lane is the sum of its voices: laying a second song into a lane adds a
- * voice rather than reloading anything, which is what lets one lane hold clips
- * from as many tracks as you like.
- *
- * Splitting by source is also what keeps the pitch right. A voice reads one
- * file at one speed, so the shift that cancels that speed is a single constant
- * and the stretcher never has to change it mid-clip.
+ * A lane is the sum of its voices, which is how one lane holds clips from
+ * several tracks. A voice reads one file at one speed, so its pitch shift is a
+ * single constant.
  *
  *   worklet ──> stretcher ──> (lane)
  */
@@ -62,9 +58,8 @@ export class Voice {
   /**
    * How fast this voice reads its file, and the pitch shift that cancels it.
    *
-   * The stretcher is inserted the first time a voice is warped and stays in the
-   * chain afterwards, because it adds a little latency: taking it back out
-   * would put this voice ahead of its neighbours.
+   * The stretcher is inserted on the first warp and stays in the chain, so its
+   * latency is the same for the life of the voice.
    */
   setRate(rate: number): void {
     const next = Number.isFinite(rate) && rate > 0 ? rate : 1
@@ -93,7 +88,7 @@ export class Voice {
     this.stretch?.schedule({ active: true, semitones: -12 * Math.log2(this.rate) })
   }
 
-  /** Start on a named context frame, so every voice takes its first sample together. */
+  /** Start on a named context frame, shared by every voice in the session. */
   start(fromFrame: number, atContextFrame: number): void {
     this.post({ type: 'transport', playing: true, fromFrame, atContextFrame })
   }
