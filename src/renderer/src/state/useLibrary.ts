@@ -22,18 +22,16 @@ import { LIBRARY_VERSION } from '@renderer/core/constants'
  * deletions included.
  *
  * Editing a mirrored record forks it into the local collection and the edit
- * lands on the fork, which is why `updateTrack` returns the id it actually
- * wrote to. Callers holding the old id — a deck, a selection — must adopt it,
- * or their next edit forks again from the mirror and the first one is stranded
- * on a record nothing references.
+ * lands on the fork, so `updateTrack` returns the id it wrote to. Callers
+ * holding the old id — a deck, a selection — must adopt the returned one.
  *
- * Writes to disk are debounced because a single grid nudge or hot cue drag
- * rewrites the whole file.
+ * Writes to disk are debounced: any single edit rewrites the whole file.
  */
 /**
- * What a one-shot XML import did, so the browser can report it rather than
- * guess. Distinct from a sync: an import copies the export into the local
- * collection once, where a sync only rebuilds the read-only mirror.
+ * What a one-shot XML import did, for the browser to report.
+ *
+ * An import copies the export into the local collection once. A sync only
+ * rebuilds the read-only mirror.
  */
 export interface RekordboxImportSummary {
   cancelled: boolean
@@ -158,10 +156,8 @@ let saveRun: Promise<void> | null = null
 /**
  * Last `visibleTracks()` result, with the inputs it was built from.
  *
- * The browser calls it more than once per render and the mirror runs to
- * thousands of rows, so the same answer is handed back until one of its inputs
- * actually changes. Collections are compared by identity, which is safe because
- * every write in this store replaces them rather than mutating in place.
+ * The same answer is handed back until one of its inputs changes. Collections
+ * are compared by identity: every write in this store replaces them.
  */
 let viewCache: { inputs: readonly unknown[]; rows: Track[] } | null = null
 
@@ -174,10 +170,8 @@ function sameInputs(a: readonly unknown[], b: readonly unknown[]): boolean {
 /**
  * The local collection exactly as it stands now, in the on-disk shape.
  *
- * Mirrored records are filtered out here rather than at the call sites: the
- * mirror is derived from the XML and rebuilt on every sync, so persisting one
- * would resurrect a track rekordbox has since deleted, and it would come back
- * as a local record that no sync can ever clean up.
+ * Mirrored records are filtered out here. The mirror is derived from the XML
+ * and rebuilt on every sync, so nothing from it is ever persisted.
  */
 function snapshotLibrary(): LibraryFile {
   const { tracks, order, mirrorMeta } = useLibrary.getState()
@@ -196,11 +190,9 @@ function snapshotLibrary(): LibraryFile {
 /**
  * Write pending changes one at a time.
  *
- * Overlapping saves can be applied by main in the opposite order to the calls
- * that started them, which persists a stale snapshot over a newer one. Only one
- * write is ever in flight, and each pass snapshots the store as it starts, so
- * whatever changed while the previous write was running is covered by the next
- * one instead of being written from a stale capture.
+ * Only one write is ever in flight, and each pass snapshots the store as it
+ * starts, so anything that changed during the previous write is covered by the
+ * next one. Overlapping saves could otherwise land out of order.
  */
 async function drainSaves(): Promise<void> {
   while (dirty) {
@@ -227,13 +219,10 @@ function scheduleSave(): void {
 /**
  * Write any pending change immediately.
  *
- * Teardown cannot await anything, so the invoke is issued directly rather than
- * queued behind `drainSaves`: a queued save would be waiting on a promise the
- * closing page never lets resolve, and the edit would be lost. `invoke` posts
- * its message synchronously, so the payload is on its way to main even though
- * the promise it returns never settles here. Main serialises library writes and
- * holds the quit open until they land, so this last snapshot still wins over a
- * write that was already in flight.
+ * Teardown cannot await, so the invoke is issued directly and not queued behind
+ * `drainSaves`. `invoke` posts its message synchronously, so the payload is on
+ * its way to main even though the promise it returns never settles here. Main
+ * serialises library writes and holds the quit open until they land.
  */
 export function flushLibrarySave(): Promise<void> {
   if (saveTimer) {
@@ -248,13 +237,11 @@ export function flushLibrarySave(): Promise<void> {
 }
 
 /**
- * library.json is a plain file a user can edit or carry between versions, so
- * fill in anything missing rather than letting `undefined` reach the UI.
+ * Fill in anything missing from library.json, which is a plain file a user can
+ * edit or carry between versions.
  *
- * `source` and `audioKey` are backfilled because records written before the
- * two-collection split have neither, and every write now resolves through
- * them: without the backfill an existing library would load as records that
- * cannot be edited and whose waveform cache cannot be found.
+ * `source` and `audioKey` are backfilled: every write resolves through them,
+ * and a record can be missing either.
  */
 function normalizeTrack(t: Track, source?: TrackSource): Track {
   return {
@@ -448,9 +435,8 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
       ...(result.error ? { error: result.error } : {})
     }
 
-    // A failed read is not rekordbox saying the collection is empty — the file
-    // is typically mid-rewrite by an export that is still running. Keep the
-    // last good mirror and report the error instead of blanking the browser.
+    // A failed read means the file is unavailable, typically mid-rewrite by a
+    // running export. Keep the last good mirror and report the error.
     if (result.error && (result.tracks?.length ?? 0) === 0) {
       set((s) => ({ mirrorMeta: { ...meta, xmlPath: meta.xmlPath ?? s.mirrorMeta.xmlPath } }))
       return
@@ -460,13 +446,12 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
     const mirrorOrder: string[] = []
     for (const t of result.tracks ?? []) {
       if (!t?.id || mirror[t.id]) continue
-      // Forced rather than trusted: a record that reads as local in here would
-      // be editable in place and could reach library.json.
+      // Forced: a record reading as local in here would be editable in place
+      // and could reach library.json.
       mirror[t.id] = normalizeTrack(t, 'rekordbox')
       mirrorOrder.push(t.id)
     }
-    // Built once here rather than per render: 2,700 tracks across hundreds of
-    // playlists is real work, and the tree only changes when the mirror does.
+    // Built once here, not per render. The tree changes only with the mirror.
     const playlists = result.playlists ?? []
     const playlistTree = buildPlaylistTree(playlists)
     // rekordbox may have renamed or deleted the playlist that is on screen.
@@ -554,9 +539,8 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
 
   selectPlaylist(path) {
     // A playlist only exists in the mirror, so picking one moves the browser
-    // there. Picking All (null) does the same: it is the top of the same tree.
-    // The sort resets because the playlist's own order is the point of picking
-    // it; one click on a column sorts it again.
+    // there, as does picking All (null), the top of the same tree. The sort
+    // resets to the playlist's own order; a click on a column sorts it again.
     set({ playlistPath: path, scope: 'rekordbox', sortActive: false })
   },
 
@@ -595,9 +579,8 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
     // and is sorted as usual.
     let playlistOrdered = false
 
-    // A folder is a container, not a track list. The tree UI is expected not to
-    // select one, but a folder path arriving here shows All rather than an
-    // empty table with nothing to explain it. Same for a path that has gone.
+    // A folder is a container, not a track list. A folder path arriving here
+    // shows All, as does a path that has gone.
     const node =
       s.scope === 'rekordbox' && s.playlistPath != null
         ? findPlaylistNode(s.playlistTree, s.playlistPath)
@@ -632,9 +615,8 @@ useLibrary.subscribe((state, prev) => {
 })
 
 if (typeof window !== 'undefined') {
-  // Main watches the XML and pushes a fresh mirror when it changes. Subscribing
-  // at module scope rather than from a component means a sync that lands during
-  // startup is not missed, and there is only ever one registration.
+  // Main watches the XML and pushes a fresh mirror when it changes. Subscribed
+  // at module scope: one registration, live from startup.
   window.api?.onRekordboxSync?.((result) => {
     useLibrary.getState().applyRekordboxSync(result)
   })

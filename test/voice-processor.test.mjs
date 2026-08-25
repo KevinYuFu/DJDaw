@@ -2,10 +2,9 @@
  * Arrangement voice behaviour, driven under Node with stubbed AudioWorklet
  * globals so positions can be asserted frame-exactly.
  *
- * The property everything else rests on: arrangement time advances at exactly
- * one frame per frame whatever the clip's speed is. That is what keeps lanes
- * locked to each other, so speed has to show up in the source lookup and
- * nowhere else.
+ * Arrangement time advances at one frame per frame whatever a clip's speed is,
+ * which is what keeps lanes locked to each other. Speed shows up in the source
+ * lookup and nowhere else.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -148,7 +147,7 @@ for (const rate of [1, 1.16, 0.82, 2]) {
   eq('voices at different speeds keep the same arrangement position', a.pos, b.pos)
 }
 
-// Past the end of the file a clip is silent rather than reading rubbish.
+// Past the end of the file a clip is silent.
 {
   const p = voice([{ start: 0, end: SR * 90, src: 0 }])
   eq('reads past the file are silent', p.readChannel(new Float32Array([1, 2, 3]), FRAMES + 10), 0)

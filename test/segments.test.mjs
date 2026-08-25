@@ -1,6 +1,6 @@
 /**
- * A row as an ordered list of segments: reordering trades places rather than
- * overwriting, and deleting from the middle leaves a hole you can delete again.
+ * A row as an ordered list of segments: reordering trades places, and deleting
+ * from the middle leaves a hole that can be deleted again.
  */
 import {
   deleteSegment,

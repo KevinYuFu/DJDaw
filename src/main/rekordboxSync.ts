@@ -48,10 +48,9 @@ function describeError(err: unknown): string {
  * Where rekordbox writes its collection export by default.
  *
  * rekordbox's Auto Export (Preferences > Advanced > Other) fills the
- * destination in for you, and on macOS that default sits beside the rest of its
- * data. Checking here means a first launch finds the collection with nothing
- * for the user to pick. Returns null on platforms whose location we have not
- * confirmed, rather than guessing.
+ * destination in, and on macOS that default sits beside the rest of its data.
+ * A first launch finds the collection with nothing for the user to pick.
+ * Returns null on platforms whose location is not known.
  */
 export function defaultRekordboxXmlPath(): string | null {
   if (process.platform !== 'darwin') return null
@@ -119,12 +118,11 @@ async function readMirror(xmlPath: string): Promise<RekordboxSyncResult> {
  * Rebuild the mirror from an XML export.
  *
  * Never rejects: a moved, deleted or malformed export resolves with an empty
- * mirror and an `error` string instead, because this runs at startup and a
- * stale remembered path must not be able to stop the app from launching.
+ * mirror and an `error` string, so a stale remembered path cannot stop the app
+ * from launching.
  *
- * Calls are serialised. A burst of file events plus a manual refresh could
- * otherwise have two parses of a multi-megabyte collection running at once,
- * and the older one could finish last and push the staler mirror.
+ * Calls are serialised, so two parses of one collection never overlap and the
+ * newest mirror is always the one pushed.
  */
 export function syncFromXml(xmlPath: string): Promise<RekordboxSyncResult> {
   const run = async (): Promise<RekordboxSyncResult> => {
@@ -165,10 +163,9 @@ function handleChange(onChange: (result: RekordboxSyncResult) => void): void {
 /**
  * Watch an XML export and call `onChange` with a fresh mirror after each write.
  *
- * The watch is on the containing directory, filtered to the file name, because
- * rekordbox exports by replacing the file rather than rewriting it in place. A
- * watch on the file itself follows the old inode and goes deaf after the very
- * first export, which looks exactly like sync silently not working.
+ * The watch is on the containing directory, filtered to the file name:
+ * rekordbox exports by replacing the file, and a watch on the file itself
+ * follows the old inode.
  *
  * Replaces any existing watch. Does not sync immediately — the caller decides
  * whether it wants the initial mirror.

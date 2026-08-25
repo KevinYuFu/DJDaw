@@ -290,15 +290,10 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         const columns = Math.max(1, Math.round(width * dpr))
         const columnSec = state.span / columns
 
-        // The strip scrolls a whole column at a time, and a column is a whole
-        // device pixel.
-        //
-        // Both halves of that matter. Laying the columns out from the playhead
-        // would give each one a different slice of audio every frame and its
-        // height would change under it. Landing them on a fraction of a pixel
-        // would blend every bar across two pixels by an amount that changes
-        // every frame, and the colour would flicker. Either way the strip
-        // pulses instead of moving.
+        // The strip scrolls a whole column at a time, and a column is a whole device
+        // pixel. Columns laid out from the playhead would take a different slice of
+        // audio every frame; columns landing on a fraction of a pixel would blend
+        // across two pixels by a changing amount.
         const grid = { index: Math.round(from / columnSec), columnSec }
         const gridFrom = grid.index * columnSec
         const gridTo = gridFrom + columns * columnSec
@@ -370,9 +365,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
       const rect = event.currentTarget.getBoundingClientRect()
       const { width } = boxRef.current
 
-      // A press on a piece's handle picks the piece up. Anywhere else on the
-      // row is a scrub, which is why the handle exists: the waveform itself is
-      // already spoken for.
+      // A press on a piece's handle picks the piece up. Anywhere else on the row is
+      // a scrub.
       if (selectClips && width > 0 && state.clips.length > 1) {
         const y = event.clientY - rect.top
         if (y <= DEFAULT_CLIP_STYLE.handleHeight) {
@@ -382,8 +376,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
           if (grabbed) {
             event.currentTarget.setPointerCapture(event.pointerId)
             const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
-            // Mark the piece rather than the pointer: the row rearranges under
-            // the hand, so the highlight has to travel with the piece.
+            // Mark the piece, not the pointer: the row rearranges under the hand, so the
+            // highlight travels with the piece.
             useDecks.getState().selectClip(deckId, grabbed.id)
             clipDragRef.current = {
               pointerId: event.pointerId,
@@ -464,9 +458,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
         }
-        // A press that went nowhere is a click on the handle, which picks the
-        // piece rather than moving it. The row has already been rearranged, so
-        // a release has nothing left to commit.
+        // A press that went nowhere is a click on the handle, which picks the piece.
+        // The row is already rearranged, so a release has nothing to commit.
         if (!held.dragging) useDecks.getState().selectClip(deckId, held.clip.id)
         return
       }

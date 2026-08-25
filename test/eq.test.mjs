@@ -1,9 +1,8 @@
 /**
  * Mixer knob mapping.
  *
- * These are the numbers that decide whether the EQ feels like a DJM or like a
- * software plugin. Centre must be exactly flat, cut must go much further than
- * boost, and the filter must sweep by ear rather than by pixel.
+ * Centre is exactly flat, cut goes much further than boost, and the filter
+ * sweeps by ear.
  */
 import * as E from './.build/eq.mjs'
 
@@ -29,7 +28,7 @@ ok('isolator cuts harder than EQ mode part way down',
   E.eqGainDb(0.25, 'isolator') < E.eqGainDb(0.25, 'eq'))
 ok('EQ mode never reaches silence', E.bandGain(0, 'eq') > 0)
 
-// Cut and boost are deliberately asymmetric, the way a mixer is.
+// Cut and boost are asymmetric, as they are on a mixer.
 ok('cut goes much further than boost', Math.abs(E.EQ_MAX_CUT_DB) > E.EQ_MAX_BOOST_DB * 3)
 ok('a full cut is nearly silent', E.dbToGain(E.eqGainDb(0)) < 0.06)
 ok('but not actually silent, since this is an EQ not a mute', E.dbToGain(E.eqGainDb(0)) > 0)

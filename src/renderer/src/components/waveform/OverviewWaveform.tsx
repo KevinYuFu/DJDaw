@@ -59,9 +59,8 @@ export interface OverviewWaveformProps {
 }
 
 /**
- * Peaks are lifted slightly. A strict 0-1 mapping leaves the strip looking
- * half empty, because outside the loudest hits a bucket rarely reaches full
- * scale; the renderer clamps whatever this pushes past the top.
+ * Peaks are lifted slightly: outside the loudest hits a bucket rarely reaches
+ * full scale. The renderer clamps whatever this pushes past the top.
  */
 const WAVE_GAIN = 1.2
 
@@ -295,8 +294,8 @@ export function OverviewWaveform({
       }
 
       if (layers.waveform) {
-        // Two clipped blits of full-size layers rather than a scaled partial
-        // copy: the source and destination stay pixel-aligned at any dpr.
+        // Two clipped blits of full-size layers, not a scaled partial copy: source and
+        // destination stay pixel-aligned at any dpr.
         if (playX > 0) {
           ctx.save()
           ctx.beginPath()
@@ -367,10 +366,9 @@ export function OverviewWaveform({
     (gesture: ClipGesture, clientX: number): number => {
       const raw =
         gesture.clip.startSec + ((clientX - gesture.startX) * gesture.duration) / gesture.width
-      // Keep the piece on the strip: past either edge there is nothing to draw
-      // the ghost against and nothing to aim at.
-      // Rearrange the row as the hand crosses each neighbour, not on release,
-      // and let the ghost follow the hand rather than the slot.
+      // Keep the piece on the strip: past either edge there is nothing to draw the
+      // ghost against. The row rearranges as the hand crosses each neighbour, and the
+      // ghost follows the hand.
       const room = Math.max(0, gesture.duration - gesture.clip.durationSec)
       const at = clamp(raw, 0, room)
       const clips = useDecks.getState().decks[deckId].clips
@@ -410,8 +408,8 @@ export function OverviewWaveform({
       // On a piece, the seek waits until the gesture has decided what it is.
       // Seeking now would jog the playhead every time a chunk is picked up.
       const index = state.clips.findIndex((clip) => clip.id === grabbed.id)
-      // Mark the piece rather than the pointer: the row rearranges under the
-      // hand, so the highlight has to travel with the piece.
+      // Mark the piece, not the pointer: the row rearranges under the hand, so the
+      // highlight travels with the piece.
       useDecks.getState().selectClip(deckId, grabbed.id)
       gestureRef.current = {
         kind: 'clip',

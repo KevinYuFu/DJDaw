@@ -2,7 +2,7 @@
 
 Things we want but have not built. Kept so nothing gets lost between sessions.
 
-Anything marked **ask Kevin first** means the design is his call and must not be
+Anything marked **ask the owner first** means the design is his call and must not be
 invented — see CLAUDE.md.
 
 ---
@@ -40,13 +40,13 @@ between tracks.
 
 **Later**
 - **Back into rekordbox.** An export has to be imported into rekordbox by
-  hand. Kevin wants it to land in his collection on its own. He has flagged it
+  hand. It should land in the collection on its own. Flagged as
   as a later problem, so it is written down rather than started. Worth knowing
   before it is: the XML we read is an export rekordbox writes, not a way in,
   so this is a different problem from the mirror and not an extension of it.
-  **Ask Kevin first.**
+  **Ask the owner first.**
 - **Automation.** Draw in fader, EQ and effect moves over time.
-  **Ask Kevin first** — he has a specific system in mind for making this easy
+  **Ask the owner first** — he has a specific system in mind for making this easy
   to draw. Do not design one.
 - **Sample browser.** Browse a folder and drag samples straight into a track.
 
@@ -63,7 +63,7 @@ between tracks.
 
 ## Master chain
 
-Kevin's idea, not scheduled. A master processing chain after the crossfader,
+Not scheduled. A master processing chain after the crossfader,
 with pluggable effects — a limiter first, since that is what stops the mix bus
 clipping the output.
 
@@ -82,10 +82,10 @@ and every DJ application has one.
   property of any interpolating player, but the export is where it becomes
   permanent. Wants either a warning with the measured peak, or a touch of
   headroom applied on render.
-- **Getting an edit back into rekordbox.** Kevin's stated want: an export
+- **Getting an edit back into rekordbox.** Wanted: an export
   should land in his rekordbox collection without a manual import. rekordbox
   has no import API, so the likely routes are writing into a watched folder, or
-  generating an XML that rekordbox can import. Not designed yet — **ask Kevin
+  generating an XML that rekordbox can import. Not designed yet — **ask the owner
   first**, since it touches his real library.
 
 ## Analysis
@@ -102,7 +102,7 @@ and every DJ application has one.
   through `onnxruntime-node`, which avoids Python but means rewriting the
   mel-spectrogram frontend in TypeScript.
 
-  Parked on 2026-08-18: Kevin judged it too much work for now.
+  Parked on 2026-08-18: judged too much work for now.
 
 - **Half-time on backbeat material.** Tracks above about 150 BPM with a strong
   backbeat can read at half speed. `x2` fixes it by hand.
@@ -136,7 +136,7 @@ and every DJ application has one.
 ## Housekeeping
 
 - **The SETUP modal has three wrong lines.** It warns that rekordbox's auto
-  export may be Dropbox-only. Kevin's export goes to
+  export may be Dropbox-only. the export goes to
   `~/Library/Pioneer/rekordbox/`, so those caveats should be deleted.
 - **Windows and Linux.** `defaultRekordboxXmlPath()` only knows the macOS
   location and returns null elsewhere, rather than guessing.

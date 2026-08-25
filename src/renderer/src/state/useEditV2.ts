@@ -9,10 +9,9 @@ import { useLibrary } from '@renderer/state/useLibrary'
 /**
  * The master tempo the editing V2 view lays everything out against.
  *
- * The first track loaded sets it. Every track after that is warped onto it, so
- * pressing play starts them all on the same grid rather than on their own.
- * Warping changes the speed without changing the pitch, so a 175 track at 150
- * still sounds like itself.
+ * The first track loaded sets it, and every track after that is warped onto it,
+ * so pressing play starts them all on the same grid. Warping changes the speed
+ * and not the pitch.
  */
 
 /** The range a master tempo can be set to, by drag, by typing or by track. */
@@ -95,8 +94,8 @@ export const useEditV2 = create<EditV2State>()((set, get) => ({
   toggleAll() {
     const loaded = loadedDecks()
     if (loaded.length === 0) return
-    // Through the store rather than the engine: it is what owns previews, loops
-    // and the commanded playhead, and a row moved behind its back keeps them.
+    // Through the store, which owns previews, loops and the commanded playhead: a
+    // row moved behind its back keeps them.
     const decks = useDecks.getState()
     if (loaded.some((id) => decks.decks[id].playing)) {
       for (const id of loaded) if (decks.decks[id].playing) decks.togglePlay(id)

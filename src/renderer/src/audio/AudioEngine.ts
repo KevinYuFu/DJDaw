@@ -4,24 +4,12 @@ import { DECK_WORKLET_URL } from '@renderer/audio/deckProtocol'
 import { Deck } from '@renderer/audio/Deck'
 
 /**
- * The audio graph: one AudioContext, one deck per {@link DECK_IDS}, one master
- * gain.
+ * A singleton: one output device, and the worklet module is registered per
+ * context. Every module that needs audio reaches it through
+ * `AudioEngine.shared()`.
  *
- *   Deck A ─┐
- *   ...     ├─> master ─> destination
- *   Deck D ─┘
- *
- * Each deck is its own channel strip — worklet, trim, three EQ bands, the
- * filter knob, then its output gain — so a deck arrives here already mixed and
- * the master node only sets the overall level. See `Deck`.
- *
- * A singleton because there is exactly one output device and the worklet
- * module is registered per context; every module that needs audio reaches it
- * through `AudioEngine.shared()`.
- *
- * Every deck exists from the moment the engine starts, whatever the view is
- * showing: a deck costs nothing until audio is loaded into it, and switching
- * views must not have to build or tear down audio nodes.
+ * Every deck exists from the moment the engine starts, whatever the view shows.
+ * A deck costs nothing until audio is loaded into it.
  */
 
 /** Time constant of the master volume ramp. Short enough to feel instant. */
@@ -99,9 +87,8 @@ export class AudioEngine {
   }
 
   /**
-   * The context is built on first touch rather than only in `init()`, because
-   * decoding and offline analysis legitimately need it before the worklet
-   * module has finished loading. It starts suspended either way, until
+   * The context, built on first touch: decoding and offline analysis need it
+   * before the worklet module has loaded. It starts suspended until
    * {@link resume} is called from a user gesture.
    */
   private ensureGraph(): { ctx: AudioContext; master: GainNode } {

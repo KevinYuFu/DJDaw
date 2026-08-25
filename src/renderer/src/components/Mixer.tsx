@@ -41,11 +41,9 @@ interface KnobSpec {
 }
 
 /**
- * Top to bottom: HI, MID, LOW. Every DJ mixer stacks the bands that way, so a
- * hand that knows the hardware reaches for the right knob without looking.
- * Leave it alone. The editing view lays the same knobs out in a row, and there
- * it runs LO, MID, HI left to right, because a horizontal strip has to read
- * the way frequency does. The two orders disagree on purpose.
+ * Top to bottom: HI, MID, LOW, as a DJ mixer stacks them. The editing views lay
+ * the same knobs out in a row and run LO, MID, HI left to right, the way a
+ * spectrum does. The two orders differ; keep them that way.
  */
 const CHANNEL_KNOBS: readonly KnobSpec[] = [
   { id: 'trim', label: 'TRIM', format: (v) => formatDb(trimGainDb(v)) },
@@ -56,14 +54,13 @@ const CHANNEL_KNOBS: readonly KnobSpec[] = [
 ]
 
 /**
- * The switch picks between two different circuits, not two settings of one, so
- * the tooltip says what each one sounds like rather than naming the filters.
- * No numbers here: the readout under every knob already shows the dB.
+ * The switch picks between two circuits, so the tooltip says what each one
+ * sounds like. No numbers: the readout under every knob shows the dB.
  */
 const EQ_MODE_TITLE = [
   'EQ: turn a band down and it drops a lot, but you can still hear it.',
   'ISO: turn a band down and it is gone. Silent.',
-  'On a DDJ-FLX10 this is shift+CUE. rekordbox has the same switch in its settings.'
+  'DJ players and mixers expose the same switch.'
 ].join('\n')
 
 const KNOB_SIZE = 30

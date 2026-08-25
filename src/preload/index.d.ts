@@ -67,9 +67,9 @@ export interface DJDawApi {
    */
   exportAudio(request: ExportRequest): Promise<ExportResult>
   /**
-   * Show a file in Finder. Feed it the `path` from {@link exportAudio} to
-   * offer "reveal" after an export; a null path or a file that has since gone
-   * does nothing, so check the path first rather than relying on a throw.
+   * Show a file in Finder. Feed it the `path` from {@link exportAudio} to offer
+   * "reveal" after an export. A null path or a file that has gone does nothing,
+   * and never throws.
    */
   revealInFinder(path: string): Promise<void>
   /** Menu commands from the app menu. Returns an unsubscribe fn. */

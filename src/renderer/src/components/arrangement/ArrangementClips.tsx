@@ -62,10 +62,8 @@ function cuesInClip(
 /**
  * The clips of one lane, drawn on a canvas.
  *
- * A clip is a window onto a source file, so it is drawn straight from that
- * file's peaks over the stretch it covers — no peaks are stored per clip, and
- * cutting one in two costs nothing but two narrower windows onto the same
- * summary.
+ * A clip is a window onto a source file and is drawn from that file's peaks
+ * over the stretch it covers. No peaks are stored per clip.
  */
 export function ArrangementClips({
   lane,
@@ -78,11 +76,8 @@ export function ArrangementClips({
 }: ArrangementClipsProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   /**
-   * Peaks already reduced to pixel columns, per clip.
-   *
-   * Building these is the expensive half of a redraw and the answer only
-   * changes when a clip's window onto its file changes or the zoom does — not
-   * when something else on the lane moves, which is most redraws.
+   * Peaks reduced to pixel columns, per clip. Rebuilt only when a clip's
+   * window onto its file changes, or the zoom does.
    */
   const columnsRef = useRef(new Map<string, { key: string; cols: WaveformColumns }>())
   const version = useArrangement((s) => s.version)
@@ -168,7 +163,7 @@ export function ArrangementClips({
       ctx.fillText(clip.name ?? track?.title ?? 'Clip', x + 5, HEADER_H / 2 + 0.5)
 
       if (preview) {
-        // Dashed, so it reads as a place rather than a thing that is there.
+        // Dashed: a place, not a clip that is there.
         ctx.strokeStyle = 'rgba(190, 215, 255, 0.95)'
         ctx.lineWidth = 2
         ctx.setLineDash([5, 3])
@@ -199,7 +194,7 @@ export function ArrangementClips({
         true
       )
     }
-    // A clip that is gone, or off screen, has no peaks worth keeping.
+    // Drop the columns of clips that are gone or off screen.
     for (const id of columnsRef.current.keys()) {
       if (!seen.has(id)) columnsRef.current.delete(id)
     }

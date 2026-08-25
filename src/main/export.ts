@@ -6,10 +6,7 @@
  * file decides is where the file goes, what it is called, and — for MP3 —
  * pipes the WAV through ffmpeg on the way.
  *
- * Exports land in `~/Music/DJDaw` rather than under the app's support
- * directory. Kevin asked for one dedicated folder, and Music is where he will
- * go looking for it; a hidden directory is somewhere a finished track can only
- * get lost.
+ * Exports land in one dedicated folder, `~/Music/DJDaw`.
  */
 
 import { spawn } from 'node:child_process'
@@ -23,8 +20,8 @@ import type { ExportFormat, ExportRequest, ExportResult } from '@shared/types'
 const EXPORT_FOLDER = 'DJDaw'
 
 /**
- * The same binary the decode fallback in `ipc.ts` uses. Neither looks it up:
- * it only has to be on PATH, and WAV export deliberately never needs it.
+ * The same binary the decode fallback in `ipc.ts` uses, taken from PATH. WAV
+ * export never needs it.
  */
 const FFMPEG_BIN = 'ffmpeg'
 
@@ -49,18 +46,16 @@ const MAX_NAME_ATTEMPTS = 1000
 /**
  * Turn a requested name into something safe to use as a file name.
  *
- * The name reaches here from the renderer, which means from a track title or
- * from Kevin typing. Path separators and leading dots are the ones that
- * matter: separators are how a name climbs out of the export folder, and a
- * leading dot hides the file from Finder the moment it is written. The rest —
- * control characters, and the punctuation macOS and Windows dislike — is about
- * the file still opening afterwards.
+ * Names arrive from a track title or from typing. Path separators would let a
+ * name climb out of the export folder and a leading dot hides the file; the
+ * rest — control characters and punctuation macOS and Windows dislike — is
+ * about the file still opening afterwards.
  */
 export function safeFileName(name: string): string {
   let cleaned = typeof name === 'string' ? name : ''
 
-  // Separators go first and become spaces rather than being deleted, so two
-  // halves of a stripped path cannot run together into a new word.
+  // Separators go first and become spaces, so two halves of a stripped path
+  // cannot run together into a new word.
   cleaned = cleaned.replace(/[/\\]/g, ' ')
   cleaned = cleaned.replace(/[\u0000-\u001f\u007f]/g, ' ')
   cleaned = cleaned.replace(/[:*?"<>|]/g, ' ')
@@ -80,8 +75,8 @@ export function safeFileName(name: string): string {
 /**
  * `~/Music/DJDaw`, created if it is not there yet.
  *
- * `app.getPath('music')` is the real, localised Music folder rather than a
- * literal "Music", so the export lands where the system actually keeps music.
+ * `app.getPath('music')` is the localised Music folder, so the export lands
+ * where the system keeps music.
  */
 async function ensureExportDir(): Promise<string> {
   let music: string
@@ -102,10 +97,8 @@ async function ensureExportDir(): Promise<string> {
  * Write the bytes under `base`, adding " 2", " 3" and so on until a name is
  * free. Returns the absolute path actually written.
  *
- * The exclusive flag does the checking rather than a prior existence test:
- * testing and then writing still races two exports of the same name against
- * each other, and losing a finished render to a silent overwrite is exactly
- * what we are avoiding.
+ * The exclusive flag does the checking, so two exports of the same name cannot
+ * race each other into one file.
  */
 async function writeWithoutOverwriting(
   dir: string,
@@ -205,10 +198,9 @@ function encodeMp3(wav: Buffer): Promise<Buffer> {
 /**
  * Write a rendered edit into `~/Music/DJDaw` and report where it landed.
  *
- * Failures come back in `error` instead of as a rejection. Every one of them
- * is something the user can act on — ffmpeg missing, the disk full — so the UI
- * wants a line of text it can show, not an exception to unwrap. Pass the
- * returned `path` to `revealInFinder` to show the file.
+ * Failures come back in `error`, never as a rejection: ffmpeg missing, the disk
+ * full, and other things the user can act on. Pass the returned `path` to
+ * `revealInFinder` to show the file.
  */
 export async function exportAudio(request: ExportRequest): Promise<ExportResult> {
   try {

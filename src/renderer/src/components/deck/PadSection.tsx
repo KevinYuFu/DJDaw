@@ -42,8 +42,8 @@ function preventFocus(e: ReactMouseEvent<HTMLElement>): void {
 }
 
 /**
- * A hot cue colour at reduced opacity. The pads are tinted rather than filled
- * so the colour reads as a cue marker and not as a lit button.
+ * A hot cue colour at reduced opacity. The pads are tinted, not filled, so the
+ * colour reads as a cue marker.
  */
 function tint(hex: string, alpha: number): string {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex
@@ -61,8 +61,8 @@ function scaleSize(current: number, factor: number, sizes: readonly number[]): n
 }
 
 /**
- * Bounds on a hand-typed tempo. Anything outside is a typo rather than a
- * tempo, and writing it to the grid would put every beat in the wrong place.
+ * Bounds on a hand-typed tempo. Anything outside is a typo, and writing it to
+ * the grid would put every beat in the wrong place.
  */
 const MIN_GRID_BPM = 20
 const MAX_GRID_BPM = 400
@@ -73,10 +73,8 @@ const BPM_STEP = 0.01
 /**
  * The grid tempo under the playhead, or null when there is none to show.
  *
- * Read live instead of from React state because a grid can carry several tempo
- * anchors — a rekordbox import often does — and `setGridBpm` edits the one the
- * playhead sits in. Showing `anchors[0]` would let the field disagree with
- * what an edit is about to change.
+ * Read live, not from React state: a grid can carry several tempo anchors, and
+ * `setGridBpm` edits the one the playhead sits in.
  */
 function gridBpmAtPlayhead(deckId: DeckId): number | null {
   const state = useDecks.getState().decks[deckId]
@@ -96,16 +94,13 @@ interface BpmFieldProps {
 /**
  * The grid tempo, as a number you can type over.
  *
- * The readout is written straight into the input from a rAF loop, the way the
- * deck header's clocks are: the value follows the playhead across tempo
- * changes without re-rendering the deck sixty times a second. While the field
- * has focus the loop leaves it alone, so it never overwrites what is being
- * typed.
+ * The readout is written straight into the input from a rAF loop, so the value
+ * follows the playhead across tempo changes. While the field has focus the loop
+ * leaves it alone.
  *
- * The input is deliberately a text input. `hooks/useKeyboard.ts` treats any
- * input that is not a slider or a button as something the user is typing into
- * and drops the global shortcuts for it, so typing `1` here sets a tempo
- * rather than firing hot cue A.
+ * A text input: `hooks/useKeyboard.ts` treats any input that is not a slider or
+ * a button as something the user is typing into and drops the global shortcuts
+ * for it, so typing `1` here sets a tempo.
  */
 function BpmField({ deckId, enabled, title }: BpmFieldProps): ReactElement {
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -226,7 +221,7 @@ function BpmField({ deckId, enabled, title }: BpmFieldProps): ReactElement {
 
 /**
  * Hot cues, beat jump, loop and grid editing: the block that turns the deck
- * into an edit surface rather than a player.
+ * into an edit surface.
  */
 export function PadSection({ deckId }: PadSectionProps): ReactElement {
   const deck = useDecks((s) => s.decks[deckId])

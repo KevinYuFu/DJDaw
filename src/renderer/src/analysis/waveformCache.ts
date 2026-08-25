@@ -18,8 +18,7 @@ function cacheMatchesAudio(w: WaveformData, buffer: AudioBuffer): boolean {
  * Cached waveform if there is one, otherwise analyse and cache the result.
  *
  * Keyed on `audioKey`, not on the track id: a mirrored record and any local
- * fork of it are the same file, so the fork inherits the analysis instead of
- * spending seconds re-deriving an identical waveform.
+ * fork of it are the same file and share one analysis.
  */
 export async function resolveWaveform(track: Track, buffer: AudioBuffer): Promise<WaveformData | null> {
   try {
@@ -48,12 +47,10 @@ export async function resolveWaveform(track: Track, buffer: AudioBuffer): Promis
 }
 
 /**
- * The cached peaks for a track, without checking them against its audio.
+ * The cached peaks for a track, unchecked against its audio.
  *
- * Only for drawing a preview of a track that is not loaded: the check needs the
- * decoded file, and decoding a whole track to shade a shape under the cursor is
- * not worth it. Stale peaks draw a slightly wrong picture for a moment; the
- * clip itself is always built from validated ones.
+ * For drawing a preview of a track that is not loaded, where no decoded file is
+ * available to check against. Clips are always built from validated peaks.
  */
 export async function peekWaveform(audioKey: string): Promise<WaveformData | null> {
   try {

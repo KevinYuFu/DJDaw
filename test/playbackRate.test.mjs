@@ -1,16 +1,13 @@
 /**
  * Which way a warp goes.
  *
- * This has been inverted twice. A rate is source frames consumed per
- * arrangement frame, so a track that has to play *slower* than it was recorded
- * consumes *fewer* of them: below 1 is slower, and there is no reading of the
- * numbers where a lower master tempo makes anything speed up.
+ * A rate is source frames consumed per arrangement frame. A track playing
+ * slower than it was recorded consumes fewer of them, so below 1 is slower.
  */
 import { playbackRate } from './.build/playbackRate.mjs'
 
 const { eq, ok } = globalThis.__t
 
-// The case that was wrong: a 150 track dropped onto a 120 grid.
 eq('a 150 track on a 120 grid plays slower', playbackRate(150, 120), 0.8)
 ok('which is below 1', playbackRate(150, 120) < 1)
 
@@ -35,6 +32,6 @@ const fileSec = 200
 eq('slowing a track down makes its clip longer', fileSec / playbackRate(150, 120), 250)
 eq('speeding it up makes it shorter', fileSec / playbackRate(150, 200), 150)
 
-// Nothing to go on means no warp rather than a divide by zero.
+// Nothing to go on means no warp, and no divide by zero.
 eq('an unanalysed track is not warped', playbackRate(0, 128), 1)
 eq('and neither is one with no grid to sit on', playbackRate(128, 0), 1)

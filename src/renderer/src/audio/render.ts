@@ -13,22 +13,17 @@ import {
  * Offline render of an edit: the whole MACRO timeline of every deck, summed
  * into one AudioBuffer, ready to be encoded with `@shared/wav`.
  *
- * This runs the *same* worklet and the *same* channel strip as live playback —
+ * Runs the *same* worklet and the *same* channel strip as live playback —
  * `deck-processor.js` inside an OfflineAudioContext, then trim, low, mid, high,
- * filter — which is the whole reason the engine was built the way it is. None
- * of the DSP is reimplemented here, so the file that comes out is what was
- * heard, not an approximation of it.
+ * filter. No DSP is reimplemented here, so the file that comes out is what was
+ * heard.
  *
- * What deliberately differs from `Deck`, and why:
- *   - Knobs are set as values at time 0 instead of ramped. The ramps exist so a
- *     hand on a knob does not click; starting a render mid-ramp would just fade
- *     the EQ in over the first few milliseconds of the file.
- *   - The deck fader is applied on the output node rather than posted to the
- *     worklet, whose gain glides towards its target from unity. The chain is
- *     linear, so the level is identical either way, but this way it is right
- *     from the first sample.
- *   - Master volume is not applied at all. It is a monitoring control; turning
- *     the speakers down must not turn the exported track down.
+ * What differs from `Deck`:
+ *   - Knobs are set as values at time 0, not ramped, so the EQ is right from
+ *     the first sample.
+ *   - The deck fader is applied on the output node, not posted to the worklet,
+ *     for the same reason. The chain is linear, so the level is identical.
+ *   - Master volume is not applied. It is a monitoring control.
  */
 
 /** One deck's contribution to the render. */
@@ -47,16 +42,13 @@ export interface RenderOptions {
   /** Every deck to mix in. One deck or four both work; they simply sum. */
   decks: readonly DeckRenderSpec[]
   /**
-   * EQ floor, matching the app's setting. A channel sitting at full cut sounds
-   * different in the two modes, so the export has to be told which one the user
-   * was hearing rather than assuming.
+   * EQ floor, matching the app's setting. A channel at full cut sounds different
+   * in the two modes, so the export is told which one was heard.
    */
   mode?: EqMode
   /**
-   * Render rate. Defaults to the first deck's file rate, because the deck
-   * engine advances its playhead one source frame per context frame — the same
-   * assumption live playback makes, where every buffer came from
-   * `decodeAudioData` at the context rate.
+   * Render rate. Defaults to the first deck's file rate: the deck engine advances
+   * its playhead one source frame per context frame, as it does live.
    */
   sampleRate?: number
 }
@@ -136,10 +128,8 @@ function buildDeck(ctx: OfflineAudioContext, spec: DeckRenderSpec, mode: EqMode)
     }
   })
 
-  // The strip is built by the same function the live deck uses, taking a
-  // BaseAudioContext so this is literally the same graph rather than a second
-  // copy that can drift. Keeping these in sync by hand is exactly how an export
-  // ends up sounding unlike what was heard — it already drifted once.
+  // Built by the same function the live deck uses, which takes a
+  // BaseAudioContext: one graph, not two copies that can drift.
   const strip = createChannelStrip(ctx)
   applyChannelStrip(strip, spec.eq ?? flatChannel(), mode, 0)
 
@@ -184,8 +174,8 @@ export async function renderTimeline(opts: RenderOptions): Promise<AudioBuffer> 
   }
 
   const ctx = new OfflineAudioContext(RENDER_CHANNELS, length, sampleRate)
-  // Worklet modules are registered per context, so the offline context loads
-  // the same file the live engine does rather than inheriting anything.
+  // Worklet modules are registered per context, so the offline context loads the
+  // same file the live engine does.
   await ctx.audioWorklet.addModule(new URL(DECK_WORKLET_URL, window.location.href).href)
 
   for (const spec of specs) buildDeck(ctx, spec, opts.mode ?? 'eq')

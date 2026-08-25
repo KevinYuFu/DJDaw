@@ -24,9 +24,8 @@ function barBeatAt(grid: BeatGrid, sec: number): string {
  * Artwork, title, key, and the readouts that move with the playhead.
  *
  * Elapsed, remaining, live BPM and the bar.beat counter are written straight
- * into their DOM nodes from a rAF loop rather than through React state: a
- * clock that re-rendered the deck sixty times a second would cost more than
- * everything else in it put together.
+ * into their DOM nodes from a rAF loop, so the deck does not re-render sixty
+ * times a second.
  */
 export function DeckHeader({ deckId }: DeckHeaderProps): ReactElement {
   const status = useDecks((s) => s.decks[deckId].status)
@@ -43,8 +42,8 @@ export function DeckHeader({ deckId }: DeckHeaderProps): ReactElement {
 
   useRaf(() => {
     if (!deck) return
-    // Read the stores here rather than closing over them, so a grid nudge or a
-    // tempo move lands on the next frame without restarting anything.
+    // Read the stores here, so a grid nudge or a tempo move lands on the next
+    // frame without restarting anything.
     const state = useDecks.getState().decks[deckId]
     const current = state.trackId ? useLibrary.getState().trackById(state.trackId) : undefined
     const grid = current?.grid ?? null

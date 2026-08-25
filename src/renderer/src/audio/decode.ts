@@ -18,9 +18,8 @@ export async function decodeTrack(ctx: BaseAudioContext, path: string): Promise<
   let nativeReason = 'unknown error'
   try {
     const bytes = await window.api.readAudioFile(path)
-    // decodeAudioData detaches `bytes`, so it is dead memory from here on:
-    // the fallback below deliberately fetches its own copy of the audio
-    // rather than trying to reuse this one.
+    // decodeAudioData detaches `bytes`, so it is dead memory from here on. The
+    // fallback below fetches its own copy.
     return await ctx.decodeAudioData(bytes)
   } catch (err) {
     nativeReason = reasonOf(err)

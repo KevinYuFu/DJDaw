@@ -53,7 +53,7 @@ ok('a reordering does slide', beginSlide(before, after, 0) !== null)
   ok('a piece that did not move is left alone', mid.clips[0] === after[0])
 }
 {
-  // Past the end it stays put rather than overshooting.
+  // Past the end it stays put.
   const slide = beginSlide(before, after, 0)
   const late = slideClips(after, slide, SLIDE_MS * 10)
   eq('long after, everything is home', late.clips.map((x) => x.startSec).join(','), '0,1,4')

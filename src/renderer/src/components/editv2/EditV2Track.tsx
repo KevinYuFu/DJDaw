@@ -52,10 +52,7 @@ function preventFocus(e: ReactMouseEvent<HTMLElement>): void {
   e.preventDefault()
 }
 
-/**
- * A hot cue colour at reduced opacity, so a set pad reads as a cue marker
- * rather than as a lit button. Same treatment the deck's pads get.
- */
+/** A hot cue colour at reduced opacity, so a set pad reads as a cue marker. */
 function tint(hex: string, alpha: number): string {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex
   const n = parseInt(hex.slice(1), 16)
@@ -98,14 +95,12 @@ function ChannelFaderForDeck({ deckId, disabled }: { deckId: DeckId; disabled: b
 /**
  * One track of the editing view: a deck squeezed into a single row.
  *
- * It is the same deck underneath — every control calls the store the CDJ-style
- * deck calls, so `Q` / `W`, the number pads, the transport and the channel EQ
- * behave identically here. Only the chrome is smaller, because four of these have to
- * fit where two full decks did.
+ * The same deck underneath — every control calls the store the full deck calls,
+ * so `Q` / `W`, the number pads, the transport and the channel EQ behave
+ * identically here. Only the chrome is smaller.
  *
  * The clocks and the live BPM are written straight into their DOM nodes from a
- * rAF loop, as the deck header's are: four rows re-rendering sixty times a
- * second would cost more than everything else on screen.
+ * rAF loop, as the deck header's are.
  */
 export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
   const status = useDecks((s) => s.decks[deckId].status)
@@ -116,7 +111,7 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
   // when the channel crosses between flat and not, which is rare.
   const eqOn = useDecks((s) => !isFlat(s.decks[deckId].eq))
   // The tempo the warp is computed from, so a re-tap or a re-analysis puts the
-  // row back on the master grid rather than leaving it on the old reading.
+  // row back on the master grid.
   const trackBpm = track?.grid?.anchors?.[0]?.bpm ?? track?.bpm ?? 0
   // A track that has just landed is warped onto the master tempo, or names it
   // when it is the first one here.
@@ -142,8 +137,8 @@ export function EditV2Track({ deckId }: EditTrackProps): ReactElement {
 
   useRaf(() => {
     if (!deck) return
-    // Read the stores here rather than closing over them, so a grid nudge or a
-    // tempo move lands on the next frame without restarting the loop.
+    // Read the stores here, so a grid nudge or a tempo move lands on the next
+    // frame without restarting the loop.
     const state = useDecks.getState().decks[deckId]
     const current = state.trackId ? useLibrary.getState().trackById(state.trackId) : undefined
     const grid = current?.grid ?? null

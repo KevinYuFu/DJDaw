@@ -82,19 +82,15 @@ const EQ_RAMP_SEC = 0.02
 /**
  * Crossfade between the EQ and ISO paths, in seconds.
  *
- * Short, because a mode change should feel like a switch, but not instant: the
- * two paths have different phase responses, so cutting straight from one to the
- * other steps the waveform and clicks. A mode change is rare enough that 30 ms
- * costs nothing.
+ * The two paths have different phase responses, so the change is faded rather
+ * than cut.
  */
 const MODE_XFADE_SEC = 0.03
 
 /**
  * Biquads per crossover slope. Two cascaded Butterworth sections make one
- * Linkwitz-Riley 24 dB/oct slope, and LR is the whole point: its bands sum
- * flat. A single Butterworth pair leaves a +3 dB bump sitting on each crossover
- * with every band centred, which is a measured artefact of EQ Three, not
- * something to copy.
+ * Linkwitz-Riley 24 dB/oct slope, whose bands sum flat. A single Butterworth
+ * pair leaves a +3 dB bump on each crossover with every band centred.
  */
 const LR_SECTIONS = 2
 
@@ -126,23 +122,16 @@ function slope(type: BiquadFilterType, hz: number): CrossoverSection[] {
 /**
  * The nodes of one mixer channel strip.
  *
- * Two EQ circuits sit side by side, because the two modes want opposite things
- * and no single topology gives both:
+ * Two EQ circuits sit side by side:
  *
- *   EQ mode   three shelving/bell filters in series. At 0 dB each one is an
- *             identity, so a centred channel is transparent — measured, a loud
- *             master comes out with 0.00 dB of peak growth. It cannot reach
- *             silence, which is exactly what a DJM channel EQ's -26 dB floor
- *             is.
- *   ISO mode  the crossover-and-sum. It can take a band to nothing, and it
- *             rotates phase between the bands whatever the knobs say — which
- *             grows the peak of that same master by +7.3 dB with every knob
- *             centred. Acceptable in an isolator, which you reach for to
- *             remove a band, and not acceptable in a flat channel.
+ *   EQ mode   three shelving/bell filters in series. At 0 dB each is an
+ *             identity, so a centred channel is transparent. Its floor is
+ *             -26 dB; it cannot reach silence.
+ *   ISO mode  a crossover-and-sum. Takes a band to nothing, and rotates phase
+ *             between the bands whatever the knobs say.
  *
- * Both are built once and both stay wired. The mode picks one by crossfading
- * their gates, because reconnecting nodes under live audio clicks. The cost is
- * three idle biquads per deck.
+ * Both are built once and both stay wired. The mode crossfades their gates,
+ * at a cost of three idle biquads per deck.
  */
 export interface ChannelStrip {
   /** Trim, first in the strip. Connect the source here. */
@@ -162,10 +151,10 @@ export interface ChannelStrip {
    */
   readonly filter: BiquadFilterNode
   /**
-   * The mode currently gated in, or null before the first apply. Mutable, and
-   * the reason {@link applyChannelStrip} can tell a mode change from a knob
-   * move: the crossfade has to run once per change, not restart on every frame
-   * of a knob drag, or the muted path never reaches zero and leaks.
+   * The mode currently gated in, or null before the first apply.
+   *
+   * Mutable: {@link applyChannelStrip} reads it to tell a mode change from a
+   * knob move, and runs the crossfade once per change.
    */
   mode: EqMode | null
 }
@@ -181,18 +170,12 @@ export interface ChannelStrip {
  *             +-> HP HP ----------> high -+
  * ```
  *
- * Built once and never rebuilt, because rewiring a live graph clicks: a knob
- * move only ever changes an AudioParam. Takes a `BaseAudioContext` so an
- * offline render builds the identical strip and an export sounds like what was
- * heard.
+ * Built once and never rebuilt: a knob move only ever changes an AudioParam.
+ * Takes a `BaseAudioContext`, so an offline render builds the identical strip.
  *
- * A three-way parallel split does not sum flat by default, so the crossover was
- * measured rather than assumed: an impulse through it in an OfflineAudioContext
- * with every knob centred is within 0.12 dB of the input across 30 Hz - 18 kHz,
- * and each band reads exactly -6 dB at its own crossover, which is the
- * Linkwitz-Riley signature. Flat is not the same as transparent, though — that
- * split still rotates phase between the bands, which is why EQ mode is not
- * built from it.
+ * The crossover is Linkwitz-Riley: its bands sum flat, within 0.12 dB across
+ * 30 Hz - 18 kHz, each reading -6 dB at its own crossover. It still rotates
+ * phase between the bands, so EQ mode is not built from it.
  */
 export function createChannelStrip(ctx: BaseAudioContext): ChannelStrip {
   const trim = ctx.createGain()
@@ -273,11 +256,9 @@ export function createChannelStrip(ctx: BaseAudioContext): ChannelStrip {
  * `@shared/eq`, so the offline render reuses it unchanged. Nothing a hand can
  * move is stepped — see {@link EQ_RAMP_SEC}.
  *
- * `mode` picks the path rather than the floor. Each path carries its own floor
- * because that is what its circuit can do: the shelves stop at -26 dB, the
- * crossover goes to a band gain of exactly zero. The ramp only approaches that
- * zero, but it is under -100 dB within five time constants, so the band is
- * silent by any measure that matters and never arrives as a click.
+ * `mode` picks the path, and each path carries its own floor: the shelves stop
+ * at -26 dB, the crossover reaches a band gain of zero. The ramp approaches
+ * that zero, passing -100 dB within five time constants.
  */
 export function applyChannelStrip(
   strip: ChannelStrip,
@@ -298,20 +279,16 @@ export function applyChannelStrip(
   const switching = strip.mode !== mode
   const first = strip.mode === null
   const incoming = mode === 'eq' ? strip.shelfGain : strip.isoGain
-  // A path that is inaudible — muted, or on a strip nothing has played through
-  // yet — can be stepped into place instead of ramped. That is what stops it
-  // coming back wrong: it has not been updated since the mode last left it, and
-  // gliding from those stale positions would drag a stale band across the
-  // crossfade. It also lets an offline render start exact on its first sample.
-  // A second mode change inside the crossfade catches the path part way up, and
-  // then it is audible and has to ramp like anything else.
+  // An inaudible path — muted, or on a strip nothing has played through — is
+  // stepped into place, so it holds no stale positions when the mode returns to
+  // it and an offline render is exact on its first sample. A path caught part
+  // way up by a second mode change is audible, and ramps.
   const step = switching && (first || incoming.gain.value === 0)
 
   if (switching) {
     strip.mode = mode
-    // Equal-gain, not equal-power: mid-fade both paths carry very nearly the
-    // same signal, so their sum holds at unity. Snapped rather than faded on
-    // the first apply, which lands before the deck has any audio to click.
+    // Equal-gain, not equal-power: mid-fade both paths carry nearly the same
+    // signal, so their sum holds at unity. The first apply snaps.
     gate(strip.shelfGain.gain, mode === 'eq' ? 1 : 0, now, !first)
     gate(strip.isoGain.gain, mode === 'eq' ? 0 : 1, now, !first)
   }
@@ -373,12 +350,9 @@ const FILTER_BYPASS_TYPE: BiquadFilterType = 'peaking'
  * Move the filter knob's single node.
  *
  * The type changes when the knob enters or leaves the dead zone, and again if
- * it is thrown from one side of centre to the other. Frequency and Q jump on
- * that swap rather than ramp: the flip only ever happens at the edge of the
- * dead zone, where the low-pass sits near 17 kHz and the high-pass near 26 Hz
- * and both are near enough transparent that the jump is silent. Ramping instead
- * would drag a fresh high-pass down from 17 kHz and mute the deck on the way
- * through.
+ * it is thrown across centre. Frequency and Q jump on that swap: it happens at
+ * the edge of the dead zone, where the low-pass sits near 17 kHz and the
+ * high-pass near 26 Hz and both are transparent.
  */
 function applyFilter(filter: BiquadFilterNode, knob: number, now: number): void {
   const setting = filterSetting(knob)
@@ -460,8 +434,7 @@ export class Deck {
     this.node.port.onmessage = (e: MessageEvent<DeckEvent>) => this.handleEvent(e.data)
     this.lastSnapshot = { frame: 0, playing: false, scrubbing: false, rate: 0, ctxTime: ctx.currentTime }
 
-    // Pin the report rate rather than inheriting the worklet's default, so
-    // extrapolation accuracy is a property of this file.
+    // Pin the report rate, so extrapolation accuracy is set here.
     this.post({ type: 'reportInterval', quanta: STATE_REPORT_QUANTA })
   }
 
@@ -470,9 +443,8 @@ export class Deck {
   // -------------------------------------------------------------------------
 
   /**
-   * Hand the deck its audio. The channel data is copied and the copies are
-   * transferred, because transferring the views `getChannelData()` returns
-   * would detach the AudioBuffer that analysis and export still need.
+   * Hand the deck its audio. The channel data is copied and the copies
+   * transferred, leaving the AudioBuffer intact for analysis and export.
    */
   load(buffer: AudioBuffer): void {
     this.frames = buffer.length
@@ -525,8 +497,7 @@ export class Deck {
    * 0.86, and the stretcher shifts it back up by the same amount.
    */
   setWarp(rate: number): void {
-    // Clamped here rather than on the way to the worklet, so the shift that
-    // cancels it is computed from the speed the deck actually runs at.
+    // Clamped here, so the shift that cancels it uses the speed actually run.
     const next = Number.isFinite(rate) && rate > 0 ? clamp(rate, MIN_RATE, MAX_RATE) : 1
     this.warpRatio = next
     this.applyRate()
@@ -536,8 +507,8 @@ export class Deck {
   /**
    * Put a stretcher in front of the channel strip, once.
    *
-   * Every warped deck gets one even at its own tempo, because the stretcher
-   * adds a little latency: a deck without one would run ahead of the others.
+   * Every warped deck keeps one even at its own tempo, so its latency is the
+   * same as its neighbours'.
    */
   private async applyWarp(): Promise<void> {
     if (!this.stretchReady) {
@@ -667,9 +638,8 @@ export class Deck {
   /**
    * The one place the read rate is written.
    *
-   * The warp and the tempo fader are separate controls on the same speed, so
-   * they multiply: riding the fader on a warped deck moves it around the master
-   * tempo instead of dropping it back to its own.
+   * The warp and the tempo fader are separate controls on the same speed and
+   * multiply, so the fader moves a warped deck around the master tempo.
    */
   private applyRate(): void {
     this.post({ type: 'rate', rate: clamp(this.warpRatio * this.pitchRatio, 0, MAX_RATE) })
@@ -688,9 +658,7 @@ export class Deck {
   /**
    * Apply the channel's knobs: trim, three-band EQ and the filter.
    *
-   * `mode` is required rather than defaulted, because the two floors sound
-   * completely different — a DJM channel EQ stops at -26 dB, its isolator mode
-   * goes to silence — and a caller that forgot would quietly get the wrong one.
+   * `mode` is required: the two floors differ, -26 dB against silence.
    */
   setChannelEq(eq: ChannelEq, mode: EqMode): void {
     applyChannelStrip(this.strip, eq, mode, this.ctx.currentTime)

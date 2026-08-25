@@ -68,9 +68,8 @@ export interface Track {
   /** Which collection this belongs to. See {@link TrackSource}. */
   source: TrackSource
   /**
-   * sha1 of the resolved audio path. A rekordbox record and any local fork of
-   * it share this, so a fork inherits the waveform cache instead of forcing a
-   * re-analysis of the same file.
+   * sha1 of the resolved audio path. A rekordbox record and any local fork of it
+   * share this, so a fork inherits the waveform cache.
    */
   audioKey: string
   /** For a local fork, the id of the rekordbox record it came from. */

@@ -3,17 +3,15 @@
  *
  * Downmixes to mono, splits that into the low/mid/high bands rekordbox draws in
  * blue/orange/white, and reduces each band to one peak byte per bucket. The
- * filters run forward once only: phase distortion is invisible in a peak
- * envelope, so a forward-backward pass would cost twice as much for nothing.
+ * filters run forward once: phase distortion is invisible in a peak envelope.
  *
- * The pass is chunked with a yield between chunks so a long track reports
- * progress as it goes instead of freezing the worker for several seconds.
+ * The pass is chunked with a yield between chunks, so a long track reports
+ * progress as it goes and the worker stays responsive.
  */
 
 /**
  * Frames summarised by one bucket. Mirrors `WAVEFORM_BUCKET` in
- * `core/constants.ts`; duplicated rather than imported so the worker does not
- * pull the renderer's module graph in behind it.
+ * `core/constants.ts`, duplicated so the worker pulls in no renderer modules.
  */
 const BUCKET_SIZE = 128
 
@@ -119,8 +117,8 @@ function runBiquad(f: Biquad, x: number): number {
   return y
 }
 
-// `self` types as a Window because the renderer tsconfig loads the DOM lib
-// alongside WebWorker; this module only ever runs inside a worker.
+// The renderer tsconfig loads the DOM lib alongside WebWorker, so `self` types
+// as a Window. This module only ever runs inside a worker.
 const ctx = self as unknown as DedicatedWorkerGlobalScope
 
 function post(message: WaveformWorkerMessage, transfer?: Transferable[]): void {
@@ -235,7 +233,7 @@ function analyze(req: WaveformRequest): void {
         post({ type: 'progress', ratio: frame / frames })
       }
       // Yield, so the progress message goes out and the worker stays alive to
-      // incoming messages instead of monopolising the thread for the whole file.
+      // incoming messages.
       setTimeout(processChunk, 0)
     } catch (err) {
       fail(err)

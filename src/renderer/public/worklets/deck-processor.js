@@ -1,21 +1,19 @@
 /**
  * DJDaw deck engine.
  *
- * A sample-position playback engine, which is how a CDJ works and what makes
- * hot cues, beat jump and scrubbing exact: the deck owns a fractional frame
- * playhead and every feature is expressed as "put the playhead here". Audio is
- * read with 4-point Hermite interpolation so off-speed playback stays clean,
- * and every discontinuity (seek, loop wrap, hot cue) is spliced with a short
- * equal-power crossfade so jumps never click.
+ * A sample-position playback engine: the deck owns a fractional frame playhead
+ * and every feature is expressed as "put the playhead here", which is what
+ * makes hot cues, beat jump and scrubbing exact. Audio is read with 4-point
+ * Hermite interpolation, and every discontinuity — seek, loop wrap, hot cue —
+ * is spliced with a short equal-power crossfade.
  *
  * The playhead is a *timeline* position, not a position in the file. An edited
  * deck carries a list of regions saying which piece of the file plays where, so
- * timeline frames and source frames drift apart the moment a track is cut. A
- * deck with no regions plays the whole file straight through, which is the same
- * thing expressed as one region covering everything.
+ * timeline frames and source frames differ once a track is cut. A deck with no
+ * regions plays the whole file straight through.
  *
- * Plain JS on purpose: this file is handed to `audioWorklet.addModule` as-is.
- * The message contract is typed in `src/renderer/src/audio/deckProtocol.ts`.
+ * Plain JS: handed to `audioWorklet.addModule` as-is. The message contract is
+ * typed in `src/renderer/src/audio/deckProtocol.ts`.
  */
 
 /** Crossfade applied across a playhead discontinuity, in frames (~5ms @48k). */
@@ -80,9 +78,8 @@ class DeckProcessor extends AudioWorkletProcessor {
     this.envStep = 1 / Math.max(1, ENV_RAMP_SEC * sampleRate)
     /**
      * Where the playhead must settle once the declick fade finishes, or null
-     * while the transport is moving under its own power. The fade deliberately
-     * keeps rendering audio past the stopping point; this is what guarantees
-     * the playhead still ends up frame-exact where it was commanded.
+     * while the transport is moving under its own power. The fade renders audio
+     * past the stopping point; the playhead still ends frame-exact.
      */
     this.restPos = null
 
@@ -266,8 +263,7 @@ class DeckProcessor extends AudioWorkletProcessor {
   /**
    * Index of the region containing a timeline frame, or -1 in a gap.
    *
-   * Stepped from the last answer rather than searched: the playhead sits inside
-   * one region for thousands of samples, so both loops normally exit at once.
+   * Stepped from the last answer, so both loops normally exit at once.
    */
   resolveRegion(pos) {
     const regions = this.regions
@@ -300,9 +296,8 @@ class DeckProcessor extends AudioWorkletProcessor {
    * Source frame for this sample, or null for silence, arming a crossfade when
    * the playhead has just crossed into a different region.
    *
-   * A boundary is a source discontinuity like any other jump, so it gets the
-   * same treatment as a seek: the outgoing piece keeps playing under the
-   * incoming one for a few milliseconds instead of stopping dead.
+   * A boundary is a source discontinuity like a seek: the outgoing piece keeps
+   * playing under the incoming one for a few milliseconds.
    */
   sourceUnderPlayhead() {
     const index = this.resolveRegion(this.pos)
@@ -330,10 +325,9 @@ class DeckProcessor extends AudioWorkletProcessor {
     }
     this.pos = target
     this.syncRegion()
-    // A stopped deck must land exactly on the target. The declick fade from a
-    // preceding pause is still running and still advancing the playhead, so
-    // the seek target becomes the new parking spot rather than cancelling it —
-    // pause-then-seek is how back-to-cue and every cue preview release work.
+    // A stopped deck lands exactly on the target. A declick fade from a
+    // preceding pause is still advancing the playhead, so the seek target
+    // becomes the new parking spot.
     this.restPos = this.playing || this.scrubbing ? null : target
     this.ended = false
     if (this.scrubbing) this.scrubTarget = target
@@ -410,8 +404,7 @@ class DeckProcessor extends AudioWorkletProcessor {
       let l = 0
       let r = 0
       if (moving || this.env > 0) {
-        // A gap reads no source at all: it renders silence while the playhead
-        // keeps moving, so a deleted piece is a hole rather than a stop.
+        // A gap reads no source: silence while the playhead keeps moving.
         const src = this.sourceUnderPlayhead()
         if (src !== null) {
           this.mixAt(src, scratch)
@@ -458,11 +451,8 @@ class DeckProcessor extends AudioWorkletProcessor {
             this.splicePos = this.lastSrcPos === null ? null : this.lastSrcPos + step
             this.spliceRate = step
             this.spliceLeft = SPLICE_FRAMES
-            // Wrap by modulo rather than by subtracting one loop length. A
-            // single playback step only ever overshoots by a fraction of a
-            // frame, but a seek can land far outside the loop, and unwinding
-            // that one length at a time would render a long burst of
-            // discontinuous samples before the playhead re-entered.
+            // Wrapped by modulo, so a seek landing far outside the loop
+            // re-enters in one step.
             this.pos = this.loopStart + (((this.pos - this.loopStart) % len) + len) % len
             // The wrap already spliced; re-seat the region state so the
             // boundary check does not arm a second crossfade over the top.

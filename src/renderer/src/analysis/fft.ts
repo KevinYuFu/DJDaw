@@ -4,12 +4,11 @@
  * Layout: the transform is iterative, in place, and split into parallel real
  * and imaginary arrays (element k of the signal is `re[k], im[k]`). Input is
  * first permuted into bit-reversed order, then combined in log2(size) stages of
- * butterflies. All twiddle factors for every stage come out of one `size / 2`
- * table read with a per-stage stride, so a transform allocates nothing and
- * recomputes no trigonometry. After `forward`, bin k is `re[k], im[k]`; for
- * real input the bins above `size / 2` are mirrored conjugates and carry no
- * extra information, which is why {@link FFT.magnitudes} returns only
- * `size / 2 + 1` of them.
+ * butterflies. All twiddle factors come out of one `size / 2` table read with a
+ * per-stage stride, so a transform allocates nothing and recomputes no
+ * trigonometry. After `forward`, bin k is `re[k], im[k]`; for real input the
+ * bins above `size / 2` are mirrored conjugates, so {@link FFT.magnitudes}
+ * returns `size / 2 + 1` of them.
  */
 export class FFT {
   /** Transform length. Always a power of two. */
@@ -123,8 +122,8 @@ export class FFT {
     im.fill(0)
     this.forward(re, im)
 
-    // sqrt rather than Math.hypot: hypot guards against overflow we cannot hit
-    // with audio-range values and costs several times as much per bin.
+    // sqrt, not Math.hypot: its overflow guard is unreachable at audio range
+    // and costs several times as much per bin.
     for (let k = 0; k < bins; k++) {
       const r = re[k]
       const i = im[k]

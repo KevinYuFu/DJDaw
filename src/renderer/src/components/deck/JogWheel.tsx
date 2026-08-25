@@ -26,9 +26,8 @@ const TWO_PI = Math.PI * 2
 interface DragState {
   pointerId: number
   /**
-   * The deck the gesture started on. Scrub mode belongs to that deck and only
-   * it can leave it, so the drag holds the instance rather than re-reading one
-   * that may have gone by the time the pointer comes up.
+   * The deck the gesture started on. Scrub mode belongs to that deck and only it
+   * can leave it, so the drag holds the instance.
    */
   deck: Deck
   /** Platter centre in client coordinates, fixed for the gesture. */

@@ -2,16 +2,14 @@
  * The library store's half of the two-collection model.
  *
  * `collection.test.mjs` covers the pure fork maths; this covers what the store
- * does with it: that an edit to a mirrored track lands on a fork and reports
- * the id it landed on, that a sync replaces the mirror rather than merging into
- * it, that search and sort behave the same in both scopes, and above all that
- * nothing mirrored can ever reach library.json.
+ * does with it: an edit to a mirrored track lands on a fork and reports the id
+ * it landed on, a sync replaces the mirror, search and sort behave the same in
+ * both scopes, and nothing mirrored reaches library.json.
  *
- * The store is bundled here rather than by `run.mjs` because it needs the
- * `@shared` and `@renderer` path aliases resolved, and because it must be
- * imported only after `window` is stubbed. No DOM is involved: the store reads
- * `window.api` and adds one `beforeunload` listener, and stubs for those two
- * are enough to exercise every code path in this file.
+ * The store is bundled here, not by `run.mjs`: it needs the `@shared` and
+ * `@renderer` path aliases resolved, and must be imported after `window` is
+ * stubbed. No DOM is involved — the store reads `window.api` and adds one
+ * `beforeunload` listener.
  */
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
@@ -162,8 +160,7 @@ await reset()
   eq('sync: missing counted', useLibrary.getState().mirrorMeta.missing, 1)
   eq('sync: playlists counted', useLibrary.getState().mirrorMeta.playlists, 1)
 
-  // A track dropped in rekordbox has to disappear here, which is why the
-  // mirror is replaced rather than merged.
+  // A track dropped in rekordbox disappears here: the mirror is replaced.
   s.applyRekordboxSync(syncResult([mirrored()]))
   eq('sync: replaced wholesale', useLibrary.getState().mirrorOrder.length, 1)
   ok('sync: deletion propagated', useLibrary.getState().mirror[`rb-${KEY_B}`] === undefined)

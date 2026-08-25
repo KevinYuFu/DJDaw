@@ -13,15 +13,14 @@ import { WorkletPlayout, type ArrangementClip } from '@renderer/arrangement/Work
 import { useLibrary } from '@renderer/state/useLibrary'
 
 /**
- * The arrangement: lanes of clips on one grid, the way Ableton lays a set out.
+ * The arrangement: lanes of clips on one grid.
  *
- * The timeline itself is not modelled here. `@waveform-playlist/engine` owns
- * which clips exist, where they sit and what a cut or a drag does to them,
- * including undo; this store owns everything that library has no opinion on —
- * the master tempo, the audio each clip reads, the channel knobs — and mirrors
- * the library's state out so React can render it.
+ * `@waveform-playlist/engine` owns the timeline — which clips exist, where they
+ * sit, what a cut or a drag does to them, and undo. This store owns the rest:
+ * the master tempo, the audio each clip reads and the channel knobs. It mirrors
+ * the library's state out for rendering.
  *
- * Nothing here touches a deck. The arrangement is its own world.
+ * Holds no deck state. The arrangement is its own world.
  */
 
 /** The range the master tempo can be set to. */
@@ -45,13 +44,7 @@ export interface ClipSelection {
   clipId: string
 }
 
-/**
- * What is about to be dropped, drawn where it will land.
- *
- * In the store rather than the lane that draws it, because it is a promise
- * about what a drop will do and has to be checkable against what the drop
- * actually did.
- */
+/** What is about to be dropped, and where it will land. */
 export interface DropPreview {
   lane: string
   sourceId: string
@@ -69,10 +62,7 @@ export interface LaneChannel {
 
 export interface ArrangementState {
   ready: boolean
-  /**
-   * Frames per second of the engine's clock. Every clip position is in these,
-   * so anything drawing one has to convert with this and not a guess.
-   */
+  /** Frames per second of the engine's clock. Every clip position is in these. */
   sampleRate: number
   /** The grid everything is warped onto. */
   masterBpm: number
@@ -107,9 +97,8 @@ export interface ArrangementState {
   select(selection: ClipSelection | null): void
   setPreview(preview: DropPreview | null): void
   /**
-   * Length of a track's audio in frames: the decoded file once it is here, the
-   * library's reading of it before that. The preview needs a number before
-   * anything has been decoded, and this is the same one the drop will use.
+   * Length of a track's audio in frames: the decoded file when it is loaded,
+   * the library's stored duration before that.
    */
   sourceFrames(trackId: string): number
   /** Delete the picked clip. Does nothing when nothing is picked. */
@@ -135,13 +124,7 @@ const sources = new Map<string, AudioBuffer>()
 
 let engine: PlaylistEngine | null = null
 let playout: WorkletPlayout | null = null
-/**
- * Whether a drag is open.
- *
- * The timeline library takes a full copy of every track for undo on each edit,
- * and a drag is one edit repeated on every pointer move. A transaction makes
- * it one copy and one undo step for the whole gesture.
- */
+/** Whether a drag is open. A drag is one transaction and one undo step. */
 let dragging = false
 
 /** Seconds into the file where its first downbeat is. */
@@ -167,11 +150,10 @@ function laneById(lanes: ClipTrack[], id: string): ClipTrack | undefined {
 }
 
 /**
- * Re-attach what a split drops.
+ * Give the halves of a split clip the source the original read.
  *
  * The library rebuilds clips from a fixed field list when it cuts one, so the
- * two halves come back without the source they read. They are the only clips on
- * the lane that lost it, and they are halves of the one clip that was cut.
+ * halves arrive without it. They are the only clips on the lane without one.
  */
 function inheritSource(lane: ClipTrack, source: ArrangementClip): ClipTrack {
   return {
@@ -265,9 +247,8 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     const buffer = sources.get(trackId)
     if (!buffer) return
 
-    // The first track into an empty arrangement names the tempo instead of
-    // being warped to it, the way dropping the first clip into an empty set
-    // does. Everything after it is warped onto that.
+    // The first track into an empty arrangement sets the tempo. Every track
+    // after it is warped onto that.
     const empty = playlist.getState().tracks.every((t) => t.clips.length === 0)
     if (empty && trackBpm(track) > 0) get().setMasterBpm(trackBpm(track))
 
@@ -379,9 +360,9 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   /**
    * Move the grid, and every clip with it.
    *
-   * Clip positions are held in beats by the library, so they follow on their
-   * own. Their lengths are in frames, so a clip that was eight bars long has to
-   * be rescaled to stay eight bars long, and re-warped to the new tempo.
+   * The library holds clip positions in beats and moves them itself. Lengths
+   * are in frames, so they are rescaled to cover the same number of bars, and
+   * each clip is re-warped to the new tempo.
    */
   setMasterBpm(bpm) {
     const next = clampMasterBpm(bpm)

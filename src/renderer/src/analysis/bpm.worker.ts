@@ -7,14 +7,11 @@ import { FFT, hannWindow } from './fft'
  * Tempo and downbeat detection.
  *
  * Spectral-flux onset envelope → pulse-train tempo search → phase search →
- * downbeat from the kick drum. Everything downstream (beat jump, quantise,
- * loops, hot cue snapping) hangs off the grid this produces, so the search is
- * exhaustive rather than clever: a couple of seconds once at import time is
- * cheap next to a grid a DJ has to nudge by hand.
+ * downbeat from the kick drum. The search is exhaustive, and runs once at
+ * import time. Beat jump, quantise, loops and hot cue snapping all hang off
+ * the grid it produces.
  *
- * The downbeat step follows Pioneer's granted patent JP6071274B2, "Bar position
- * determining apparatus", which is what rekordbox does. See
- * {@link barPhaseFromKicks} for why it only counts two kinds of kick.
+ * The downbeat step counts two kinds of kick; see {@link barPhaseFromKicks}.
  */
 
 export interface BpmRequest {
@@ -48,7 +45,7 @@ const COARSE_STEP = 0.1
 const FINE_STEP = 0.01
 /** Half-width of the fine search around the coarse winner, in BPM. */
 const FINE_WINDOW = 1.0
-/** Tempo range a DJ expects to see on the display; used to resolve octaves. */
+/** Tempo range shown on the display. Used to resolve octaves. */
 const OCTAVE_LO = 85
 const OCTAVE_HI = 175
 /**
@@ -154,12 +151,10 @@ function downmix(channels: Float32Array[]): Float32Array {
  * Phase offsets to try across one beat of `period` envelope samples: one per
  * envelope sample.
  *
- * Under-resolving here is fatal rather than merely imprecise. At the true tempo
- * the pulses are exactly periodic, so a single offset error repeats on every
- * beat and the correct tempo scores *below* its neighbours, which are free to
- * slide onto the peaks — a fixed 24 steps had 128.0 BPM scoring a fifth of what
- * 128.1 scored on a metronomic track. Resolving finer than the envelope itself
- * buys nothing, and the cost per candidate comes out tempo-independent.
+ * One offset per envelope sample. At the true tempo the pulses are exactly
+ * periodic, so a coarser step repeats one offset error on every beat and scores
+ * the correct tempo below its neighbours. Finer than the envelope adds nothing,
+ * and the cost per candidate is tempo-independent.
  */
 function phaseStepsFor(period: number): number {
   return clamp(Math.ceil(period), MIN_PHASE_STEPS, MAX_PHASE_STEPS)
@@ -246,9 +241,8 @@ function buildEnvelopes(
 
 /**
  * Local adaptive normalisation, in place: subtract a moving mean, half-wave
- * rectify, divide by the standard deviation. This is what lets a quiet intro
- * and a loud drop contribute equally to the tempo search instead of the drop
- * drowning everything else out.
+ * rectify, divide by the standard deviation, so a quiet intro and a loud drop
+ * contribute equally to the tempo search.
  */
 function normalise(env: Float32Array, rate: number): void {
   const n = env.length
@@ -356,8 +350,7 @@ function driftTolerantScore(env: Envelopes, period: number): number {
   let pulses = 0
   for (let start = 0; start < env.onset.length; start += segment) {
     const end = Math.min(start + segment, env.onset.length)
-    // A stub of a tail segment says nothing about tempo; stop rather than let
-    // it skew the total.
+    // A stub of a tail segment says nothing about tempo. Stop here.
     if (end - start < period * 4) break
     const fit = bestPhase(env.onset, start, end, period, steps)
     total += fit.score
@@ -605,10 +598,8 @@ function barPhaseFromKicks(
  * Bar phase from low-band onset energy: of the `beatsPerBar` candidates, the
  * one whose beats carry the most kick-band flux.
  *
- * This is the fallback for a track with no kick drum at all, where the patent
- * method has nothing to count. It is weaker — it is an average over the track
- * rather than evidence about any one bar line — but it is still better than
- * defaulting to whichever beat the phase search happened to land on.
+ * The fallback for a track with no kick drum to count. An average over the
+ * track, not evidence about any one bar line.
  */
 function barPhaseFromLowBand(
   low: Float32Array,
@@ -712,7 +703,7 @@ export function detect(
 }
 
 // The renderer tsconfig loads both the DOM and WebWorker libs, so `self` is
-// typed as a Window here. Narrow it once rather than casting at every use.
+// typed as a Window here. Narrowed once.
 const ctx = self as unknown as DedicatedWorkerGlobalScope
 
 ctx.onmessage = (event: MessageEvent<BpmRequest>): void => {

@@ -85,7 +85,7 @@ eq('playlist track order is preserved',
 
 eq('an empty collection yields an empty tree', T.buildPlaylistTree([]).length, 0)
 
-// Empty folder names in the path are skipped rather than making blank folders.
+// Empty folder names in the path are skipped, making no blank folders.
 {
   const blanks = T.buildPlaylistTree([pl(['', 'Real', ''], 'P', ['z'])])
   eq('only the named folder survives', blanks.length, 1)

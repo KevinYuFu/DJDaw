@@ -10,9 +10,8 @@ import './browser.css'
  * The bottom half of the window: source tree, track table, and the header bar
  * that searches, sorts and imports into them.
  *
- * The header names the collection on screen because the two behave differently
- * — one is yours, the other is a mirror that forks when edited — and a count
- * with no collection beside it says nothing about which one changed.
+ * The header names the collection on screen. The two behave differently — one
+ * is yours, the other a mirror that forks when edited.
  */
 
 interface SortOption {
@@ -74,8 +73,8 @@ function fileSystemPath(file: File): string | null {
     const resolved = window.api.getPathForFile(file)
     return resolved.length > 0 ? resolved : null
   } catch {
-    // A file with no filesystem backing (a drag from a web page, say) throws
-    // rather than returning empty. That is not an error worth surfacing.
+    // A file with no filesystem backing — a drag from a web page, say — throws
+    // here. Not an error worth surfacing.
     return null
   }
 }
@@ -135,11 +134,10 @@ export function Browser(): ReactElement {
     [tracks, order, mirror, mirrorOrder, scope, scopeCount, search]
   )
 
-  // Announce a sync when it lands: it can arrive unprompted, because main
-  // re-reads the XML whenever rekordbox rewrites it, and a collection changing
-  // size on its own needs a reason on screen. Keyed on the stamp rather than
-  // the object so a re-render cannot re-announce the same sync, and seeded on
-  // the first pass so a remount does not announce one that already happened.
+  // Announce a sync when it lands. It can arrive unprompted: main re-reads the
+  // XML whenever rekordbox rewrites it. Keyed on the stamp, so a re-render cannot
+  // re-announce the same sync, and seeded on the first pass, so a remount does
+  // not announce one that already happened.
   const announced = useRef<string | null>(null)
   useEffect(() => {
     const stamp = `${mirrorMeta.syncedAt}:${mirrorMeta.error ?? ''}`
@@ -173,10 +171,8 @@ export function Browser(): ReactElement {
   }, [importFiles, notify])
 
   /**
-   * The one-shot XML import, which is a different thing from the mirror: it
-   * copies the export into the local collection once, and nothing links the two
-   * afterwards. Kept alongside the mirror because an import is what you want
-   * when the collection is moving to DJDaw for good.
+   * The one-shot XML import, a different thing from the mirror: it copies the
+   * export into the local collection once, and nothing links the two afterwards.
    */
   const onImportRekordbox = useCallback(async (): Promise<void> => {
     setImporting(true)
@@ -333,8 +329,8 @@ export function Browser(): ReactElement {
             value={sortBy}
             aria-label="Sort column"
             onChange={(event) => {
-              // Reading the option back out of the list keeps the value typed
-              // as a Track key instead of casting the raw select string.
+              // Reading the option back out of the list keeps the value typed as a Track
+              // key, with no cast of the raw select string.
               const option = SORT_OPTIONS.find((o) => o.key === event.target.value)
               if (option && option.key !== sortBy) setSort(option.key)
             }}

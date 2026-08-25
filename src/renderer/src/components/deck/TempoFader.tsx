@@ -41,10 +41,9 @@ function preventFocus(e: ReactMouseEvent<HTMLElement>): void {
 /**
  * The tempo fader.
  *
- * Plus is at the bottom, as it is on a CDJ and on a 1200: pulling the fader
- * towards you speeds the track up. Dragging is relative rather than absolute,
- * which is what lets shift make a gesture finer than the pixels it covers, and
- * the value stops dead at the ends the way a physical fader does.
+ * Plus is at the bottom, as on a CDJ and a 1200: pulling the fader towards you
+ * speeds the track up. Dragging is relative, so shift makes a gesture finer
+ * than the pixels it covers, and the value stops dead at the ends.
  */
 export function TempoFader({ deckId }: TempoFaderProps): ReactElement {
   const deck = useDecks((s) => s.decks[deckId])

@@ -42,8 +42,8 @@ function clipAt(lane: ClipTrack, sec: number, sampleRate: number): ArrangementCl
  * One track of the arrangement: a channel on the left, a stretch of time on
  * the right.
  *
- * The lane is a place, not a track — it holds clips from as many songs as get
- * dropped on it, and its channel applies to all of them.
+ * A lane holds clips from any number of songs. Its channel applies to all
+ * of them.
  */
 export function ArrangementLane({
   lane,
@@ -103,8 +103,7 @@ export function ArrangementLane({
     if (!held.moved && Math.abs(travel) < DRAG_SLOP_PX) return
     if (!held.moved) useArrangement.getState().beginDrag()
     held.moved = true
-    // Snapped where it lands rather than by how far it came, so a clip that
-    // started on a bar line stays on one.
+    // Snapped where it lands, so a clip that started on a bar line stays on one.
     const wanted = snap(held.startSec + travel * secPerPx)
     const current = useArrangement.getState().lanes.find((l) => l.id === lane.id)
     const clip = current?.clips.find((c) => c.id === held.clipId)
@@ -119,10 +118,8 @@ export function ArrangementLane({
   }
 
   /**
-   * Draw the clip where it is going to land, at the size it is going to be.
-   *
-   * From the same placement the drop itself uses, so the shape under the
-   * cursor is a promise rather than a hint.
+   * Draw the clip where it will land, at the size it will be, from the same
+   * placement the drop uses.
    */
   const onDragOver = (e: DragEvent<HTMLDivElement>): void => {
     if (!e.dataTransfer.types.includes(TRACK_DRAG_MIME)) return
@@ -147,8 +144,7 @@ export function ArrangementLane({
       atSeconds: snap(secAt(e.clientX)),
       sampleRate
     })
-    // Snapping puts most of these on the same bar as the last one; redrawing
-    // for a shape that has not moved is the bulk of the work in a drag.
+    // Snapping puts most of these on the same bar as the last one.
     const shown = arrangement.preview
     if (
       shown &&

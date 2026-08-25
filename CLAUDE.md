@@ -1,21 +1,21 @@
 # Working agreement
 
-## Kevin makes the decisions
+## YuFu makes the decisions
 
-Kevin is the decision maker. Always.
+YuFu is the decision maker. Always.
 
 - If I hit a blocker, I **stop and ask**. I do not pick a workaround on my own.
-- If I am about to build something Kevin did not ask for, I **ask first**.
+- If I am about to build something YuFu did not ask for, I **ask first**.
 - Flagging a problem and then solving it my own way in the same message is
   **not** asking. That is still me deciding.
 - "I can't do X, so I did Y instead" is wrong. The right move is:
   "I can't do X. Here are the options. Which do you want?"
 
-This applies even when my alternative is technically better. Kevin decides.
+This applies even when my alternative is technically better. YuFu decides.
 
 ## Branches and PRs
 
-**Always `git checkout main && git pull` before starting anything.** Kevin
+**Always `git checkout main && git pull` before starting anything.** YuFu
 merges often, so a branch cut from a stale main wastes both our time.
 
 **Every branch starts from `main`.** Never commit straight to `main`, and never
@@ -28,7 +28,7 @@ to merge, then branch from `main`.
 Stacking to avoid merge conflicts is the wrong reason. Conflicts are normal and
 resolvable; a stack makes every PR harder to review and forces a merge order.
 
-**Once Kevin merges a PR, that branch is finished.** The next change branches
+**Once YuFu merges a PR, that branch is finished.** The next change branches
 from `main` again, even when it is more of the same work. Pushing to a merged
 branch puts the commits nowhere: they are not on `main` and there is no open PR
 to review them.
@@ -49,19 +49,23 @@ already shipped work onto the wrong branch once by switching branches to test
 something and forgetting to switch back — verify, do not assume.
 
 After each code change, push the branch and open (or update) a pull request, so
-Kevin can review it on GitHub. He approves and merges — I do not merge.
+YuFu can review it on GitHub. He approves and merges — I do not merge.
 
 Branch names: `feat/short-description`, `fix/short-description`.
 
 ## How to comment code
 
-A comment says **what the code is for**, to someone seeing it for the first
-time. Nobody remembers the history of the code, so do not write it down.
+A comment says **what the code is for and what it does**, to someone seeing it
+for the first time. Nothing about how it came to be that way.
 
 - No explaining the bug that was fixed.
 - No explaining what the code used to do.
 - No justifying the change, or arguing with an alternative.
-- No naming Kevin, or any decision he made.
+- No naming YuFu, any decision he made, or his hardware.
+- No naming another product as the reason for a choice.
+
+The same goes for the docs and the README. They describe what the app does,
+not the path taken to get there.
 
 Most comments are one line. If a line of code is obvious, it gets no comment.
 
@@ -69,7 +73,7 @@ Bad:
 
 ```ts
 // A freshly loaded deck parks at the top of the file, not on its cue point.
-// rekordbox has this as a preference and Kevin runs it this way: an imported
+// rekordbox has this as a preference and YuFu runs it this way: an imported
 // track carries a memory cue from wherever the last edit left off, and loading
 // straight onto it hides the intro.
 const start = 0
@@ -87,7 +91,7 @@ what it does now. Keep it short.
 
 ## Matching a reference means matching it
 
-When Kevin points at something and says make it look like that, the job is to
+When YuFu points at something and says make it look like that, the job is to
 match it. Not to match it and add an improvement.
 
 If I think the reference is missing something useful, I say so and let him
@@ -97,11 +101,15 @@ and it is still that even when the addition is genuinely good.
 The same goes for measuring: when I claim something matches, the measurement
 has to be of the thing itself, not of something that correlates with it.
 
-## Ableton is the reference for the arrangement view
+## Follow the conventions of the tool being built
 
-The arrangement view (V3) is Ableton Live's arrangement view. When a decision
-is unclear, the answer is how Ableton does it. Rekordbox is still the reference
-for the performance view.
+The arrangement view follows standard DAW arrangement conventions: lanes of
+clips on one grid, clips that do not overlap, snapping, one transport. The
+performance view follows DJ player conventions.
+
+When a decision is unclear, the answer is whichever of those a user of that
+kind of tool would already expect. Do not name a specific product in the
+codebase, the docs or the UI.
 
 ## Use what already exists
 
@@ -123,7 +131,7 @@ So a preview is not decoration. It is a promise, and it has to be drawn from
 the same numbers the real thing uses — not from a second copy of the maths that
 can drift.
 
-## Testing must not disturb Kevin
+## Testing must not disturb YuFu
 
 He is working on the same machine. Tests run around him, not over him.
 
@@ -135,17 +143,17 @@ He is working on the same machine. Tests run around him, not over him.
   `Page.setWebLifecycleState('active')` first; only ask him to bring the app
   forward if that fails, and say why.
 
-## Save every rule Kevin gives me
+## Save every rule YuFu gives me
 
-When Kevin gives me an instruction about how to work, I add it to this file
+When YuFu gives me an instruction about how to work, I add it to this file
 straight away. He should not have to repeat himself.
 
-## How to write for Kevin
+## How to write for YuFu
 
-Kevin is dyslexic. Make everything easy to read.
+YuFu is dyslexic. Make everything easy to read.
 
 **Keep it short.** This is the main one. Most answers should fit on one screen.
-Kevin should never have to scroll up to find where the answer starts.
+YuFu should never have to scroll up to find where the answer starts.
 
 - Lead with the answer. First line, no preamble.
 - Short sentences.
