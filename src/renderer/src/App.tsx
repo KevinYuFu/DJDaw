@@ -32,14 +32,13 @@ import type { ViewName } from '@renderer/state/useSettings'
 
 /**
  * The window: toolbar, the current view, and the browser below a draggable
- * divider. This is also where the app's one-time wiring lives — engine
- * startup, library hydration, the key map and the application menu — because
- * everything below it is a view of the stores.
+ * divider. The app's one-time wiring lives here — engine startup, library
+ * hydration, the key map and the application menu.
  *
- * Two views share the middle row: PERFORMANCE, the two decks either side of
- * the mixer, and EDIT, four tracks stacked. Only that row swaps. The toolbar
- * carries the tabs that switch it and the browser is where tracks come from,
- * so both stay on screen in either view.
+ * The views share the middle row and only that row swaps: PERFORMANCE puts two
+ * decks either side of the mixer, the editing views stack four tracks, and the
+ * arrangement lays out lanes. The toolbar and the browser stay on screen
+ * throughout.
  */
 
 /** Must match the toolbar and handle rows in app.css. */
@@ -77,7 +76,7 @@ const VIEW_HEIGHTS: Record<ViewName, { min: number; preferred: number }> = {
     preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
   },
   // The arrangement's chrome is a transport bar and a bar ruler, over lanes
-  // that are shorter than an editing row because there is no deck on them.
+  // shorter than an editing row.
   v3: {
     min: ARRANGEMENT_CHROME_H + 4 * ARRANGEMENT_LANE_H,
     preferred: ARRANGEMENT_CHROME_H + 4 * ARRANGEMENT_LANE_H
@@ -159,8 +158,8 @@ function runMenuCommand(command: string): void {
       decks.togglePlay(deck)
       break
     case 'cue':
-      // A menu click is a press and an immediate release. Without the release,
-      // a preview started from the cue point would have nothing to end it.
+      // A menu click is a press and an immediate release, so a preview started from
+      // the cue point has something to end it.
       decks.cuePress(deck)
       decks.cueRelease(deck)
       break
@@ -228,8 +227,8 @@ export function App(): ReactElement {
       .catch((err: unknown) => console.error('[app] library load failed', err))
   }, [])
 
-  // An AudioContext starts suspended until a gesture, and the gesture that
-  // unlocks it may well be a click on the waveform rather than on a button.
+  // An AudioContext starts suspended until a gesture, and any click counts — a
+  // waveform as much as a button.
   useEffect(() => {
     const unlock = (): void => {
       void AudioEngine.shared()

@@ -41,9 +41,8 @@ function createWindow(): BrowserWindow {
   // Showing only once the first frame is ready avoids a white flash.
   window.on('ready-to-show', () => window.show())
 
-  // The mirror is pushed rather than pulled, so it can only go out once the
-  // renderer exists to receive it. Doing it per window also covers the macOS
-  // case of the last window being closed and a new one opened later.
+  // The mirror is pushed, so it goes out once a renderer exists to receive it.
+  // Per window, which covers a new window opened after the last one closed.
   window.webContents.once('did-finish-load', () => {
     void startRekordboxSync().catch((err) =>
       console.error('[main] initial rekordbox sync failed', err)
@@ -87,11 +86,9 @@ app.on('will-quit', (event) => {
   if (libraryFlushed) return
 
   // The renderer posts its final library write from `beforeunload`, which runs
-  // while the window closes — after `before-quit` and possibly still in flight
-  // here. Losing a hot cue the user set seconds before quitting is the worst
-  // thing this app can do, so the quit is held back until that write has landed
-  // and then restarted. `will-quit` rather than `before-quit` because by then
-  // every window has unloaded, so there is nothing left to wait for afterwards.
+  // as the window closes and can still be in flight here. The quit is held back
+  // until that write lands, then restarted. On `will-quit`, by which point every
+  // window has unloaded.
   event.preventDefault()
   void whenLibraryIdle()
     .catch((err) => console.error('[main] library flush failed on quit', err))

@@ -168,7 +168,7 @@ async function pickXmlFile(
 ): Promise<string | null> {
   const owner = BrowserWindow.fromWebContents(event.sender)
   const options = xmlDialogOptions(buttonLabel)
-  // Owning the dialog makes it a sheet on macOS instead of a floating window.
+  // An owned dialog is a sheet on macOS, not a floating window.
   const picked = owner
     ? await dialog.showOpenDialog(owner, options)
     : await dialog.showOpenDialog(options)
@@ -259,9 +259,8 @@ export async function startRekordboxSync(): Promise<void> {
 /**
  * Read a rekordbox XML collection export.
  *
- * The XML export is the supported interchange format, and a copy rather than
- * the live database. Parsed here, so a large collection never crosses IPC as
- * one string.
+ * The XML export is the supported interchange format, and a copy of the live
+ * database. Parsed here, so a large collection never crosses IPC as one string.
  */
 async function importRekordboxXml(event: IpcMainInvokeEvent): Promise<RekordboxImportResult> {
   const xmlPath = await pickXmlFile(event, 'Import')

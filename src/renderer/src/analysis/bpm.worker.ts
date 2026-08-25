@@ -45,7 +45,7 @@ const COARSE_STEP = 0.1
 const FINE_STEP = 0.01
 /** Half-width of the fine search around the coarse winner, in BPM. */
 const FINE_WINDOW = 1.0
-/** Tempo range a DJ expects to see on the display; used to resolve octaves. */
+/** Tempo range shown on the display. Used to resolve octaves. */
 const OCTAVE_LO = 85
 const OCTAVE_HI = 175
 /**

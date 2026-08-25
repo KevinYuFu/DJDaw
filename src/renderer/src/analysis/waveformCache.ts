@@ -18,8 +18,7 @@ function cacheMatchesAudio(w: WaveformData, buffer: AudioBuffer): boolean {
  * Cached waveform if there is one, otherwise analyse and cache the result.
  *
  * Keyed on `audioKey`, not on the track id: a mirrored record and any local
- * fork of it are the same file, so the fork inherits the analysis instead of
- * spending seconds re-deriving an identical waveform.
+ * fork of it are the same file and share one analysis.
  */
 export async function resolveWaveform(track: Track, buffer: AudioBuffer): Promise<WaveformData | null> {
   try {

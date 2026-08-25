@@ -102,7 +102,7 @@ export function encodeWaveform(w: WaveformData): ArrayBuffer {
 /**
  * Parse a `.djw` cache. Returns null for anything unreadable — wrong magic, a
  * version bump, a truncated file — so a stale or corrupt cache is silently
- * re-analysed instead of taking the import down with it.
+ * re-analysed.
  */
 export function decodeWaveform(data: ArrayBuffer): WaveformData | null {
   if (data.byteLength < HEADER_OFFSET) return null

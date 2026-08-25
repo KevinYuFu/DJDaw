@@ -162,9 +162,8 @@ function deckMenu(): MenuItemConstructorOptions {
       { label: 'Beat Jump Back', click: () => send('beat-jump-back') },
       { label: 'Beat Jump Forward', click: () => send('beat-jump-forward') },
       { type: 'separator' },
-      // Hot cues are set from the pads or keys 1-8. There is no menu command
-      // for them in the renderer contract, so the item is shown but inert
-      // rather than wired to a command nothing listens for.
+      // Hot cues are set from the pads or keys 1-8. The renderer contract has no
+      // menu command for them, so the item is shown but inert.
       { label: 'Set Hot Cue…', enabled: false }
     ]
   }
