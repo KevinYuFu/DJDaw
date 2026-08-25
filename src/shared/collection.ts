@@ -48,9 +48,8 @@ export function sourceOfId(id: string): TrackSource {
 /**
  * Copy a mirrored record into the local collection.
  *
- * `audioKey` is carried over unchanged, which is what lets the fork reuse the
- * waveform already analysed for the mirrored record rather than re-running
- * analysis on the identical file.
+ * `audioKey` is carried over unchanged, so the fork reuses the waveform already
+ * analysed for the mirrored record.
  */
 export function forkToLocal(mirrored: Track): Track {
   return {
@@ -92,8 +91,8 @@ export function resolveWrite(
   const mirrored = mirror[id]
   if (!mirrored) return null
 
-  // A fork may already exist from an earlier edit; reuse it rather than
-  // resetting the user's work back to the mirrored state.
+  // A fork may already exist from an earlier edit. Reuse it, leaving the user's
+  // work in place.
   const localId = localIdFor(mirrored.audioKey)
   if (local[localId]) return { id: localId, fork: null }
 

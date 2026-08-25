@@ -8,20 +8,15 @@ import { useLibrary } from '@renderer/state/useLibrary'
  * The browser's left column: rekordbox's source tree, and the home of the
  * two-collection split.
  *
- * Collection and rekordbox are both real nodes and both selectable, because
- * choosing one is what switches the table between the local records and the
- * read-only mirror. The rekordbox node also carries the connection state — the
- * XML it mirrors, how old that export is, and the actions that change it —
- * since that is the only place in the UI where the mirror can be reasoned
- * about as a whole.
+ * Collection and rekordbox are both real nodes and both selectable: choosing
+ * one switches the table between the local records and the read-only mirror.
+ * The rekordbox node carries the connection state — the XML it mirrors, how old
+ * that export is, and the actions that change it.
  *
- * Under it hangs rekordbox's own folder structure: All, then the playlist
- * tree. A 2,700 track export shown as one flat list is not a library, so the
- * tree is the only way most of it can be reached.
+ * Under it hangs rekordbox's own folder structure: All, then the playlist tree.
  *
- * History and related tracks are still to come. They are rendered as disabled
- * nodes rather than hidden so the tree keeps its final shape and the gap is
- * visible instead of looking like a feature nobody thought of.
+ * History and related tracks are still to come, rendered as disabled nodes so
+ * the tree keeps its final shape.
  */
 
 interface PendingNodeSpec {
@@ -61,11 +56,10 @@ const PADDING_LEFT = 6
 const PLAYLIST_DEPTH = 2
 
 /**
- * Playlist folders indent more tightly than the fixed tree above them, and
- * stop indenting past a point, because rekordbox folders nest several levels
- * deep and the column is only 190px wide. Past that depth the parent row above
- * still says where a node sits, but a name that has been squeezed to an
- * ellipsis says nothing at all.
+ * Playlist folders indent more tightly than the fixed tree above them, and stop
+ * indenting past a point: rekordbox folders nest several levels deep and the
+ * column is 190px wide. Past that depth the parent row above says where a node
+ * sits.
  */
 const PLAYLIST_INDENT = 10
 const MAX_PLAYLIST_INDENT_DEPTH = 6
@@ -254,9 +248,8 @@ export function TreeSidebar(): ReactElement {
   const [busy, setBusy] = useState(false)
   /**
    * Which playlist folders are open, by `PlaylistNode.path`. Everything starts
-   * closed — opening the app onto hundreds of playlist names would be worse
-   * than the flat list this replaces. Held by path rather than by node so a
-   * re-sync rebuilds the tree without closing what the user opened.
+   * closed. Held by path, so a re-sync rebuilds the tree without closing what the
+   * user opened.
    */
   const [openPaths, setOpenPaths] = useState<ReadonlySet<string>>(() => new Set())
 

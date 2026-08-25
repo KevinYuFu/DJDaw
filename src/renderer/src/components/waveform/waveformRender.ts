@@ -267,7 +267,7 @@ export interface ColumnExtents {
  * The lowest and highest sample under each column, read from the decoded audio.
  *
  * The two edges are tracked separately, so the drawn shape follows the signal
- * instead of forming a symmetrical block.
+ * and does not form a symmetrical block.
  *
  * Clips are walked as {@link buildClipColumns} walks them, so a cut row reads
  * from the right part of the file.

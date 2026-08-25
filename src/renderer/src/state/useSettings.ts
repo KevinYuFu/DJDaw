@@ -43,9 +43,7 @@ export interface SettingsState {
   /**
    * How far a band EQ knob cuts. See {@link EqMode}.
    *
-   * Global, not per deck, because that is how the hardware and rekordbox treat
-   * it: a DJM's isolator switch changes the whole mixer. Per deck would be a
-   * trap where one channel kills and the next one only drops 26 dB.
+   * Global, not per deck: the switch changes the whole mixer.
    */
   eqMode: EqMode
   setMasterVolume(linear: number): void
@@ -69,8 +67,7 @@ export interface SettingsState {
 /**
  * Push the level at the audio graph. A value restored from localStorage at
  * startup has nothing to push to yet, so `useDecks.loadTrack` re-applies it
- * once the engine is initialised; that is what makes the setting survive a
- * restart rather than waiting for the fader to be touched.
+ * once the engine is initialised and the setting survives a restart.
  */
 function applyMasterVolume(linear: number): void {
   try {
@@ -113,8 +110,8 @@ export const useSettings = create<SettingsState>()(
       cycleFocusedDeck(step) {
         const decks = decksInView(get().view)
         const at = decks.indexOf(get().focusedDeck)
-        // An out-of-view focus reads as index -1; stepping from there still
-        // lands somewhere sensible because the modulo is taken on the length.
+        // An out-of-view focus reads as index -1. Stepping from there still lands
+        // somewhere sensible: the modulo is taken on the length.
         const next = (((at + step) % decks.length) + decks.length) % decks.length
         set({ focusedDeck: decks[next] })
       },

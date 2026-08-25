@@ -3,11 +3,8 @@ import type { Clip } from '@shared/clips'
 /**
  * The slide a row does when its pieces change places.
  *
- * Reordering is instant in the store — the audio has to be right on the next
- * buffer — so the movement is drawn rather than modelled: the row remembers
- * where each piece used to be and walks it to where it is now. Without it a
- * piece and its neighbour trade places between two frames and there is nothing
- * to say which one moved.
+ * Reordering is instant in the store, so the movement is drawn: the row
+ * remembers where each piece used to be and walks it to where it is now.
  */
 
 /**

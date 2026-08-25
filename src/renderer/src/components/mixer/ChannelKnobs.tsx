@@ -178,16 +178,16 @@ export interface ChannelKnobsProps {
 }
 
 /**
- * Trim, three-band EQ and filter for one row.
+ * Trim, three-band EQ and filter for one channel.
  *
- * Its own component so that a knob move re-renders five small SVGs instead of
- * the whole row: the waveform beside it is the expensive neighbour, and a drag
- * writes to the store on every pointer move.
+ * Shared by every view with a channel strip. Told what to draw, so a caller can
+ * keep its knobs wherever it likes.
  *
- * Knobs are dragged vertically — up is more — and a double-click puts one back
- * to centre, which is how every mixer plugin behaves. The live value goes in a
- * readout floating above the strip rather than under each knob, because 26px
- * of width cannot hold `-26 dB`.
+ * Its own component, so a knob move re-renders five small SVGs and not the
+ * whole row.
+ *
+ * Knobs drag vertically, up for more; a double-click returns one to centre.
+ * The live value goes in a readout above the strip, which has room for it.
  */
 export function ChannelKnobs({
   label,

@@ -1,14 +1,13 @@
 /**
  * rekordbox XML collection parser.
  *
- * rekordbox 6/7 keeps its live library in an SQLCipher-encrypted `master.db`,
- * but it exports the whole collection — including beat grids and hot cues — as
- * XML, which is the format every other DJ tool interchanges through. That is
- * what this reads.
+ * rekordbox 6/7 keeps its live library in an SQLCipher-encrypted `master.db`
+ * and exports the whole collection — beat grids and hot cues included — as XML,
+ * the format every other DJ tool interchanges through. That is what this reads.
  *
- * Dependency-free and environment-free on purpose: it runs in the Electron main
- * process (so a large collection never crosses IPC as a string) and under plain
- * Node in the tests, with no DOM.
+ * Dependency-free and environment-free: it runs in the Electron main process,
+ * so a large collection never crosses IPC as a string, and under plain Node in
+ * the tests, with no DOM.
  */
 
 export interface RekordboxTempo {
@@ -118,7 +117,7 @@ function parseAttrs(source: string): Record<string, string> {
 /**
  * Walk the document, reporting element opens and closes. rekordbox XML is
  * machine-generated and attribute-only, so there is no text content to collect;
- * comments, the prolog, DOCTYPE and CDATA are skipped rather than reported.
+ * comments, the prolog, DOCTYPE and CDATA are skipped.
  */
 export function scanXml(
   text: string,

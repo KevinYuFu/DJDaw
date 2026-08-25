@@ -6,8 +6,7 @@ import type { RefObject } from 'react'
  *
  * The playhead moves 60 times a second. Anything driven by it — clocks, beat
  * counters, waveforms — reads the position inside a rAF callback and writes
- * straight to the DOM or a canvas, because routing that through `setState`
- * would re-render the app on every frame.
+ * straight to the DOM or a canvas, leaving the app un-rendered.
  */
 
 /**

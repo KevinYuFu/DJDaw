@@ -36,13 +36,8 @@ const INT_MIN = { 16: 32768, 24: 8388608 } as const
  * Fold a sample into [-1, 1].
  *
  * Everything is clamped before it is written, at every depth. A sample above
- * full scale has nowhere to go in an integer word: scaling it and letting it
- * overflow wraps a loud peak round to full-scale negative, which is not a
- * distorted peak but a bang. Float files could carry the overshoot, but an
- * export is a finished track and whatever plays it would clip anyway, so it
- * clips here where the behaviour is predictable.
- *
- * NaN becomes silence rather than whatever the cast happens to produce.
+ * full scale has nowhere to go in an integer word: letting it overflow wraps a
+ * loud peak round to full-scale negative. NaN becomes silence.
  */
 function clampSample(v: number): number {
   if (Number.isNaN(v)) return 0
@@ -52,8 +47,8 @@ function clampSample(v: number): number {
 /**
  * Quantise to a signed integer of `depth` bits.
  *
- * Positive and negative use different scales because two's complement is not
- * symmetric: +1.0 has to land on 32767, not on 32768, which does not fit.
+ * Positive and negative use different scales: two's complement is not
+ * symmetric, so +1.0 lands on 32767.
  */
 function toInt(v: number, depth: 16 | 24): number {
   const s = clampSample(v)

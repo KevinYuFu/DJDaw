@@ -89,8 +89,8 @@ export function cuesFromMarks(rb: RekordboxTrack, grid: BeatGrid | null): Conver
 
   for (const mark of rb.marks) {
     if (mark.num >= 0 && mark.num < MAX_HOT_CUES) {
-      // rekordbox should not emit two marks for one pad, but a hand-edited
-      // file can; the first one wins rather than the last.
+      // rekordbox should not emit two marks for one pad, but a hand-edited file can.
+      // The first one wins.
       if (seenPads.has(mark.num)) continue
       seenPads.add(mark.num)
 
@@ -171,10 +171,8 @@ export function trackFromRekordbox(
  * Merge an incoming track over one already in the collection.
  *
  * Used by every import path, file-by-file or rekordbox XML, so there is one
- * merge policy rather than two that drift apart. Metadata from the import
- * always wins, because that is the library the user curates. Grid and cues only
- * fill in where DJDaw has none, so analysis or hand-editing done here is never
- * destroyed by a re-import.
+ * merge policy. Metadata from the import always wins. Grid and cues fill in
+ * only where DJDaw has none, so analysis and hand-editing survive a re-import.
  */
 export function mergeImported(existing: Track, imported: Track): Track {
   const keepGrid = existing.grid !== null
