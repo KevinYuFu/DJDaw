@@ -29,6 +29,8 @@ export interface ThemeTokens {
   'bg-raised-hover': string
   'bg-pressed': string
   'bg-sunken': string
+  /** The arrangement's lanes and the bar ruler above them. */
+  lane: string
   'bg-waveform': string
   border: string
   'border-soft': string
@@ -92,6 +94,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#3c3f46',
     'bg-pressed': '#13161c',
     'bg-sunken': '#080a0f',
+    lane: '#080a0f',
     'bg-waveform': '#040509',
     border: '#4f535b',
     'border-soft': '#2f3238',
@@ -143,6 +146,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#3b3f48',
     'bg-pressed': '#12161d',
     'bg-sunken': '#070a11',
+    lane: '#070a11',
     'bg-waveform': '#03050a',
     border: '#4d535d',
     'border-soft': '#2e323a',
@@ -194,6 +198,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#443e37',
     'bg-pressed': '#1a150f',
     'bg-sunken': '#0e0905',
+    lane: '#0e0905',
     'bg-waveform': '#070502',
     border: '#585148',
     'border-soft': '#36312a',
@@ -245,6 +250,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#3a4046',
     'bg-pressed': '#11171c',
     'bg-sunken': '#060b10',
+    lane: '#060b10',
     'bg-waveform': '#030509',
     border: '#4c535c',
     'border-soft': '#2c3239',
@@ -296,6 +302,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#dbd7cd',
     'bg-pressed': '#d0ccc2',
     'bg-sunken': '#e2ddd4',
+    lane: '#c2cdc4',
     'bg-waveform': '#19160f',
     border: '#a9a499',
     'border-soft': '#d0ccc2',
@@ -339,57 +346,120 @@ export const THEMES: readonly Theme[] = [
     'clip-text': 'rgba(255, 251, 244, 0.95)'
   }),
 
-  theme('blossom', 'Blossom', 'Near-black violet under a hot candy pink. Loud, on purpose.', {
-    'bg-app': '#120f14',
-    'bg-panel': '#1d1b20',
-    'bg-panel-2': '#27252a',
-    'bg-raised': '#343137',
-    'bg-raised-hover': '#403e44',
-    'bg-pressed': '#17151a',
-    'bg-sunken': '#0b090e',
-    'bg-waveform': '#060408',
-    border: '#545159',
-    'border-soft': '#333036',
-    'border-strong': '#7c7881',
-    text: '#f5f2f8',
-    'text-dim': '#d5d0da',
-    'text-faint': '#b9b4bf',
-    'text-inverse': '#020103',
-    accent: '#ff9bcb',
-    'accent-dim': '#940060',
-    'accent-glow': 'rgba(255, 155, 203, 0.45)',
-    'deck-a': '#ff9bcb',
-    'deck-b': '#fead00',
-    'deck-c': '#01e296',
-    'deck-d': '#adbbff',
-    play: '#08e384',
-    'play-glow': 'rgba(8, 227, 132, 0.45)',
-    cue: '#fead00',
-    'cue-glow': 'rgba(254, 173, 0, 0.45)',
-    danger: '#ffa39b',
-    loop: '#fead00',
-    'wave-low': '#968cff',
-    'wave-mid': '#fe8cc5',
-    'wave-high': '#feeef8',
-    'chrome-hi': '#49464d',
-    'chrome-lo': '#1f1d22',
-    overlay: 'rgba(250, 247, 254, 0.07)',
-    'overlay-strong': 'rgba(250, 247, 254, 0.13)',
-    thumb: '#444147',
-    'thumb-hover': '#5c5960',
+  theme('blossom', 'Blossom', 'A lifted violet room under soft candy pink.', {
+    'bg-app': '#201e2b',
+    'bg-panel': '#2b2937',
+    'bg-panel-2': '#363542',
+    'bg-raised': '#454351',
+    'bg-raised-hover': '#52505f',
+    'bg-pressed': '#252330',
+    'bg-sunken': '#181623',
+    lane: '#292533',
+    'bg-waveform': '#020202',
+    border: '#6b697c',
+    'border-soft': '#474654',
+    'border-strong': '#928fa3',
+    text: '#f3f3f9',
+    'text-dim': '#d9d8e2',
+    'text-faint': '#bdbcc8',
+    'text-inverse': '#020203',
+    accent: '#ff9ce3',
+    'accent-dim': '#aa008d',
+    'accent-glow': 'rgba(255, 156, 227, 0.45)',
+    'deck-a': '#ff9ce3',
+    'deck-b': '#ffb129',
+    'deck-c': '#03e698',
+    'deck-d': '#a5c2ff',
+    play: '#0ce787',
+    'play-glow': 'rgba(12, 231, 135, 0.45)',
+    cue: '#ffb129',
+    'cue-glow': 'rgba(255, 177, 41, 0.45)',
+    danger: '#ffa8a0',
+    loop: '#ffb129',
+    'wave-low': '#9f89fe',
+    'wave-mid': '#fe9fe4',
+    'wave-high': '#feeefa',
+    'chrome-hi': '#585665',
+    'chrome-lo': '#2e2c39',
+    overlay: 'rgba(248, 247, 255, 0.07)',
+    'overlay-strong': 'rgba(248, 247, 255, 0.13)',
+    thumb: '#555362',
+    'thumb-hover': '#716f7f',
     playhead: '#fcfbfe',
-    'grid-beat': 'rgba(241, 235, 250, 0.12)',
-    'grid-bar': 'rgba(241, 235, 250, 0.3)',
-    'grid-phrase': 'rgba(247, 243, 254, 0.5)',
-    'clip-body': 'rgba(255, 155, 203, 0.2)',
-    'clip-body-on': 'rgba(255, 155, 203, 0.32)',
-    'clip-head': 'rgba(255, 155, 203, 0.5)',
-    'clip-head-on': 'rgba(255, 155, 203, 0.78)',
-    'clip-edge': 'rgba(177, 171, 184, 0.45)',
-    'clip-edge-on': 'rgba(255, 155, 203, 0.95)',
-    'clip-text': 'rgba(14, 12, 17, 0.95)'
+    'grid-beat': 'rgba(238, 236, 251, 0.12)',
+    'grid-bar': 'rgba(238, 236, 251, 0.3)',
+    'grid-phrase': 'rgba(245, 244, 254, 0.5)',
+    'clip-body': 'rgba(255, 156, 227, 0.3)',
+    'clip-body-on': 'rgba(255, 156, 227, 0.46)',
+    'clip-head': 'rgba(255, 156, 227, 0.66)',
+    'clip-head-on': 'rgba(255, 156, 227, 0.9)',
+    'clip-edge': 'rgba(174, 172, 186, 0.45)',
+    'clip-edge-on': 'rgba(255, 156, 227, 0.95)',
+    'clip-text': 'rgba(13, 13, 17, 0.95)'
+  }),
+
+  theme('iris', 'Iris', 'Cool blue-grey and violet. Light without the glare of white.', {
+    'bg-app': '#d8e8fa',
+    'bg-panel': '#eaf4ff',
+    'bg-panel-2': '#d8e8fa',
+    'bg-raised': '#cddeef',
+    'bg-raised-hover': '#c3d3e5',
+    'bg-pressed': '#b8c8d9',
+    'bg-sunken': '#d1e2f3',
+    lane: '#c1d2e3',
+    'bg-waveform': '#0d1926',
+    border: '#889aae',
+    'border-soft': '#b4c4d6',
+    'border-strong': '#596b7d',
+    text: '#06080b',
+    'text-dim': '#30363c',
+    'text-faint': '#4b525a',
+    'text-inverse': '#fafcfe',
+    accent: '#7402de',
+    'accent-dim': '#5801ac',
+    'accent-glow': 'rgba(116, 2, 222, 0.45)',
+    'deck-a': '#7402de',
+    'deck-b': '#a9016f',
+    'deck-c': '#026d71',
+    'deck-d': '#005db6',
+    play: '#00723f',
+    'play-glow': 'rgba(0, 114, 63, 0.45)',
+    cue: '#885002',
+    'cue-glow': 'rgba(136, 80, 2, 0.45)',
+    danger: '#b3022d',
+    loop: '#885002',
+    'wave-low': '#78a1ff',
+    'wave-mid': '#ec98ff',
+    'wave-high': '#f6f3ff',
+    'chrome-hi': '#e0effe',
+    'chrome-lo': '#becee0',
+    overlay: 'rgba(15, 23, 31, 0.07)',
+    'overlay-strong': 'rgba(15, 23, 31, 0.13)',
+    thumb: '#a2b1c2',
+    'thumb-hover': '#8393a3',
+    playhead: '#13161a',
+    'grid-beat': 'rgba(26, 34, 43, 0.12)',
+    'grid-bar': 'rgba(26, 34, 43, 0.3)',
+    'grid-phrase': 'rgba(15, 23, 31, 0.5)',
+    'clip-body': 'rgba(116, 2, 222, 0.16)',
+    'clip-body-on': 'rgba(116, 2, 222, 0.26)',
+    'clip-head': 'rgba(116, 2, 222, 0.5)',
+    'clip-head-on': 'rgba(116, 2, 222, 0.78)',
+    'clip-edge': 'rgba(77, 86, 96, 0.45)',
+    'clip-edge-on': 'rgba(116, 2, 222, 0.95)',
+    'clip-text': 'rgba(250, 252, 254, 0.95)'
   })
 ]
+
+/*
+ * Adding a theme
+ * --------------
+ * Append one `theme(...)` entry above with the full {@link ThemeTokens} set.
+ * `test/palette.test.mjs` holds every entry to the same measures — APCA
+ * contrast for each text pairing, OKLCH steps between surfaces, and enough
+ * distance between an accent and the ground it sits on — and names whichever
+ * one falls short. The picker and the grid pick a new entry up on their own.
+ */
 
 export const DEFAULT_THEME_ID = THEMES[0].id
 
@@ -467,4 +537,10 @@ export function canvasChrome(id: string): CanvasChrome {
     clipEdgeOn: t['clip-edge-on'],
     clipText: t['clip-text']
   }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept((next) => {
+    next?.applyTheme(document.documentElement.dataset.theme ?? DEFAULT_THEME_ID)
+  })
 }
