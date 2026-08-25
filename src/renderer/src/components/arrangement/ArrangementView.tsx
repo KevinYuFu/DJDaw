@@ -198,6 +198,7 @@ export function ArrangementView(): ReactElement {
             width={width}
             height={LANE_H}
             barSec={barSec}
+            beatsPerBar={BEATS_PER_BAR}
             selected={selected}
             onSelect={(next) => useArrangement.getState().select(next)}
           />

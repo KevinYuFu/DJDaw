@@ -23,8 +23,10 @@ export interface ArrangementLaneProps {
   secPerPx: number
   width: number
   height: number
-  /** Arrangement seconds in one bar, for snapping. */
+  /** Arrangement seconds in one bar, for snapping and for the grid. */
   barSec: number
+  /** Beats in a bar. */
+  beatsPerBar: number
   selected: ClipSelection | null
   onSelect(selection: ClipSelection | null): void
 }
@@ -54,6 +56,7 @@ export function ArrangementLane({
   width,
   height,
   barSec,
+  beatsPerBar,
   selected,
   onSelect
 }: ArrangementLaneProps): ReactElement {
@@ -242,6 +245,8 @@ export function ArrangementLane({
           height={height}
           selectedClipId={laneSelected}
           ghost={ghost}
+          barSec={barSec}
+          beatsPerBar={beatsPerBar}
         />
         {lane.clips.length === 0 && !ghost ? (
           <span className="arr-lane__empty">Drag a track here</span>
