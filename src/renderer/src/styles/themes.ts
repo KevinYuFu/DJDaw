@@ -62,6 +62,21 @@ export interface ThemeTokens {
   /** Scrollbar thumb. */
   thumb: string
   'thumb-hover': string
+  /** The line that follows playback, drawn on canvas. */
+  playhead: string
+  /** Grid lines on an arrangement lane, faintest first. */
+  'grid-beat': string
+  'grid-bar': string
+  'grid-phrase': string
+  /** A clip's body and its title strip, at rest and picked. */
+  'clip-body': string
+  'clip-body-on': string
+  'clip-head': string
+  'clip-head-on': string
+  'clip-edge': string
+  'clip-edge-on': string
+  /** Text on a clip's title strip. */
+  'clip-text': string
 }
 
 function theme(id: string, name: string, note: string, tokens: ThemeTokens): Theme {
@@ -106,7 +121,18 @@ export const THEMES: readonly Theme[] = [
     overlay: 'rgba(255, 255, 255, 0.055)',
     'overlay-strong': 'rgba(255, 255, 255, 0.1)',
     thumb: '#3a3f49',
-    'thumb-hover': '#4d5460'
+    'thumb-hover': '#4d5460',
+    playhead: '#ffffff',
+    'grid-beat': 'rgba(214, 228, 250, 0.10)',
+    'grid-bar': 'rgba(214, 228, 250, 0.26)',
+    'grid-phrase': 'rgba(220, 233, 255, 0.42)',
+    'clip-body': 'rgba(58, 74, 100, 0.22)',
+    'clip-body-on': 'rgba(90, 122, 168, 0.30)',
+    'clip-head': 'rgba(90, 110, 145, 0.40)',
+    'clip-head-on': 'rgba(120, 156, 210, 0.55)',
+    'clip-edge': 'rgba(150, 170, 200, 0.45)',
+    'clip-edge-on': 'rgba(160, 195, 255, 0.95)',
+    'clip-text': 'rgba(255, 255, 255, 0.86)'
   }),
 
   theme('midnight', 'Midnight', 'Deep indigo with a violet accent. Soft on the eyes.', {
@@ -146,7 +172,18 @@ export const THEMES: readonly Theme[] = [
     overlay: 'rgba(190, 200, 255, 0.07)',
     'overlay-strong': 'rgba(190, 200, 255, 0.13)',
     thumb: '#333b60',
-    'thumb-hover': '#454f7c'
+    'thumb-hover': '#454f7c',
+    playhead: '#ffffff',
+    'grid-beat': 'rgba(198, 205, 255, 0.11)',
+    'grid-bar': 'rgba(198, 205, 255, 0.28)',
+    'grid-phrase': 'rgba(210, 216, 255, 0.46)',
+    'clip-body': 'rgba(70, 82, 140, 0.26)',
+    'clip-body-on': 'rgba(108, 116, 210, 0.34)',
+    'clip-head': 'rgba(104, 114, 178, 0.44)',
+    'clip-head-on': 'rgba(146, 148, 240, 0.58)',
+    'clip-edge': 'rgba(160, 170, 220, 0.45)',
+    'clip-edge-on': 'rgba(180, 176, 255, 0.95)',
+    'clip-text': 'rgba(255, 255, 255, 0.88)'
   }),
 
   theme('amber', 'Amber', 'Warm and low-glare, the way a valve amp looks.', {
@@ -186,7 +223,18 @@ export const THEMES: readonly Theme[] = [
     overlay: 'rgba(255, 236, 200, 0.06)',
     'overlay-strong': 'rgba(255, 236, 200, 0.11)',
     thumb: '#453e31',
-    'thumb-hover': '#5b5243'
+    'thumb-hover': '#5b5243',
+    playhead: '#fff8ec',
+    'grid-beat': 'rgba(255, 236, 205, 0.10)',
+    'grid-bar': 'rgba(255, 236, 205, 0.26)',
+    'grid-phrase': 'rgba(255, 240, 214, 0.44)',
+    'clip-body': 'rgba(110, 88, 56, 0.26)',
+    'clip-body-on': 'rgba(160, 124, 66, 0.32)',
+    'clip-head': 'rgba(140, 116, 74, 0.44)',
+    'clip-head-on': 'rgba(198, 154, 78, 0.58)',
+    'clip-edge': 'rgba(198, 180, 146, 0.45)',
+    'clip-edge-on': 'rgba(245, 200, 130, 0.95)',
+    'clip-text': 'rgba(255, 248, 236, 0.9)'
   }),
 
   theme('slate', 'Slate', 'Lighter blue-grey and teal, for a long session.', {
@@ -226,7 +274,120 @@ export const THEMES: readonly Theme[] = [
     overlay: 'rgba(255, 255, 255, 0.06)',
     'overlay-strong': 'rgba(255, 255, 255, 0.11)',
     thumb: '#49515d',
-    'thumb-hover': '#5d6673'
+    'thumb-hover': '#5d6673',
+    playhead: '#ffffff',
+    'grid-beat': 'rgba(220, 232, 245, 0.11)',
+    'grid-bar': 'rgba(220, 232, 245, 0.28)',
+    'grid-phrase': 'rgba(228, 238, 250, 0.44)',
+    'clip-body': 'rgba(78, 100, 124, 0.28)',
+    'clip-body-on': 'rgba(60, 150, 142, 0.32)',
+    'clip-head': 'rgba(108, 130, 152, 0.44)',
+    'clip-head-on': 'rgba(70, 178, 166, 0.56)',
+    'clip-edge': 'rgba(160, 178, 196, 0.45)',
+    'clip-edge-on': 'rgba(110, 216, 202, 0.95)',
+    'clip-text': 'rgba(255, 255, 255, 0.88)'
+  }),
+
+  theme('paper', 'Paper', 'Warm off-white and a deep sea-blue. Light, never glaring.', {
+    'bg-app': '#e9e5dc',
+    'bg-panel': '#f3f0e9',
+    'bg-panel-2': '#eae6dd',
+    'bg-raised': '#dedacf',
+    'bg-raised-hover': '#d2cdc0',
+    'bg-pressed': '#c9c3b4',
+    'bg-sunken': '#dcd7cb',
+    'bg-waveform': '#20242c',
+    border: '#a8a294',
+    'border-soft': '#c8c2b4',
+    'border-strong': '#7d7768',
+    text: '#232019',
+    'text-dim': '#4e4a40',
+    'text-faint': '#66614f',
+    'text-inverse': '#f7f5f0',
+    accent: '#15607f',
+    'accent-dim': '#0e4358',
+    'accent-glow': 'rgba(21, 96, 127, 0.28)',
+    'deck-a': '#15607f',
+    'deck-b': '#9a5510',
+    'deck-c': '#1f7346',
+    'deck-d': '#a5322f',
+    play: '#1f7346',
+    'play-glow': 'rgba(31, 115, 70, 0.3)',
+    cue: '#9a5510',
+    'cue-glow': 'rgba(154, 85, 16, 0.3)',
+    danger: '#a5322f',
+    loop: '#9a5510',
+    'wave-low': '#4a9eff',
+    'wave-mid': '#ffab3d',
+    'wave-high': '#f4f8ff',
+    'chrome-hi': '#f0ece3',
+    'chrome-lo': '#cbc5b7',
+    overlay: 'rgba(35, 32, 25, 0.06)',
+    'overlay-strong': 'rgba(35, 32, 25, 0.12)',
+    thumb: '#bab4a5',
+    'thumb-hover': '#9e9788',
+    playhead: '#1a1712',
+    'grid-beat': 'rgba(40, 36, 28, 0.10)',
+    'grid-bar': 'rgba(40, 36, 28, 0.24)',
+    'grid-phrase': 'rgba(30, 27, 20, 0.42)',
+    'clip-body': 'rgba(21, 96, 127, 0.13)',
+    'clip-body-on': 'rgba(21, 96, 127, 0.22)',
+    'clip-head': 'rgba(21, 96, 127, 0.38)',
+    'clip-head-on': 'rgba(21, 96, 127, 0.62)',
+    'clip-edge': 'rgba(70, 84, 96, 0.45)',
+    'clip-edge-on': 'rgba(14, 67, 88, 0.95)',
+    'clip-text': 'rgba(255, 255, 255, 0.95)'
+  }),
+
+  theme('blossom', 'Blossom', 'Soft pink with a plum accent. Light and warm.', {
+    'bg-app': '#f6e6ec',
+    'bg-panel': '#fdf1f5',
+    'bg-panel-2': '#f7e8ef',
+    'bg-raised': '#efd9e2',
+    'bg-raised-hover': '#e7ccd8',
+    'bg-pressed': '#dcbcca',
+    'bg-sunken': '#eedbe4',
+    'bg-waveform': '#2a1f27',
+    border: '#c9a3b3',
+    'border-soft': '#e0c2ce',
+    'border-strong': '#96697c',
+    text: '#2c1a24',
+    'text-dim': '#5a3c49',
+    'text-faint': '#75525f',
+    'text-inverse': '#fdf4f7',
+    accent: '#a52f6e',
+    'accent-dim': '#75204e',
+    'accent-glow': 'rgba(165, 47, 110, 0.3)',
+    'deck-a': '#a52f6e',
+    'deck-b': '#0f6d84',
+    'deck-c': '#2c7a45',
+    'deck-d': '#b03636',
+    play: '#2c7a45',
+    'play-glow': 'rgba(44, 122, 69, 0.3)',
+    cue: '#a4560f',
+    'cue-glow': 'rgba(164, 86, 15, 0.3)',
+    danger: '#b03636',
+    loop: '#a4560f',
+    'wave-low': '#ff7ab8',
+    'wave-mid': '#ffc46b',
+    'wave-high': '#fff2f7',
+    'chrome-hi': '#fbeaf0',
+    'chrome-lo': '#dfc0ce',
+    overlay: 'rgba(60, 26, 42, 0.06)',
+    'overlay-strong': 'rgba(60, 26, 42, 0.12)',
+    thumb: '#d6adbe',
+    'thumb-hover': '#b98ba0',
+    playhead: '#2c1a24',
+    'grid-beat': 'rgba(60, 26, 42, 0.10)',
+    'grid-bar': 'rgba(60, 26, 42, 0.24)',
+    'grid-phrase': 'rgba(52, 20, 36, 0.42)',
+    'clip-body': 'rgba(165, 47, 110, 0.13)',
+    'clip-body-on': 'rgba(165, 47, 110, 0.22)',
+    'clip-head': 'rgba(165, 47, 110, 0.4)',
+    'clip-head-on': 'rgba(165, 47, 110, 0.66)',
+    'clip-edge': 'rgba(140, 96, 116, 0.45)',
+    'clip-edge-on': 'rgba(117, 32, 78, 0.95)',
+    'clip-text': 'rgba(255, 255, 255, 0.95)'
   })
 ]
 
@@ -273,5 +434,37 @@ export function bandColorsDim(id: string): BandColors {
     low: darken(bands.low, 0.55),
     mid: darken(bands.mid, 0.5),
     high: darken(bands.high, 0.45)
+  }
+}
+
+export interface CanvasChrome {
+  playhead: string
+  gridBeat: string
+  gridBar: string
+  gridPhrase: string
+  clipBody: string
+  clipBodyOn: string
+  clipHead: string
+  clipHeadOn: string
+  clipEdge: string
+  clipEdgeOn: string
+  clipText: string
+}
+
+/** The colours a canvas draws chrome with, which cannot read a CSS variable. */
+export function canvasChrome(id: string): CanvasChrome {
+  const t = themeById(id).tokens
+  return {
+    playhead: t.playhead,
+    gridBeat: t['grid-beat'],
+    gridBar: t['grid-bar'],
+    gridPhrase: t['grid-phrase'],
+    clipBody: t['clip-body'],
+    clipBodyOn: t['clip-body-on'],
+    clipHead: t['clip-head'],
+    clipHeadOn: t['clip-head-on'],
+    clipEdge: t['clip-edge'],
+    clipEdgeOn: t['clip-edge-on'],
+    clipText: t['clip-text']
   }
 }

@@ -216,8 +216,20 @@ const WAVEFORM_COLOR_OPTIONS: ReadonlyArray<{
   { value: 'mono', label: 'Mono', note: 'One envelope in the deck colour.' }
 ]
 
-/** The tokens a theme card shows, in the order they are drawn. */
-const SWATCH_TOKENS = ['accent', 'deck-a', 'deck-b', 'play', 'cue', 'danger'] as const
+/**
+ * The colours a card shows, widest first.
+ *
+ * The accent leads because it is the colour the app leans on; the four deck
+ * colours follow, since those are what a lane, a badge and a fader are painted
+ * with. Every one is a colour the theme actually uses.
+ */
+const CARD_SWATCHES = [
+  { token: 'accent', label: 'Accent' },
+  { token: 'deck-a', label: 'Deck A' },
+  { token: 'deck-b', label: 'Deck B' },
+  { token: 'deck-c', label: 'Deck C' },
+  { token: 'deck-d', label: 'Deck D' }
+] as const
 
 /**
  * One theme, shown in its own colours.
@@ -239,22 +251,23 @@ function ThemeCard({
     <button
       type="button"
       className={`theme-card${picked ? ' is-on' : ''}`}
-      style={{ background: t['bg-panel'], borderColor: picked ? t.accent : t['border-soft'] }}
+      style={{
+        background: t['bg-panel'],
+        borderColor: picked ? t.accent : t['border-soft'],
+        boxShadow: picked ? `0 0 0 1px ${t.accent} inset` : undefined
+      }}
       aria-pressed={picked}
       onClick={onPick}
     >
-      <span className="theme-card__preview" style={{ background: t['bg-app'] }}>
-        <span className="theme-card__bar" style={{ background: t['bg-panel-2'] }}>
-          <span className="theme-card__pip" style={{ background: t.accent }} />
-          <span className="theme-card__rule" style={{ background: t['text-faint'] }} />
-        </span>
-        <span className="theme-card__wave" style={{ background: t['bg-waveform'] }}>
-          <span style={{ background: t['wave-low'] }} />
-          <span style={{ background: t['wave-mid'] }} />
-          <span style={{ background: t['wave-high'] }} />
-          <span style={{ background: t['wave-low'] }} />
-          <span style={{ background: t['wave-mid'] }} />
-        </span>
+      <span className="theme-card__swatches">
+        {CARD_SWATCHES.map((swatch, i) => (
+          <span
+            key={swatch.token}
+            className={`theme-card__swatch${i === 0 ? ' is-lead' : ''}`}
+            style={{ background: t[swatch.token] }}
+            title={`${swatch.label} — ${t[swatch.token]}`}
+          />
+        ))}
       </span>
 
       <span className="theme-card__body">
@@ -263,16 +276,6 @@ function ThemeCard({
         </span>
         <span className="theme-card__note" style={{ color: t['text-dim'] }}>
           {theme.note}
-        </span>
-        <span className="theme-card__swatches">
-          {SWATCH_TOKENS.map((token) => (
-            <span
-              key={token}
-              className="theme-card__swatch"
-              style={{ background: t[token], borderColor: t['bg-panel'] }}
-              title={token}
-            />
-          ))}
         </span>
       </span>
     </button>

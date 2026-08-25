@@ -53,6 +53,12 @@
   --thumb: #3a3f49;
   --thumb-hover: #4d5460;
 
+  /* Chrome drawn on canvas, and the arrangement playhead */
+  --playhead: #ffffff;
+  --grid-beat: rgba(214, 228, 250, 0.1);
+  --grid-bar: rgba(214, 228, 250, 0.26);
+  --grid-phrase: rgba(220, 233, 255, 0.42);
+
   /* Metrics */
   --row-h: 22px;
   --radius: 3px;
