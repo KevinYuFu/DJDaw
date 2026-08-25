@@ -35,7 +35,7 @@ export const PLAYHEAD_COLOR = '#ffffff'
  */
 export const LOCATOR_COLOR = '#dfe6f2'
 
-/** Waveform band colours, as `BAND_COLORS` / `BAND_COLORS_DIM` supply them. */
+/** Waveform band colours, as `styles/themes.ts` supplies them. */
 export interface BandColors {
   low: string
   mid: string

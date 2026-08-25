@@ -1,6 +1,6 @@
 /*
- * rekordbox-flavoured dark theme. Every colour and metric in the app comes
- * from here, so re-skinning is a one-file job.
+ * Metrics, base element styles, and the token values the app paints with
+ * before a theme is applied. `styles/themes.ts` overwrites the colours.
  */
 :root {
   /* Surfaces, darkest to lightest */
@@ -9,6 +9,7 @@
   --bg-panel-2: #202024;
   --bg-raised: #2a2a30;
   --bg-raised-hover: #34343b;
+  --bg-pressed: #1a1d22;
   --bg-sunken: #121215;
   --bg-waveform: #08080a;
 
@@ -29,6 +30,8 @@
 
   --deck-a: #00a0e9;
   --deck-b: #f5a11c;
+  --deck-c: #3ed48a;
+  --deck-d: #f5636f;
 
   --play: #37c95a;
   --play-glow: rgba(55, 201, 90, 0.45);
@@ -42,6 +45,20 @@
   --wave-mid: #ef8c1c;
   --wave-high: #e8f2ff;
 
+  /* Moulded chrome, and the washes laid over a surface */
+  --chrome-hi: #454b57;
+  --chrome-lo: #20242a;
+  --overlay: var(--overlay);
+  --overlay-strong: var(--overlay-strong);
+  --thumb: #3a3f49;
+  --thumb-hover: #4d5460;
+
+  /* Chrome drawn on canvas, and the arrangement playhead */
+  --playhead: #ffffff;
+  --grid-beat: rgba(214, 228, 250, 0.1);
+  --grid-bar: rgba(214, 228, 250, 0.26);
+  --grid-phrase: rgba(220, 233, 255, 0.42);
+
   /* Metrics */
   --row-h: 22px;
   --radius: 3px;
@@ -50,7 +67,7 @@
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 
-  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 0 1px 0 var(--overlay) inset, 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -92,7 +109,7 @@ button:hover:not(:disabled) {
   border-color: var(--border-strong);
 }
 button:active:not(:disabled) {
-  background: #1c1c21;
+  background: var(--bg-pressed);
 }
 button:disabled {
   opacity: 0.4;
@@ -126,12 +143,12 @@ input:focus {
   background: var(--bg-sunken);
 }
 ::-webkit-scrollbar-thumb {
-  background: #3a3a42;
+  background: var(--thumb);
   border-radius: 5px;
   border: 2px solid var(--bg-sunken);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #4c4c56;
+  background: var(--thumb-hover);
 }
 
 /* Small caps label used all over the rekordbox chrome */

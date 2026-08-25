@@ -76,7 +76,7 @@
   background-image: repeating-linear-gradient(
     45deg,
     transparent 0 5px,
-    rgba(255, 255, 255, 0.035) 5px 10px
+    var(--overlay) 5px 10px
   );
 }
 
@@ -194,8 +194,8 @@
   border: 3px solid transparent;
   /* Disc and metal rim in one element: the radial gradient fills the content
      box, the conic one shows through the transparent border. */
-  background-image: radial-gradient(circle at 50% 32%, #25252c 0%, #131317 60%, #0b0b0e 100%),
-    conic-gradient(#5c5c68, #26262d, #4e4e59, #1d1d23, #5c5c68);
+  background-image: radial-gradient(circle at 50% 32%, var(--chrome-hi) 0%, var(--chrome-lo) 60%, var(--bg-app) 100%),
+    conic-gradient(var(--border-strong), var(--chrome-lo), var(--chrome-hi), var(--bg-sunken), var(--border-strong));
   background-origin: border-box;
   background-clip: content-box, border-box;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6), inset 0 0 26px rgba(0, 0, 0, 0.75);
@@ -233,7 +233,7 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, #25252c, #16161a);
+  background: linear-gradient(180deg, var(--chrome-hi), var(--chrome-lo));
   border: 1px solid var(--border);
   color: var(--text-faint);
   font-size: 13px;
@@ -261,7 +261,7 @@
   height: 42px;
   padding: 0 8px;
   border-radius: 21px;
-  background: linear-gradient(180deg, var(--bg-raised), #1c1c21);
+  background: linear-gradient(180deg, var(--bg-raised), var(--bg-pressed));
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -379,7 +379,7 @@
   transform: translateY(-50%);
   border: 1px solid var(--border-strong);
   border-radius: 2px;
-  background: linear-gradient(180deg, #40404a, #1e1e24);
+  background: linear-gradient(180deg, var(--chrome-hi), var(--chrome-lo));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
   cursor: grab;
 }

@@ -1,11 +1,11 @@
-import { useEffect, useRef, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, type ReactElement } from 'react'
 import type { ClipTrack } from '@waveform-playlist/core'
 import type { HotCue } from '@shared/types'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import { useArrangement } from '@renderer/state/useArrangement'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
-import { BAND_COLORS } from '@renderer/core/constants'
+import { bandColors, canvasChrome, type CanvasChrome } from '@renderer/styles/themes'
 import {
   buildColumns,
   drawWaveform,
@@ -52,10 +52,6 @@ export interface ArrangementClipsProps {
  * findable. Phrase lines fall every {@link BARS_PER_PHRASE} bars and match the
  * numbered divisions on the ruler.
  */
-const PHRASE_LINE = 'rgba(220, 233, 255, 0.42)'
-const BAR_LINE = 'rgba(214, 228, 250, 0.26)'
-const BEAT_LINE = 'rgba(214, 228, 250, 0.10)'
-
 /** Bars in a phrase. */
 const BARS_PER_PHRASE = 4
 
@@ -64,6 +60,7 @@ const MIN_BAR_PX = 6
 const MIN_BEAT_PX = 9
 
 export interface GridStyle {
+  chrome: CanvasChrome
   width: number
   height: number
   fromSec: number
@@ -102,13 +99,13 @@ function drawGrid(ctx: CanvasRenderingContext2D, g: GridStyle): void {
   if (beatPx >= MIN_BEAT_PX) {
     for (let bar = firstBar; bar <= lastBar; bar++) {
       for (let beat = 1; beat < g.beatsPerBar; beat++) {
-        line(bar * g.barSec + beat * (g.barSec / g.beatsPerBar), BEAT_LINE)
+        line(bar * g.barSec + beat * (g.barSec / g.beatsPerBar), g.chrome.gridBeat)
       }
     }
   }
   for (let bar = firstBar; bar <= lastBar; bar++) {
     if (bar % everyBars !== 0) continue
-    line(bar * g.barSec, bar % BARS_PER_PHRASE === 0 ? PHRASE_LINE : BAR_LINE)
+    line(bar * g.barSec, bar % BARS_PER_PHRASE === 0 ? g.chrome.gridPhrase : g.chrome.gridBar)
   }
   ctx.restore()
 }
@@ -164,6 +161,11 @@ export function ArrangementClips({
   const waveforms = useArrangement((s) => s.waveforms)
   const tracks = useLibrary((s) => s.tracks)
   const colorMode = useSettings((s) => s.waveformColorMode)
+  // The id is the selector, not the colours: a fresh object every render would
+  // never compare equal and the store would re-render forever.
+  const themeId = useSettings((s) => s.themeId)
+  const bands = useMemo(() => bandColors(themeId), [themeId])
+  const chrome = useMemo(() => canvasChrome(themeId), [themeId])
   const sampleRate = useArrangement((s) => s.sampleRate)
 
   useEffect(() => {
@@ -196,9 +198,9 @@ export function ArrangementClips({
       ctx.rect(x, 0, px, h)
       ctx.clip()
 
-      ctx.fillStyle = selected ? 'rgba(90, 122, 168, 0.30)' : 'rgba(58, 74, 100, 0.22)'
+      ctx.fillStyle = selected ? chrome.clipBodyOn : chrome.clipBody
       ctx.fillRect(x, 0, px, h)
-      ctx.fillStyle = selected ? 'rgba(120, 156, 210, 0.55)' : 'rgba(90, 110, 145, 0.40)'
+      ctx.fillStyle = selected ? chrome.clipHeadOn : chrome.clipHead
       ctx.fillRect(x, 0, px, CLIP_HEADER_H)
 
       if (wave) {
@@ -220,9 +222,9 @@ export function ArrangementClips({
           height: h - CLIP_HEADER_H,
           y: CLIP_HEADER_H,
           x: x + visibleFrom,
-          colors: BAND_COLORS,
+          colors: bands,
           rgb: colorMode === 'rgb',
-          mono: colorMode === 'mono' ? '#cfd8e6' : undefined,
+          mono: colorMode === 'mono' ? bands.high : undefined,
           dim: selected ? 1 : 0.86
         })
       }
@@ -236,18 +238,18 @@ export function ArrangementClips({
         }
       }
 
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.86)'
+      ctx.fillStyle = chrome.clipText
       ctx.font = '10px -apple-system, system-ui, sans-serif'
       ctx.textBaseline = 'middle'
       ctx.fillText(clip.name ?? track?.title ?? 'Clip', x + 5, CLIP_HEADER_H / 2 + 0.5)
 
       if (preview) {
         // Dashed: a place, not a clip that is there.
-        ctx.strokeStyle = 'rgba(190, 215, 255, 0.95)'
+        ctx.strokeStyle = chrome.clipEdgeOn
         ctx.lineWidth = 2
         ctx.setLineDash([5, 3])
       } else {
-        ctx.strokeStyle = selected ? 'rgba(160, 195, 255, 0.95)' : 'rgba(150, 170, 200, 0.45)'
+        ctx.strokeStyle = selected ? chrome.clipEdgeOn : chrome.clipEdge
         ctx.lineWidth = selected ? 2 : 1
       }
       ctx.strokeRect(x + 0.5, 0.5, px - 1, h - 1)
@@ -273,7 +275,7 @@ export function ArrangementClips({
         true
       )
     }
-    drawGrid(ctx, { width: w, height: h, fromSec, secPerPx, barSec, beatsPerBar })
+    drawGrid(ctx, { chrome, width: w, height: h, fromSec, secPerPx, barSec, beatsPerBar })
 
     // Drop the columns of clips that are gone or off screen.
     for (const id of columnsRef.current.keys()) {
@@ -294,7 +296,9 @@ export function ArrangementClips({
     masterBpm,
     waveforms,
     tracks,
-    colorMode
+    colorMode,
+    bands,
+    chrome
   ])
 
   return <canvas className="arr-lane__canvas" ref={canvasRef} />

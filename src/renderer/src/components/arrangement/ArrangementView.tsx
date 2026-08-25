@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactElement,
@@ -8,6 +9,8 @@ import {
 } from 'react'
 import { clamp } from '@renderer/core/format'
 import { useRaf } from '@renderer/hooks/useRaf'
+import { useSettings } from '@renderer/state/useSettings'
+import { canvasChrome, themeById } from '@renderer/styles/themes'
 import { useArrangement } from '@renderer/state/useArrangement'
 import { ArrangementLane } from '@renderer/components/arrangement/ArrangementLane'
 import './arrangement.css'
@@ -39,6 +42,11 @@ export function ArrangementView(): ReactElement {
   const playing = useArrangement((s) => s.playing)
   const loading = useArrangement((s) => s.loading)
   const notice = useArrangement((s) => s.notice)
+  const themeId = useSettings((s) => s.themeId)
+  const chrome = useMemo(() => canvasChrome(themeId), [themeId])
+  // The ruler's numbers read as body text, so they come from the token the rest
+  // of the chrome uses rather than from a second colour.
+  const rulerText = useMemo(() => themeById(themeId).tokens['text-dim'], [themeId])
   const selected = useArrangement((s) => s.selection)
   const [width, setWidth] = useState(900)
   const [barsInView, setBarsInView] = useState(DEFAULT_BARS_IN_VIEW)
@@ -107,17 +115,17 @@ export function ArrangementView(): ReactElement {
     for (let bar = 0; bar <= barsInView; bar++) {
       const x = Math.round(((bar + Math.round(fromBar)) * barSec - fromSec) / secPerPx) + 0.5
       const major = (bar + Math.round(fromBar)) % 4 === 0
-      ctx.strokeStyle = major ? 'rgba(200, 214, 236, 0.5)' : 'rgba(150, 170, 200, 0.22)'
+      ctx.strokeStyle = major ? chrome.gridPhrase : chrome.gridBar
       ctx.beginPath()
       ctx.moveTo(x, major ? 2 : 10)
       ctx.lineTo(x, h)
       ctx.stroke()
       if (major) {
-        ctx.fillStyle = 'rgba(210, 222, 240, 0.75)'
+        ctx.fillStyle = rulerText
         ctx.fillText(String(bar + Math.round(fromBar) + 1), x + 3, 2)
       }
     }
-  }, [width, barSec, secPerPx, fromSec, fromBar, barsInView])
+  }, [width, barSec, secPerPx, fromSec, fromBar, barsInView, chrome, rulerText])
 
   // Moved directly, outside the store: it changes every frame.
   useRaf(() => {

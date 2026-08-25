@@ -169,7 +169,7 @@
   background-image: repeating-linear-gradient(
     45deg,
     transparent 0 5px,
-    rgba(255, 255, 255, 0.035) 5px 10px
+    var(--overlay) 5px 10px
   );
 }
 
@@ -739,11 +739,11 @@
   position: absolute;
   inset: 0;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--deck-color, var(--accent)) 30%, #0a0a0e);
+  background: color-mix(in srgb, var(--deck-color, var(--accent)) 30%, var(--bg-waveform));
   box-shadow: inset 0 0 0 1px var(--border);
 }
 .edit-fader:not(.is-disabled) .edit-fader__track:hover .edit-fader__slot {
-  background: color-mix(in srgb, var(--deck-color, var(--accent)) 40%, #0a0a0e);
+  background: color-mix(in srgb, var(--deck-color, var(--accent)) 40%, var(--bg-waveform));
 }
 
 /* The level is the top of the fill. No cap: a bar that fills is what a screen
