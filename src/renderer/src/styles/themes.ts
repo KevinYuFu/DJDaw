@@ -388,8 +388,69 @@ export const THEMES: readonly Theme[] = [
     'clip-edge': 'rgba(174, 172, 186, 0.45)',
     'clip-edge-on': 'rgba(255, 156, 227, 0.95)',
     'clip-text': 'rgba(13, 13, 17, 0.95)'
+  }),
+
+  theme('iris', 'Iris', 'Cool blue-grey and violet. Light without the glare of white.', {
+    'bg-app': '#d8e8fa',
+    'bg-panel': '#eaf4ff',
+    'bg-panel-2': '#d8e8fa',
+    'bg-raised': '#cddeef',
+    'bg-raised-hover': '#c3d3e5',
+    'bg-pressed': '#b8c8d9',
+    'bg-sunken': '#d1e2f3',
+    'bg-waveform': '#0d1926',
+    border: '#889aae',
+    'border-soft': '#b4c4d6',
+    'border-strong': '#596b7d',
+    text: '#06080b',
+    'text-dim': '#30363c',
+    'text-faint': '#4b525a',
+    'text-inverse': '#fafcfe',
+    accent: '#7402de',
+    'accent-dim': '#5801ac',
+    'accent-glow': 'rgba(116, 2, 222, 0.45)',
+    'deck-a': '#7402de',
+    'deck-b': '#a9016f',
+    'deck-c': '#026d71',
+    'deck-d': '#005db6',
+    play: '#00723f',
+    'play-glow': 'rgba(0, 114, 63, 0.45)',
+    cue: '#885002',
+    'cue-glow': 'rgba(136, 80, 2, 0.45)',
+    danger: '#b3022d',
+    loop: '#885002',
+    'wave-low': '#78a1ff',
+    'wave-mid': '#ec98ff',
+    'wave-high': '#f6f3ff',
+    'chrome-hi': '#e0effe',
+    'chrome-lo': '#becee0',
+    overlay: 'rgba(15, 23, 31, 0.07)',
+    'overlay-strong': 'rgba(15, 23, 31, 0.13)',
+    thumb: '#a2b1c2',
+    'thumb-hover': '#8393a3',
+    playhead: '#13161a',
+    'grid-beat': 'rgba(26, 34, 43, 0.12)',
+    'grid-bar': 'rgba(26, 34, 43, 0.3)',
+    'grid-phrase': 'rgba(15, 23, 31, 0.5)',
+    'clip-body': 'rgba(116, 2, 222, 0.16)',
+    'clip-body-on': 'rgba(116, 2, 222, 0.26)',
+    'clip-head': 'rgba(116, 2, 222, 0.5)',
+    'clip-head-on': 'rgba(116, 2, 222, 0.78)',
+    'clip-edge': 'rgba(77, 86, 96, 0.45)',
+    'clip-edge-on': 'rgba(116, 2, 222, 0.95)',
+    'clip-text': 'rgba(250, 252, 254, 0.95)'
   })
 ]
+
+/*
+ * Adding a theme
+ * --------------
+ * Append one `theme(...)` entry above with the full {@link ThemeTokens} set.
+ * `test/palette.test.mjs` holds every entry to the same measures — APCA
+ * contrast for each text pairing, OKLCH steps between surfaces, and enough
+ * distance between an accent and the ground it sits on — and names whichever
+ * one falls short. The picker and the grid pick a new entry up on their own.
+ */
 
 export const DEFAULT_THEME_ID = THEMES[0].id
 
