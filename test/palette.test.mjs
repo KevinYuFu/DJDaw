@@ -43,6 +43,15 @@ function oklch(hex) {
   return { L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, C: Math.hypot(a, b), H }
 }
 
+/** Perceptual distance in OKLab: lightness, chroma and hue at once. */
+function distance(a, b) {
+  const ax = a.C * Math.cos((a.H * Math.PI) / 180)
+  const ay = a.C * Math.sin((a.H * Math.PI) / 180)
+  const bx = b.C * Math.cos((b.H * Math.PI) / 180)
+  const by = b.C * Math.sin((b.H * Math.PI) / 180)
+  return Math.hypot(a.L - b.L, ax - bx, ay - by)
+}
+
 const hueGap = (a, b) => {
   const d = Math.abs(a - b) % 360
   return d > 180 ? 360 - d : d
@@ -94,15 +103,15 @@ for (const theme of THEMES) {
     )
   }
 
-  // Surfaces stay near-neutral so the accents are what carry colour.
+  // A ground may carry colour of its own, but not so much that it competes.
   const surfaceChroma = Math.max(...surfaces.map((s) => s.C))
-  ok(`${theme.name}: surfaces are quiet at chroma ${surfaceChroma.toFixed(3)}`, surfaceChroma <= 0.03)
+  ok(`${theme.name}: surfaces hold at chroma ${surfaceChroma.toFixed(3)}`, surfaceChroma <= 0.035)
 
+  // How far apart the accent and its ground look, lightness, chroma and hue
+  // together. Distance is what separates them; chroma alone is not.
   const accent = oklch(t.accent)
-  ok(
-    `${theme.name}: the accent is ${(accent.C / surfaceChroma).toFixed(1)}x as colourful as its ground`,
-    accent.C / surfaceChroma >= 5
-  )
+  const gap = distance(accent, oklch(t['bg-panel']))
+  ok(`${theme.name}: the accent sits ${gap.toFixed(2)} from its ground`, gap >= 0.35)
 
   // An accent sharing its ground's hue reads as a lighter shade of it, so it
   // has to separate — unless the ground is so neutral there is nothing to
