@@ -2,11 +2,9 @@
  * Deck engine playhead behaviour, driven under Node with stubbed AudioWorklet
  * globals so positions can be asserted frame-exactly.
  *
- * These guard one specific hazard: the deck deliberately keeps rendering audio
- * for ~6 ms after the transport stops, so the stop does not click. Every one of
- * these cases is somewhere that fade could be left advancing the playhead —
- * which showed up as hot cues and CUE landing several milliseconds late, and as
- * jog nudges creeping forward.
+ * The deck keeps rendering audio for ~6 ms after the transport stops, so the
+ * stop does not click. These cover every place that fade could be left
+ * advancing the playhead.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

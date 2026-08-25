@@ -5,11 +5,10 @@
  *   EQ mode       shelving filters, cutting to -26 dB like a Pioneer DJM
  *                 channel EQ. A shelf at 0 dB is an identity, so a centred
  *                 channel is genuinely transparent.
- *   ISOLATOR mode a crossover-and-sum, cutting to silence like a DJM's
- *                 isolator mode, an Allen & Heath Xone, or EQ Three. Only a
- *                 crossover can truly kill a band; the price is that it
- *                 rotates phase between the bands whatever the knobs say,
- *                 which is what an isolator is.
+ *   ISOLATOR mode a crossover-and-sum, cutting to silence like a mixer's
+ *                 isolator. Only a crossover can kill a band; the price is
+ *                 that it rotates phase between the bands whatever the knobs
+ *                 say, which is what an isolator is.
  * Both modes are offered, as DJ players and mixer hardware do.
  *
  * Every knob is a 0-1 position with 0.5 centred, and everything is a pure

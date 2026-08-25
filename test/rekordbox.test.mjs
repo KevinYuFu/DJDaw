@@ -1,10 +1,9 @@
 /**
  * rekordbox XML import.
  *
- * The fixture is deliberately awkward: non-ASCII filenames (which is most of a
- * real collection once percent-encoding is involved), XML entities in titles, a
- * grid marker that does not sit on a downbeat, a mid-track tempo change, a loop
- * hot cue, several memory cues, and a track with no analysis at all.
+ * The fixture is awkward: non-ASCII filenames, XML entities in titles, a grid
+ * marker off the downbeat, a mid-track tempo change, a loop hot cue, several
+ * memory cues, and a track with no analysis at all.
  */
 import * as X from './.build/rekordboxXml.mjs'
 import * as I from './.build/rekordboxImport.mjs'

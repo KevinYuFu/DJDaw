@@ -21,7 +21,7 @@ const SR = 44100
 const BPM = 128
 /** Seconds per beat. */
 const B = 60 / BPM
-/** Where beat 0 of the grid sits. Not a round number on purpose. */
+/** Where beat 0 of the grid sits. Not a round number. */
 const OFFSET = 0.35
 /** Half a beat of slack: enough to catch a wrong beat, loose on filter delay. */
 const TOL = B / 2

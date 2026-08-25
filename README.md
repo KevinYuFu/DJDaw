@@ -76,11 +76,11 @@ browser displays today.
 
 Tempo detection is solid on four-on-the-floor material — it recovers the exact
 BPM across 70–190 on click tracks. Two things it still gets wrong, both
-measured rather than guessed:
+measured:
 
 - Backbeat-heavy material above about 150 BPM can read as half time (a 174 BPM
-  track detected as 87). The correlation genuinely prefers the half tempo there;
-  it is not an octave-preference bug. Fix it with the x2 button.
+  track detected as 87). The correlation prefers the half tempo there. Fix it
+  with the x2 button.
 - The downbeat can land a beat off, so bar lines are wrong while the beats
   themselves are correct. `G` (set downbeat at the playhead) fixes it. Beat jump
   is unaffected, since it walks beats rather than bars.
@@ -88,7 +88,7 @@ measured rather than guessed:
 Both are one keypress to correct, and the corrected grid is saved with the
 track. Analysis results never overwrite a grid you edited.
 
-## What is deliberately not built yet
+## Not built yet
 
 Key detection, master tempo (key lock), stem separation and track export are
 the next milestones. The EQ cuts to -26 dB like a DJM's EQ rather than to

@@ -209,9 +209,8 @@ the winning correlation peak relative to the runner-up.
 
 ## Contract: state (`state/`)
 
-Three stores. **The playhead is deliberately not in React state** — pushing a
-60 Hz position through the store would re-render the whole app every frame.
-Slow-changing values live in the store; anything that moves with the playhead
+Three stores. **The playhead is not in React state.** Slow-changing values live
+in the store; anything that moves with the playhead
 reads `Deck.positionSeconds()` inside its own `requestAnimationFrame` loop and
 writes to canvas or to a DOM node directly.
 
@@ -393,13 +392,11 @@ DJDaw shows two collections side by side, and the split is the whole design:
 Editing anything on a mirrored track forks it into the local collection
 (`src/shared/collection.ts`), and the edit lands on the fork. The two are
 independent from then on: later rekordbox changes never reach the fork, and a
-re-export never overwrites your work. The same file therefore appears twice
-once forked, which is accepted deliberately.
+re-export never overwrites your work. The same file appears twice once forked.
 
 **Ids.** A local id is the audio key (sha1 of the resolved path); a mirrored id
 is that key prefixed `rb-`. Both carry `audioKey`, and the **waveform cache is
-keyed on `audioKey`, not on the id**, so a fork inherits the analysis instead of
-re-running it on the identical file.
+keyed on `audioKey`, not on the id**, so a fork inherits the analysis.
 
 **Every write goes through `resolveWrite(id, local, mirror)`**, which returns the
 id to write to plus a fork to insert when one is needed. Callers must adopt the
@@ -455,7 +452,7 @@ dance music), 78.3 on GTZAN.
   reimplementing the mel-spectrogram frontend in TypeScript — a real risk of
   silent accuracy drift.
 
-## Not built yet (deliberately)
+## Not built yet
 
 Channel EQ, filter and trim are real. Each deck runs
 trim -> three-way Linkwitz-Riley crossover -> a gain per band -> summed ->
@@ -466,20 +463,19 @@ Crossovers at 250 Hz and 2.5 kHz. Two modes, as rekordbox exposes them:
 EQ cuts to -26 dB like a DJM channel EQ, ISO cuts to silence. Both boost +6 dB.
 The mapping lives in `src/shared/eq.ts`; the graph is built by
 `createChannelStrip` in `audio/Deck.ts`, which takes a `BaseAudioContext` so an
-offline export builds the identical strip rather than a second copy that can
+offline export builds the identical strip, and not a second copy that can
 drift.
 
-Two traps worth knowing, both found by measuring rather than reading:
+Two measured facts the graph depends on:
 
 - **Web Audio reads `Q` on a lowpass/highpass in decibels, not as a Q factor.**
-  Passing 0.7071 asks for Q 1.085. Three resonant slopes summed measured
+  Passing 0.7071 asks for Q 1.085. Three resonant slopes summed measure
   +7.4 dB at each crossover with every knob centred. `Deck.ts` converts.
-- A Butterworth split leaves +3 dB on each crossover even when flat, which is a
-  measured artefact of EQ Three. Linkwitz-Riley sums flat; measured worst
-  deviation across 30 Hz - 18 kHz is -0.12 dB.
+- A Butterworth split leaves +3 dB on each crossover even when flat.
+  Linkwitz-Riley sums flat: worst deviation across 30 Hz - 18 kHz is -0.12 dB.
 
-Every parameter is ramped rather than stepped, because a stepped gain is an
-audible click and a stepped filter frequency zippers. Key detection, key lock / master tempo (needs a time-stretcher),
+Every parameter is ramped, never stepped: a stepped gain clicks and a stepped
+filter frequency zippers. Key detection, key lock / master tempo (needs a time-stretcher),
 stem separation, the edit/arrangement timeline and track export are all future
 work. `Track.key` and `DeckState.keyLock` exist so the UI does not have to
 change shape when they land.

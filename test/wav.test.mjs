@@ -1,15 +1,13 @@
 /**
  * WAV encoding.
  *
- * Two things here break a file completely rather than subtly. The declared
- * chunk sizes have to match the bytes that are actually there, or a reader
- * stops early and gets a truncated track. And the `fmt ` audioFormat has to say
- * integer or float correctly, because the sample size alone does not: a float
- * file labelled PCM opens as noise.
+ * Two things here break a file completely. The declared chunk sizes have to
+ * match the bytes that are there, or a reader stops early. And the `fmt `
+ * audioFormat has to say integer or float correctly, which the sample size
+ * alone does not.
  *
- * The third thing is the classic quantising bug — a sample over 1.0 scaled into
- * an integer word overflows and wraps to full-scale negative, so the loudest
- * peak in the track comes out as a bang.
+ * The third is quantising: a sample over 1.0 scaled into an integer word
+ * overflows and wraps to full-scale negative.
  */
 import * as W from './.build/wav.mjs'
 
@@ -191,8 +189,7 @@ for (const depth of [16, 24, 32]) {
 }
 
 {
-  // Left is positive, right is negative, so a swapped or dropped channel is
-  // obvious rather than something you have to squint at.
+  // Left is positive, right is negative, so a swapped or dropped channel shows.
   const left = Float32Array.from([0.25, 0.5])
   const right = Float32Array.from([-0.25, -0.5])
   const bytes = W.encodeWav([left, right], 44100, 16)

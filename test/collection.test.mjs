@@ -1,10 +1,9 @@
 /**
  * Copy-on-write between the rekordbox mirror and the local collection.
  *
- * The invariants that matter: an edit to a mirrored track must never reach the
- * mirror, a second edit must reuse the existing fork instead of resetting the
- * first one, and a fork must keep the audio key so it inherits the waveform
- * rather than re-analysing the same file.
+ * An edit to a mirrored track never reaches the mirror, a second edit reuses
+ * the existing fork, and a fork keeps the audio key so it inherits the
+ * waveform.
  */
 import * as C from './.build/collection.mjs'
 

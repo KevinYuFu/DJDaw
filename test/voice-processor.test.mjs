@@ -147,7 +147,7 @@ for (const rate of [1, 1.16, 0.82, 2]) {
   eq('voices at different speeds keep the same arrangement position', a.pos, b.pos)
 }
 
-// Past the end of the file a clip is silent rather than reading rubbish.
+// Past the end of the file a clip is silent.
 {
   const p = voice([{ start: 0, end: SR * 90, src: 0 }])
   eq('reads past the file are silent', p.readChannel(new Float32Array([1, 2, 3]), FRAMES + 10), 0)

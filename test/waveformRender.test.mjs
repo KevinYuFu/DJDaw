@@ -1,10 +1,9 @@
 /**
  * RGB waveform colouring.
  *
- * Bass first, then highs, then mids — a column with real low end has to read
- * red, and between the other two the highs win. Colours are lifted towards
- * white so the strip reads like a meter rather than a set of neon stripes,
- * which means these check which channel leads, not that the others are dark.
+ * Bass first, then highs, then mids: a column with real low end reads red, and
+ * between the other two the highs win. Colours are lifted towards white, so
+ * these check which channel leads and not that the others are dark.
  */
 import { rgbColumnColor } from './.build/waveformRender.mjs'
 
@@ -52,8 +51,7 @@ ok('every channel is a byte', chan(rgbColumnColor(1, 0.5, 0.25)).every((v) => Nu
 /**
  * Clip bands: the wash that turns a cut row into blocks.
  *
- * Drawn against a stub context, so this is about what gets painted rather than
- * about what a screenshot happens to look like.
+ * Drawn against a stub context, so this covers what gets painted.
  */
 import { drawClipBands, DEFAULT_CLIP_STYLE } from './.build/waveformRender.mjs'
 

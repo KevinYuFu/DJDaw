@@ -89,10 +89,8 @@ const MODE_XFADE_SEC = 0.03
 
 /**
  * Biquads per crossover slope. Two cascaded Butterworth sections make one
- * Linkwitz-Riley 24 dB/oct slope, and LR is the whole point: its bands sum
- * flat. A single Butterworth pair leaves a +3 dB bump sitting on each crossover
- * with every band centred, which is a measured artefact of EQ Three, not
- * something to copy.
+ * Linkwitz-Riley 24 dB/oct slope, whose bands sum flat. A single Butterworth
+ * pair leaves a +3 dB bump on each crossover with every band centred.
  */
 const LR_SECTIONS = 2
 
