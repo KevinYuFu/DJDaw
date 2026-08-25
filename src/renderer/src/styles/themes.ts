@@ -29,6 +29,8 @@ export interface ThemeTokens {
   'bg-raised-hover': string
   'bg-pressed': string
   'bg-sunken': string
+  /** The arrangement's lanes and the bar ruler above them. */
+  lane: string
   'bg-waveform': string
   border: string
   'border-soft': string
@@ -92,6 +94,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#3c3f46',
     'bg-pressed': '#13161c',
     'bg-sunken': '#080a0f',
+    lane: '#080a0f',
     'bg-waveform': '#040509',
     border: '#4f535b',
     'border-soft': '#2f3238',
@@ -143,6 +146,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#3b3f48',
     'bg-pressed': '#12161d',
     'bg-sunken': '#070a11',
+    lane: '#070a11',
     'bg-waveform': '#03050a',
     border: '#4d535d',
     'border-soft': '#2e323a',
@@ -194,6 +198,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#443e37',
     'bg-pressed': '#1a150f',
     'bg-sunken': '#0e0905',
+    lane: '#0e0905',
     'bg-waveform': '#070502',
     border: '#585148',
     'border-soft': '#36312a',
@@ -245,6 +250,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#3a4046',
     'bg-pressed': '#11171c',
     'bg-sunken': '#060b10',
+    lane: '#060b10',
     'bg-waveform': '#030509',
     border: '#4c535c',
     'border-soft': '#2c3239',
@@ -296,6 +302,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#dbd7cd',
     'bg-pressed': '#d0ccc2',
     'bg-sunken': '#e2ddd4',
+    lane: '#e2ddd4',
     'bg-waveform': '#19160f',
     border: '#a9a499',
     'border-soft': '#d0ccc2',
@@ -347,7 +354,8 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#52505f',
     'bg-pressed': '#252330',
     'bg-sunken': '#181623',
-    'bg-waveform': '#05040d',
+    lane: '#181623',
+    'bg-waveform': '#020202',
     border: '#6b697c',
     'border-soft': '#474654',
     'border-strong': '#928fa3',
@@ -398,6 +406,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#c3d3e5',
     'bg-pressed': '#b8c8d9',
     'bg-sunken': '#d1e2f3',
+    lane: '#d1e2f3',
     'bg-waveform': '#0d1926',
     border: '#889aae',
     'border-soft': '#b4c4d6',
@@ -528,4 +537,10 @@ export function canvasChrome(id: string): CanvasChrome {
     clipEdgeOn: t['clip-edge-on'],
     clipText: t['clip-text']
   }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept((next) => {
+    next?.applyTheme(document.documentElement.dataset.theme ?? DEFAULT_THEME_ID)
+  })
 }
