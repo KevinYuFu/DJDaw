@@ -9,10 +9,8 @@
  *                 isolator mode, an Allen & Heath Xone, or EQ Three. Only a
  *                 crossover can truly kill a band; the price is that it
  *                 rotates phase between the bands whatever the knobs say,
- *                 which is what an isolator is and is accepted because you
- *                 reach for it to remove a band.
- * rekordbox exposes exactly this as a preference, and Kevin's DDJ-FLX10 has an
- * isolator mode on shift+CUE, so both belong here.
+ *                 which is what an isolator is.
+ * Both modes are offered, as DJ players and mixer hardware do.
  *
  * Every knob is a 0-1 position with 0.5 centred, and everything is a pure
  * function of that, so the mapping is testable without an AudioContext and the
@@ -22,14 +20,8 @@
 /**
  * Crossover points, in Hz.
  *
- * These are crossover frequencies, not shelf corners — the distinction matters,
- * and getting it wrong is what made the first version feel unlike a controller.
- * 250 Hz / 2.5 kHz are Ableton EQ Three's defaults and sit in the middle of the
- * range hardware uses (Allen & Heath's Xone:96 publishes 180 Hz / 3 kHz).
- *
- * Pioneer quotes its channel EQ as 70 Hz / 1 kHz / 13 kHz, but those are the
- * centres of shelving and bell filters, not splits, so they are not the numbers
- * to use here.
+ * Crossover frequencies, where the bands split — not shelf corners. 250 Hz and
+ * 2.5 kHz sit in the middle of the range mixer hardware uses.
  */
 export const CROSSOVER_HZ = { low: 250, high: 2500 } as const
 
@@ -112,9 +104,8 @@ export const FILTER_LP_MIN_HZ = 30
 export const FILTER_HP_MAX_HZ = 18000
 
 /**
- * Filter resonance. Hardware filters have a bump at the corner; a flat
- * Butterworth sweep sounds inert next to one. Fixed rather than exposed,
- * because the FLX10 has no per-channel resonance control to map it to.
+ * Filter resonance: a bump at the corner, as hardware filters have. Fixed,
+ * with no control mapped to it.
  */
 export const FILTER_Q = 1.2
 

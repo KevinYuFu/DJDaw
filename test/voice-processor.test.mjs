@@ -2,10 +2,9 @@
  * Arrangement voice behaviour, driven under Node with stubbed AudioWorklet
  * globals so positions can be asserted frame-exactly.
  *
- * The property everything else rests on: arrangement time advances at exactly
- * one frame per frame whatever the clip's speed is. That is what keeps lanes
- * locked to each other, so speed has to show up in the source lookup and
- * nowhere else.
+ * Arrangement time advances at one frame per frame whatever a clip's speed is,
+ * which is what keeps lanes locked to each other. Speed shows up in the source
+ * lookup and nowhere else.
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

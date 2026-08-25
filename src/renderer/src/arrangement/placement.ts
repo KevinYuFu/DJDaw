@@ -3,8 +3,7 @@ import { playbackRate } from '@renderer/analysis/playbackRate'
 /**
  * Where a track lands when it is dropped on a lane.
  *
- * One function, used both to make the clip and to draw the preview of it under
- * the cursor, so the two can never disagree about where it is going.
+ * Used both to make the clip and to draw the preview of it under the cursor.
  */
 
 export interface PlacementRequest {
@@ -32,12 +31,11 @@ export interface Placement {
 }
 
 /**
- * The track's first downbeat lands on the drop point, which is what puts it in
- * phase with everything else on the grid.
+ * The track's first downbeat lands on the drop point, putting it in phase with
+ * the grid.
  *
- * The intro before that downbeat keeps its place ahead of the clip, the way it
- * does in a DAW. Dropping close to the start leaves no room for it, so as much
- * of it as would run before zero is trimmed.
+ * The intro before that downbeat sits ahead of the drop point. Whatever would
+ * run before zero is trimmed.
  */
 export function placeClip(req: PlacementRequest): Placement {
   const { sourceFrames, downbeatSec, trackBpm, masterBpm, atSeconds, sampleRate } = req

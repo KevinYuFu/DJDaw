@@ -183,8 +183,8 @@ export interface DecksState {
   toggleLoop(deck: DeckId): void
   setLoopBeats(deck: DeckId, beats: number): void
   /**
-   * Cut the clip under the playhead in two, the way Ableton does. Snaps to the
-   * grid first when Quantize is on.
+   * Cut the clip under the playhead in two. Snaps to the grid first when
+   * Quantize is on.
    *
    * A refusal comes back with its reason so the button can say why instead of
    * looking broken.

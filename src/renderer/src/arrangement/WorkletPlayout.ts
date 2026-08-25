@@ -6,12 +6,11 @@ import type { ChannelEq, EqMode } from '@shared/eq'
 
 /**
  * What a clip needs that the timeline library does not model: where its audio
- * comes from, and how fast that audio has to run to sit on the grid.
+ * comes from, and how fast that audio runs to sit on the grid.
  *
- * Everything the library holds is in *arrangement* frames, this rate included:
- * `offsetSamples` is how far into the source the clip starts measured on the
- * grid, not in the file. That keeps the library's own trim and collision maths
- * correct on warped clips, and this rate is the only thing that converts back.
+ * Every length the library holds is in arrangement frames, `offsetSamples`
+ * included — how far into the source the clip starts, measured on the grid.
+ * This rate is what converts those back to source frames.
  */
 export interface ClipSource {
   /** Library track the audio comes from. */
@@ -45,11 +44,9 @@ export interface WorkletPlayoutOptions {
 /**
  * The seam between the timeline library and DJDaw's audio.
  *
- * The library owns the model — which clips exist, where they sit, what a cut
- * or a drag does to them — and never touches the audio graph. This is the
- * other half: it turns each track of clips into lanes and voices, and runs the
- * transport. Nothing above this line knows about worklets; nothing below it
- * knows about undo.
+ * Turns each track of clips into lanes and voices, and runs the transport.
+ * Nothing above this line knows about worklets; nothing below it knows about
+ * the timeline model.
  */
 export class WorkletPlayout implements PlayoutAdapter {
   readonly ppqn = PPQN
@@ -98,9 +95,8 @@ export class WorkletPlayout implements PlayoutAdapter {
   /**
    * Rebuild one lane from its clips.
    *
-   * Clips are grouped by the source they read, because a voice plays one file
-   * at one speed: two songs on the same lane are two voices summed, not one
-   * voice switching between them.
+   * Grouped by source: a voice plays one file at one speed, so two songs on a
+   * lane are two voices summed.
    */
   updateTrack(trackId: string, track: ClipTrack): void {
     this.known.add(trackId)
@@ -161,9 +157,8 @@ export class WorkletPlayout implements PlayoutAdapter {
     return this.engine.playing
   }
 
-  setMasterVolume(): void {
-    // The master fader belongs to the app, not to the arrangement.
-  }
+  /** No-op: the master fader is an app-level control. */
+  setMasterVolume(): void {}
 
   setTrackVolume(trackId: string, volume: number): void {
     this.engine.lane(trackId).setVolume(volume)
@@ -185,9 +180,8 @@ export class WorkletPlayout implements PlayoutAdapter {
     this.engine.lane(trackId).setPan(pan)
   }
 
-  setLoop(): void {
-    // Arrangement looping comes later.
-  }
+  /** No-op: arrangement looping is not implemented. */
+  setLoop(): void {}
 
   setTempo(bpm: number): boolean {
     if (!(bpm > 0)) return false

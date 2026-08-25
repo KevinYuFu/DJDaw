@@ -1,12 +1,11 @@
 /**
  * Points of interest: everything worth jumping to on a track.
  *
- * Memory cues are treated as locators, the way Ableton treats them — markers
- * you drop while listening and then navigate between, rather than pads you
- * trigger. Hot cues and the CUE point are jumpable too, so one pair of keys
- * walks the lot in time order.
+ * Memory cues are locators — markers dropped while listening and navigated
+ * between, not pads to trigger. Hot cues and the CUE point are jumpable too,
+ * so one pair of keys walks all of them in time order.
  *
- * Pure and dependency-free so the navigation can be tested without a deck.
+ * Pure and dependency-free: navigation is testable without a deck.
  */
 
 import type { Track } from './types'

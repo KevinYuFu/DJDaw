@@ -27,9 +27,8 @@ const CUT_FAILED = 'Cannot cut here'
 const NOTICE_MS = 1800
 
 /**
- * 24-bit, always. An export is the master Kevin takes back into rekordbox, so
- * the bounce is the last place to lose depth; MP3 is encoded from these bytes
- * in main, and giving ffmpeg the better input costs nothing.
+ * 24-bit, always. MP3 is encoded from these bytes in main, so the bounce keeps
+ * full depth whatever the export format is.
  */
 const BIT_DEPTH = 24
 
@@ -37,9 +36,8 @@ const BIT_DEPTH = 24
 const FALLBACK_NAME = 'DJDaw edit'
 
 /**
- * The likeliest MP3 failure by far, and "export failed" would send Kevin
- * looking in the wrong place. Main sends its own line too, which is kept
- * underneath this one.
+ * Shown for the most common MP3 failure. Main's own message is kept underneath
+ * this one.
  */
 const FFMPEG_MISSING = 'MP3 needs ffmpeg, and it was not found. Export WAV instead, or install ffmpeg.'
 

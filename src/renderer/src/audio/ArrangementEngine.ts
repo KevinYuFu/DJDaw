@@ -5,17 +5,14 @@ import { VOICE_WORKLET_URL } from '@renderer/audio/voiceProtocol'
 /**
  * The arrangement's audio: a set of lanes and one clock.
  *
- * Nothing here is shared with the decks. They sit on the same output device —
- * there is only one — but a lane is not a deck, holds its own audio and takes
- * no instruction from the performance side.
+ * Lanes share the output device with the decks and nothing else. A lane holds
+ * its own audio and takes no instruction from the performance side.
  *
- * The clock is the point of the whole thing. Every voice advances at exactly
- * one frame per frame and they are all started on a named context frame, so
- * once they are running they are locked together to the sample for as long as
- * they play. Nothing re-syncs, because nothing drifts.
+ * Every voice advances at one frame per frame and all of them start on a named
+ * context frame, so a running session is locked to the sample throughout.
  */
 
-/** How far ahead a start is scheduled, so every voice gets the message in time. */
+/** How far ahead a start is scheduled, so every voice has the message. */
 const START_LEAD_SEC = 0.08
 
 export class ArrangementEngine {
@@ -74,8 +71,7 @@ export class ArrangementEngine {
   /** Hand a lane its sources. Voices are added, updated and dropped to match. */
   setLaneSources(id: string, sources: readonly LaneSource[]): void {
     const fresh = this.lane(id).setSources(sources)
-    // A voice built while the transport is running joins the run in progress.
-    // Only the new ones: restarting the others would jump them.
+    // A voice built while the transport runs joins the run in progress.
     if (this.startedAt === null || fresh.length === 0) return
     const at = this.atNextStart()
     const from = this.positionSeconds() + START_LEAD_SEC
@@ -117,8 +113,7 @@ export class ArrangementEngine {
       for (const lane of this.lanes.values()) lane.seek(frame)
       return
     }
-    // Seeking while running is a restart from the new position: the voices
-    // have to be re-aimed together or they would land a message apart.
+    // Seeking while running restarts every voice together from the new position.
     this.play(at)
   }
 

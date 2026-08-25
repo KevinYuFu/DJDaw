@@ -20,15 +20,14 @@ const DEFAULT_BARS_IN_VIEW = 32
 const MIN_BARS_IN_VIEW = 4
 const MAX_BARS_IN_VIEW = 256
 
-/** Beats in a bar. Only 4/4 for now, as Ableton opens. */
+/** Beats in a bar. 4/4 only. */
 const BEATS_PER_BAR = 4
 
 /**
  * The arrangement view: lanes of clips on one fixed grid.
  *
- * Every lane runs on the same grid at the same tempo, and a clip laid onto it
- * is warped to that tempo when it lands, so pressing play starts everything
- * together and it stays together — there is no per-lane tempo to drift from.
+ * Every lane runs on that grid at the master tempo, and a clip is warped to it
+ * as it lands. There is no per-lane tempo.
  */
 export function ArrangementView(): ReactElement {
   const ready = useArrangement((s) => s.ready)
@@ -48,8 +47,7 @@ export function ArrangementView(): ReactElement {
     void useArrangement.getState().init()
   }, [])
 
-  // The timeline is sized from the panel, so a bar is the same width whatever
-  // the window is.
+  // A bar is the same width whatever the window size is.
   useLayoutEffect(() => {
     const el = stripsRef.current
     if (!el) return
@@ -64,10 +62,7 @@ export function ArrangementView(): ReactElement {
   const secPerPx = (barSec * barsInView) / width
   const fromSec = fromBar * barSec
 
-  /**
-   * Wheel over the lanes scrolls, and with a modifier it zooms about the
-   * pointer — the way every timeline does it.
-   */
+  /** Wheel scrolls the lanes; with a modifier it zooms about the pointer. */
   const onWheel = (e: ReactWheelEvent<HTMLDivElement>): void => {
     if (e.ctrlKey || e.metaKey) {
       const box = e.currentTarget.getBoundingClientRect()
@@ -114,8 +109,7 @@ export function ArrangementView(): ReactElement {
     }
   }, [width, barSec, secPerPx, fromSec, fromBar, barsInView])
 
-  // The playhead is the one thing that moves every frame, so it moves on its
-  // own rather than through the store.
+  // Moved directly, outside the store: it changes every frame.
   useRaf(() => {
     const head = headRef.current
     if (!head) return
@@ -199,7 +193,7 @@ export function ArrangementView(): ReactElement {
             onScrub={(sec) => useArrangement.getState().seek(sec)}
           />
         ))}
-        {/* Over the strips, never over the channel columns either side. */}
+        {/* Over the strips only, not the channel columns either side. */}
         <div className="arr-view__overlay" ref={stripsRef}>
           <div className="arr-view__playhead" ref={headRef} />
         </div>

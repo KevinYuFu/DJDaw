@@ -63,7 +63,7 @@ const CHANNEL_KNOBS: readonly KnobSpec[] = [
 const EQ_MODE_TITLE = [
   'EQ: turn a band down and it drops a lot, but you can still hear it.',
   'ISO: turn a band down and it is gone. Silent.',
-  'On a DDJ-FLX10 this is shift+CUE. rekordbox has the same switch in its settings.'
+  'DJ players and mixers expose the same switch.'
 ].join('\n')
 
 const KNOB_SIZE = 30

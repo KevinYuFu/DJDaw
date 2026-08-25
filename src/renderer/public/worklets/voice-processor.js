@@ -3,23 +3,20 @@
  *
  * One audio source, playing the pieces of itself that belong to one lane.
  *
- * The playhead is arrangement time and it always advances at exactly one frame
- * per frame — that is what keeps every voice in the session locked together no
- * matter what tempo anything was recorded at. Speed lives on the clip instead:
- * a clip says which source frame it starts at and how many source frames to
- * consume per arrangement frame, so a 174 BPM track laid on a 123 BPM grid is
- * read slowly while the grid keeps ticking.
+ * The playhead is arrangement time and advances at exactly one frame per
+ * frame, which keeps every voice in the session locked together. Speed lives
+ * on the clip: a clip names the source frame it starts at and how many source
+ * frames to consume per arrangement frame.
  *
- * A voice holds one source at one rate, so the pitch shift that cancels the
- * speed change is a single constant — see `Voice` for the stretcher that
- * applies it.
+ * A voice holds one source at one rate, so the pitch shift that cancels its
+ * speed change is a single constant. `Voice` applies it.
  *
- * Audio is read with 4-point Hermite interpolation, and every discontinuity —
- * a seek, or the jump from the end of one clip to the start of the next — is
- * spliced with a short equal-power crossfade so it never clicks.
+ * Audio is read with 4-point Hermite interpolation. Every discontinuity — a
+ * seek, or the jump from one clip to the next — is spliced with a short
+ * equal-power crossfade.
  *
- * Plain JS on purpose: this file is handed to `audioWorklet.addModule` as-is.
- * The message contract is typed in `src/renderer/src/audio/voiceProtocol.ts`.
+ * Plain JS: handed to `audioWorklet.addModule` as-is. The message contract is
+ * typed in `src/renderer/src/audio/voiceProtocol.ts`.
  */
 
 /** Crossfade applied across a playhead discontinuity, in frames (~5ms @48k). */
@@ -49,7 +46,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
      * The pieces of the source this voice plays, in arrangement order.
      *
      * `start`/`end` are arrangement frames, `src` is the source frame the piece
-     * begins at. Kept sorted and non-overlapping by the renderer.
+     * begins at. Sorted and non-overlapping.
      */
     this.clips = []
     /** Source frames consumed per arrangement frame. */
@@ -101,8 +98,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
         break
 
       case 'transport':
-        // A start is scheduled on a context frame so every voice in the
-        // session begins on the same sample, however they were created.
+        // A start names a context frame, so every voice begins on the same one.
         if (msg.playing) {
           this.pos = msg.fromFrame
           this.startsAt = msg.atContextFrame
@@ -132,8 +128,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
   /**
    * Index of the clip covering an arrangement position, or -1 for a gap.
    *
-   * Walks from the last answer rather than searching: the playhead moves by one
-   * frame at a time, so both loops normally exit immediately.
+   * Walks from the last answer, so both loops normally exit immediately.
    */
   resolveClip(pos) {
     const clips = this.clips
@@ -157,12 +152,9 @@ class VoiceProcessor extends AudioWorkletProcessor {
   }
 
   /**
-   * Source frame for this sample, arming a crossfade when the playhead has
-   * just crossed into a different clip.
-   *
-   * A clip boundary is a source discontinuity like any other jump, so it gets
-   * the same treatment as a seek: the outgoing piece keeps playing under the
-   * incoming one for a few milliseconds instead of stopping dead.
+   * Source frame for this sample, arming a crossfade when the playhead crosses
+   * into a different clip. The outgoing piece keeps playing under the incoming
+   * one for a few milliseconds.
    */
   sourceUnderPlayhead() {
     const index = this.resolveClip(this.pos)
@@ -216,8 +208,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
     const right = out.length > 1 ? out[1] : out[0]
     const n = left.length
 
-    // A scheduled start lands mid-quantum as often as not; the frames before it
-    // stay silent so every voice hears its first sample at the same instant.
+    // A scheduled start can land mid-quantum. Frames before it are silent.
     let startAt = 0
     if (this.startsAt >= 0) {
       const offset = this.startsAt - currentFrame
@@ -260,8 +251,7 @@ class VoiceProcessor extends AudioWorkletProcessor {
         this.readAt(src, scratch)
       }
 
-      // The outgoing side of a splice keeps reading straight on, so the two
-      // sides are both real audio and the crossfade between them is inaudible.
+      // The outgoing side keeps reading on, so both sides of the fade are audio.
       if (this.spliceLeft > 0 && this.splicePos !== null) {
         this.readAt(this.splicePos, tail)
         const t = this.spliceLeft / SPLICE_FRAMES

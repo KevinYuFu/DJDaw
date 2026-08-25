@@ -6,10 +6,7 @@
  * file decides is where the file goes, what it is called, and — for MP3 —
  * pipes the WAV through ffmpeg on the way.
  *
- * Exports land in `~/Music/DJDaw` rather than under the app's support
- * directory. Kevin asked for one dedicated folder, and Music is where he will
- * go looking for it; a hidden directory is somewhere a finished track can only
- * get lost.
+ * Exports land in one dedicated folder, `~/Music/DJDaw`.
  */
 
 import { spawn } from 'node:child_process'
@@ -49,12 +46,10 @@ const MAX_NAME_ATTEMPTS = 1000
 /**
  * Turn a requested name into something safe to use as a file name.
  *
- * The name reaches here from the renderer, which means from a track title or
- * from Kevin typing. Path separators and leading dots are the ones that
- * matter: separators are how a name climbs out of the export folder, and a
- * leading dot hides the file from Finder the moment it is written. The rest —
- * control characters, and the punctuation macOS and Windows dislike — is about
- * the file still opening afterwards.
+ * Names arrive from a track title or from typing. Path separators would let a
+ * name climb out of the export folder and a leading dot hides the file; the
+ * rest — control characters and punctuation macOS and Windows dislike — is
+ * about the file still opening afterwards.
  */
 export function safeFileName(name: string): string {
   let cleaned = typeof name === 'string' ? name : ''
