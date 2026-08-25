@@ -97,6 +97,44 @@ and it is still that even when the addition is genuinely good.
 The same goes for measuring: when I claim something matches, the measurement
 has to be of the thing itself, not of something that correlates with it.
 
+## Ableton is the reference for the arrangement view
+
+The arrangement view (V3) is Ableton Live's arrangement view. When a decision
+is unclear, the answer is how Ableton does it. Rekordbox is still the reference
+for the performance view.
+
+## Use what already exists
+
+If a library already does the job, use it. Something already built and
+maintained beats anything written here. Check before writing.
+
+## The picture must match what happens
+
+Whatever the UI shows is what the app must do. If they disagree, one of them
+is wrong and it has to be fixed — never left.
+
+This cuts both ways:
+
+- If the app puts a clip where the cursor is, the UI must show it landing
+  there, not highlight the whole lane.
+- If the UI shows something landing somewhere, that is where it must land.
+
+So a preview is not decoration. It is a promise, and it has to be drawn from
+the same numbers the real thing uses — not from a second copy of the maths that
+can drift.
+
+## Testing must not disturb Kevin
+
+He is working on the same machine. Tests run around him, not over him.
+
+- **Silence the output.** Set the master to 0 and tap the meter upstream of
+  it. The signal is still there to measure; the speakers are not.
+- **Never steal focus.** Dispatch key events into the page instead of through
+  the OS. They reach the app with the window unfocused.
+- Screenshots and anything about drawing need the window rendering. Try
+  `Page.setWebLifecycleState('active')` first; only ask him to bring the app
+  forward if that fails, and say why.
+
 ## Save every rule Kevin gives me
 
 When Kevin gives me an instruction about how to work, I add it to this file

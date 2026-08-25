@@ -5,6 +5,7 @@ import { BEAT_JUMP_SIZES, HOT_CUE_COUNT, LOOP_SIZES } from '@renderer/core/const
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
+import { useArrangement } from '@renderer/state/useArrangement'
 import { useEditV2 } from '@renderer/state/useEditV2'
 import { useSettings } from '@renderer/state/useSettings'
 
@@ -62,7 +63,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Tab', action: 'Move the focus to the next deck' },
   { keys: 'Shift + Tab', action: 'Move the focus back one deck' },
   { keys: 'Cmd / Ctrl + E', action: 'Edit view: cut the track at the playhead' },
-  { keys: 'Delete', action: 'Edit view: delete the picked clip, leaving a gap' },
+  { keys: 'Delete', action: 'Edit and V3: delete the picked clip' },
   { keys: 'Shift + Delete', action: 'Edit view: delete it and close the gap' }
 ] as const
 
@@ -135,6 +136,11 @@ function focusedDeck(): DeckId {
 /** Whether the view that plays every row at once is on screen. */
 function inEditV2(): boolean {
   return useSettings.getState().view === 'editv2'
+}
+
+/** Whether the arrangement is on screen, where there are lanes and no decks. */
+function inArrangement(): boolean {
+  return useSettings.getState().view === 'v3'
 }
 
 /** Whether an editing view is on screen, which is the only place clips exist. */
@@ -246,7 +252,7 @@ function isBound(code: string): boolean {
   if (hotCueIndex(code) !== null) return true
   // Held down in the performance view these are not ours, so they must reach
   // the browser rather than being quietly eaten on every repeat.
-  if (code === 'Delete' || code === 'Backspace') return inEditView()
+  if (code === 'Delete' || code === 'Backspace') return inEditView() || inArrangement()
   return (
     REPEATABLE.has(code) ||
     code === 'Space' ||
@@ -320,9 +326,10 @@ export function useKeyboard(): void {
 
       switch (event.code) {
         case 'Space':
-          // EDIT V2 has no such thing as playing one row: there, space starts
-          // and stops all of them together.
-          if (inEditV2()) useEditV2.getState().toggleAll()
+          // Neither the arrangement nor EDIT V2 has such a thing as playing one
+          // row: in both, space starts and stops everything together.
+          if (inArrangement()) useArrangement.getState().toggle()
+          else if (inEditV2()) useEditV2.getState().toggleAll()
           else decks.togglePlay(deck)
           break
 
@@ -419,7 +426,8 @@ export function useKeyboard(): void {
         case 'Backspace':
           // Shift closes the gap the deleted clip leaves; on its own the gap
           // stays and plays as silence.
-          if (inEditView()) decks.deleteSelectedClip(deck)
+          if (inArrangement()) useArrangement.getState().removeSelected()
+          else if (inEditView()) decks.deleteSelectedClip(deck)
           else handled = false
           break
 
