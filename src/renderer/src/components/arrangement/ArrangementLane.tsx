@@ -86,20 +86,24 @@ export function ArrangementLane({
   }
 
   /**
-   * A press on a clip's title strip picks that clip up. A press anywhere else —
-   * over a waveform or over empty grid — takes hold of the playhead, which then
-   * follows the pointer until it is released.
+   * A press picks the clip under it, wherever on that clip it lands.
+   *
+   * On the title strip it also takes hold of the clip, which then follows the
+   * pointer. Anywhere else it takes hold of the playhead instead, so one press
+   * on a waveform both picks the clip and says where in it to cut. A press on
+   * empty grid picks nothing and only moves the playhead.
    */
   const onDown = (e: PointerEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return
     const box = stripRef.current?.getBoundingClientRect()
     const at = secAt(e.clientX)
+    const clip = clipAt(lane, at, sampleRate)
     const onHeader = box ? e.clientY - box.top < CLIP_HEADER_H : false
-    const clip = onHeader ? clipAt(lane, at, sampleRate) : null
 
     e.currentTarget.setPointerCapture(e.pointerId)
-    if (clip) {
-      onSelect({ lane: lane.id, clipId: clip.id })
+    onSelect(clip ? { lane: lane.id, clipId: clip.id } : null)
+
+    if (clip && onHeader) {
       drag.current = {
         pointerId: e.pointerId,
         clipId: clip.id,
@@ -226,9 +230,6 @@ export function ArrangementLane({
             S
           </button>
         </div>
-        <span className="arr-lane__count mono">
-          {lane.clips.length === 0 ? '—' : `${lane.clips.length} clip${lane.clips.length > 1 ? 's' : ''}`}
-        </span>
       </div>
 
       <div
@@ -272,6 +273,7 @@ export function ArrangementLane({
         mode={eqMode}
         disabled={false}
         prefix="arr"
+        showFlat={false}
         onChange={(id, value) =>
           useArrangement.getState().setLaneEq(lane.id, { ...knobs.eq, [id]: value })
         }

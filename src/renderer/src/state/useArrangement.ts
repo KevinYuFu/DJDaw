@@ -372,7 +372,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   cutSelected() {
     const picked = get().selection
     if (!picked) {
-      set({ notice: 'Pick a clip by its title bar first' })
+      set({ notice: 'Click a clip first' })
       return
     }
     const lane = engine && laneById(engine.getState().tracks, picked.lane)

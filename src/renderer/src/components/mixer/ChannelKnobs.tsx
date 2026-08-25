@@ -172,6 +172,8 @@ export interface ChannelKnobsProps {
   disabled: boolean
   /** Class-name prefix, so a view can style the strip as its own. */
   prefix?: string
+  /** Whether to draw the button that puts every knob back to flat. */
+  showFlat?: boolean
   onChange(id: keyof ChannelEq, value: number): void
   onReset(id: keyof ChannelEq): void
   onFlat(): void
@@ -195,6 +197,7 @@ export function ChannelKnobs({
   mode: eqMode,
   disabled,
   prefix = 'v2-edit',
+  showFlat = true,
   onChange,
   onReset,
   onFlat
@@ -290,15 +293,17 @@ export function ChannelKnobs({
         )
       })}
 
-      <button
-        type="button"
-        className={`${prefix}-btn ${prefix}-btn--flat${flat ? '' : ' is-lit'}`}
-        disabled={disabled || flat}
-        onClick={onFlat}
-        title="Put every knob on this row back to flat"
-      >
-        <span>Flat</span>
-      </button>
+      {showFlat ? (
+        <button
+          type="button"
+          className={`${prefix}-btn ${prefix}-btn--flat${flat ? '' : ' is-lit'}`}
+          disabled={disabled || flat}
+          onClick={onFlat}
+          title="Put every knob on this row back to flat"
+        >
+          <span>Flat</span>
+        </button>
+      ) : null}
     </div>
   )
 }
