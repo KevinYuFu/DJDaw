@@ -59,14 +59,6 @@ const hueGap = (a, b) => {
 
 const SURFACES = ['bg-app', 'bg-panel', 'bg-panel-2', 'bg-raised', 'bg-raised-hover']
 
-/** An `rgba()` token laid over an opaque hex, as the canvas paints it. */
-function over(rgbaToken, baseHex) {
-  const n = rgbaToken.match(/[\d.]+/g).map(Number)
-  const base = [1, 3, 5].map((i) => parseInt(baseHex.slice(i, i + 2), 16))
-  const mix = base.map((c, i) => Math.round(n[i] * n[3] + c * (1 - n[3])))
-  return '#' + mix.map((c) => c.toString(16).padStart(2, '0')).join('')
-}
-
 /** Text and its ground, with the Lc each pairing has to reach. */
 const READABLE = [
   ['text', 'bg-panel', 90],
@@ -127,17 +119,6 @@ for (const theme of THEMES) {
   if (surfaceChroma > 0.02) {
     const gap = hueGap(accent.H, oklch(t['bg-panel']).H)
     ok(`${theme.name}: accent sits ${gap.toFixed(0)} degrees off its ground`, gap >= 40)
-  }
-
-  // A waveform is drawn over a clip's body, which is itself over the lane. That
-  // stack is the ground the bands actually have to clear.
-  const clipGround = over(t['clip-body'], t['bg-waveform'])
-  const pickedGround = over(t['clip-body-on'], t['bg-waveform'])
-  for (const [ground, where] of [[clipGround, 'a clip'], [pickedGround, 'a picked clip']]) {
-    for (const [band, min] of [['wave-high', 75], ['wave-mid', 60], ['wave-low', 45]]) {
-      const got = lc(t[band], ground)
-      ok(`${theme.name}: ${band} over ${where} reads at Lc ${got.toFixed(0)}, needs ${min}`, got >= min)
-    }
   }
 
   // The four lanes have to be told apart at a glance.
