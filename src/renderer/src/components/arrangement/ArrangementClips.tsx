@@ -39,6 +39,78 @@ export interface ArrangementClipsProps {
   width: number
   selectedClipId: string | null
   ghost: ClipGhost | null
+  /** Seconds in one bar of the master grid. */
+  barSec: number
+  /** Beats in a bar. */
+  beatsPerBar: number
+}
+
+/**
+ * Three weights of grid line: the beat, the bar it starts, and the phrase.
+ *
+ * Bright enough to read over a waveform, which is where a downbeat has to be
+ * findable. Phrase lines fall every {@link BARS_PER_PHRASE} bars and match the
+ * numbered divisions on the ruler.
+ */
+const PHRASE_LINE = 'rgba(220, 233, 255, 0.42)'
+const BAR_LINE = 'rgba(214, 228, 250, 0.26)'
+const BEAT_LINE = 'rgba(214, 228, 250, 0.10)'
+
+/** Bars in a phrase. */
+const BARS_PER_PHRASE = 4
+
+/** A division is drawn only once it is this many pixels from its neighbour. */
+const MIN_BAR_PX = 6
+const MIN_BEAT_PX = 9
+
+export interface GridStyle {
+  width: number
+  height: number
+  fromSec: number
+  secPerPx: number
+  barSec: number
+  beatsPerBar: number
+}
+
+/**
+ * The master grid, over the clips.
+ *
+ * Bar lines carry the downbeats. Beats are drawn under them while they are far
+ * enough apart to read; once bars themselves crowd, only every nth is drawn.
+ */
+function drawGrid(ctx: CanvasRenderingContext2D, g: GridStyle): void {
+  if (!(g.barSec > 0) || !(g.secPerPx > 0)) return
+  const barPx = g.barSec / g.secPerPx
+  const beatPx = barPx / Math.max(1, g.beatsPerBar)
+  const everyBars = barPx >= MIN_BAR_PX ? 1 : Math.ceil(MIN_BAR_PX / barPx)
+
+  const line = (sec: number, color: string): void => {
+    const x = Math.round((sec - g.fromSec) / g.secPerPx) + 0.5
+    if (x < 0 || x > g.width) return
+    ctx.strokeStyle = color
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, g.height)
+    ctx.stroke()
+  }
+
+  ctx.save()
+  ctx.lineWidth = 1
+  const firstBar = Math.floor(g.fromSec / g.barSec)
+  const lastBar = Math.ceil((g.fromSec + g.width * g.secPerPx) / g.barSec)
+
+  if (beatPx >= MIN_BEAT_PX) {
+    for (let bar = firstBar; bar <= lastBar; bar++) {
+      for (let beat = 1; beat < g.beatsPerBar; beat++) {
+        line(bar * g.barSec + beat * (g.barSec / g.beatsPerBar), BEAT_LINE)
+      }
+    }
+  }
+  for (let bar = firstBar; bar <= lastBar; bar++) {
+    if (bar % everyBars !== 0) continue
+    line(bar * g.barSec, bar % BARS_PER_PHRASE === 0 ? PHRASE_LINE : BAR_LINE)
+  }
+  ctx.restore()
 }
 
 /** Where a clip reads from its source file, in file seconds. */
@@ -77,7 +149,9 @@ export function ArrangementClips({
   height,
   width,
   selectedClipId,
-  ghost
+  ghost,
+  barSec,
+  beatsPerBar
 }: ArrangementClipsProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   /**
@@ -199,6 +273,8 @@ export function ArrangementClips({
         true
       )
     }
+    drawGrid(ctx, { width: w, height: h, fromSec, secPerPx, barSec, beatsPerBar })
+
     // Drop the columns of clips that are gone or off screen.
     for (const id of columnsRef.current.keys()) {
       if (!seen.has(id)) columnsRef.current.delete(id)
@@ -211,6 +287,8 @@ export function ArrangementClips({
     height,
     selectedClipId,
     ghost,
+    barSec,
+    beatsPerBar,
     sampleRate,
     version,
     masterBpm,
