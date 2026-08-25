@@ -12,8 +12,13 @@ import {
   type WaveformColumns
 } from '@renderer/components/waveform/waveformRender'
 
-/** Height of the clip's title strip, above the waveform. */
-const HEADER_H = 14
+/**
+ * Height of the clip's title strip, above the waveform.
+ *
+ * The strip is the clip's handle: a press there picks the clip up, and a press
+ * anywhere else on the lane moves the playhead.
+ */
+export const CLIP_HEADER_H = 14
 
 /** A clip about to be dropped, drawn where it will actually land. */
 export interface ClipGhost {
@@ -120,7 +125,7 @@ export function ArrangementClips({
       ctx.fillStyle = selected ? 'rgba(90, 122, 168, 0.30)' : 'rgba(58, 74, 100, 0.22)'
       ctx.fillRect(x, 0, px, h)
       ctx.fillStyle = selected ? 'rgba(120, 156, 210, 0.55)' : 'rgba(90, 110, 145, 0.40)'
-      ctx.fillRect(x, 0, px, HEADER_H)
+      ctx.fillRect(x, 0, px, CLIP_HEADER_H)
 
       if (wave) {
         const [srcFrom, srcTo] = sourceRange(clip, sampleRate)
@@ -138,8 +143,8 @@ export function ArrangementClips({
         seen.add(clip.id)
         const cols = held.cols
         drawWaveform(ctx, cols, {
-          height: h - HEADER_H,
-          y: HEADER_H,
+          height: h - CLIP_HEADER_H,
+          y: CLIP_HEADER_H,
           x: x + visibleFrom,
           colors: BAND_COLORS,
           rgb: colorMode === 'rgb',
@@ -152,15 +157,15 @@ export function ArrangementClips({
         for (const cue of cuesInClip(clip, track.hotCues ?? [], sampleRate)) {
           const cx = Math.round((cue.at - fromSec) / secPerPx)
           ctx.fillStyle = cue.color
-          ctx.fillRect(cx, HEADER_H, 1.5, h - HEADER_H)
-          ctx.fillRect(cx, HEADER_H, 5, 4)
+          ctx.fillRect(cx, CLIP_HEADER_H, 1.5, h - CLIP_HEADER_H)
+          ctx.fillRect(cx, CLIP_HEADER_H, 5, 4)
         }
       }
 
       ctx.fillStyle = 'rgba(255, 255, 255, 0.86)'
       ctx.font = '10px -apple-system, system-ui, sans-serif'
       ctx.textBaseline = 'middle'
-      ctx.fillText(clip.name ?? track?.title ?? 'Clip', x + 5, HEADER_H / 2 + 0.5)
+      ctx.fillText(clip.name ?? track?.title ?? 'Clip', x + 5, CLIP_HEADER_H / 2 + 0.5)
 
       if (preview) {
         // Dashed: a place, not a clip that is there.
