@@ -36,6 +36,14 @@
   font-size: 12px;
 }
 
+.arr-view__note.is-warn {
+  color: var(--text);
+  padding: 2px 7px;
+  border-radius: var(--radius);
+  background: var(--bg-panel-2);
+  border-left: 2px solid var(--accent);
+}
+
 .arr-view__grid {
   color: var(--text-dim);
   font-size: 12px;

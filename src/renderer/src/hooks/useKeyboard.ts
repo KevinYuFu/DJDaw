@@ -57,7 +57,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'A', action: 'Load the track picked in the browser into the focused deck' },
   { keys: 'Tab', action: 'Move the focus to the next deck' },
   { keys: 'Shift + Tab', action: 'Move the focus back one deck' },
-  { keys: 'Cmd / Ctrl + E', action: 'Edit view: cut the track at the playhead' },
+  { keys: 'Cmd / Ctrl + E', action: 'Cut the picked clip at the playhead' },
   { keys: 'Delete', action: 'Edit and V3: delete the picked clip' },
   { keys: 'Shift + Delete', action: 'Edit view: delete it and close the gap' }
 ] as const
@@ -290,6 +290,11 @@ export function useKeyboard(): void {
       // Cut is the one binding that wants a modifier, so it is matched ahead of
       // the guard below, which hands every other Cmd/Ctrl chord to the menu.
       if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey) && !event.altKey) {
+        if (inArrangement()) {
+          event.preventDefault()
+          if (!event.repeat) useArrangement.getState().cutSelected()
+          return
+        }
         if (!inEditView()) return
         event.preventDefault()
         if (!event.repeat) cutAtPlayhead(focusedDeck())

@@ -20,6 +20,9 @@ const DEFAULT_BARS_IN_VIEW = 32
 const MIN_BARS_IN_VIEW = 4
 const MAX_BARS_IN_VIEW = 256
 
+/** How long a refused edit explains itself, in ms. */
+const NOTICE_MS = 2200
+
 /** Beats in a bar. 4/4 only. */
 const BEATS_PER_BAR = 4
 
@@ -35,6 +38,7 @@ export function ArrangementView(): ReactElement {
   const masterBpm = useArrangement((s) => s.masterBpm)
   const playing = useArrangement((s) => s.playing)
   const loading = useArrangement((s) => s.loading)
+  const notice = useArrangement((s) => s.notice)
   const selected = useArrangement((s) => s.selection)
   const [width, setWidth] = useState(900)
   const [barsInView, setBarsInView] = useState(DEFAULT_BARS_IN_VIEW)
@@ -46,6 +50,12 @@ export function ArrangementView(): ReactElement {
   useEffect(() => {
     void useArrangement.getState().init()
   }, [])
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => useArrangement.getState().clearNotice(), NOTICE_MS)
+    return () => window.clearTimeout(timer)
+  }, [notice])
 
   // A bar is the same width whatever the window size is.
   useLayoutEffect(() => {
@@ -113,7 +123,7 @@ export function ArrangementView(): ReactElement {
   useRaf(() => {
     const head = headRef.current
     if (!head) return
-    const at = useArrangement.getState().positionSeconds()
+    const at = useArrangement.getState().displaySeconds()
     head.style.transform = `translateX(${(at - fromSec) / secPerPx}px)`
   }, true)
 
@@ -132,7 +142,6 @@ export function ArrangementView(): ReactElement {
           <button
             type="button"
             className="arr-btn"
-            disabled={!selected}
             onClick={() => useArrangement.getState().cutSelected()}
             title="Cut the selected clip at the playhead"
           >
@@ -147,6 +156,7 @@ export function ArrangementView(): ReactElement {
           >
             <span>DELETE</span>
           </button>
+          {notice ? <span className="arr-view__note is-warn">{notice}</span> : null}
           {loading.length > 0 ? <span className="arr-view__note">Loading a track…</span> : null}
         </div>
         <div className="arr-view__right">
@@ -190,7 +200,6 @@ export function ArrangementView(): ReactElement {
             barSec={barSec}
             selected={selected}
             onSelect={(next) => useArrangement.getState().select(next)}
-            onScrub={(sec) => useArrangement.getState().seek(sec)}
           />
         ))}
         {/* Over the strips only, not the channel columns either side. */}

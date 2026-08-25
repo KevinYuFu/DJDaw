@@ -7,7 +7,10 @@ import { ChannelFader, ChannelKnobs } from '@renderer/components/mixer/ChannelKn
 import { useSettings } from '@renderer/state/useSettings'
 import { useArrangement, type ClipSelection } from '@renderer/state/useArrangement'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
-import { ArrangementClips } from '@renderer/components/arrangement/ArrangementClips'
+import {
+  ArrangementClips,
+  CLIP_HEADER_H
+} from '@renderer/components/arrangement/ArrangementClips'
 import { placeClip } from '@renderer/arrangement/placement'
 import { useLibrary } from '@renderer/state/useLibrary'
 
@@ -24,7 +27,6 @@ export interface ArrangementLaneProps {
   barSec: number
   selected: ClipSelection | null
   onSelect(selection: ClipSelection | null): void
-  onScrub(seconds: number): void
 }
 
 /** The clip under an arrangement position, if any. */
@@ -53,8 +55,7 @@ export function ArrangementLane({
   height,
   barSec,
   selected,
-  onSelect,
-  onScrub
+  onSelect
 }: ArrangementLaneProps): ReactElement {
   const eqMode = useSettings((s) => s.eqMode)
   const channel = useArrangement((s) => s.channels[lane.id])
@@ -68,6 +69,8 @@ export function ArrangementLane({
     moved: boolean
   } | null>(null)
   const stripRef = useRef<HTMLDivElement>(null)
+  /** The pointer holding the playhead, or null. */
+  const scrub = useRef<number | null>(null)
 
   const snap = (sec: number): number => Math.max(0, Math.round(sec / barSec) * barSec)
   const secAt = (clientX: number): number => {
@@ -76,27 +79,39 @@ export function ArrangementLane({
     return fromSec + (clientX - box.left) * secPerPx
   }
 
+  /**
+   * A press on a clip's title strip picks that clip up. A press anywhere else —
+   * over a waveform or over empty grid — takes hold of the playhead, which then
+   * follows the pointer until it is released.
+   */
   const onDown = (e: PointerEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return
+    const box = stripRef.current?.getBoundingClientRect()
     const at = secAt(e.clientX)
-    const clip = clipAt(lane, at, sampleRate)
-    if (!clip) {
-      onSelect(null)
-      onScrub(snap(at))
+    const onHeader = box ? e.clientY - box.top < CLIP_HEADER_H : false
+    const clip = onHeader ? clipAt(lane, at, sampleRate) : null
+
+    e.currentTarget.setPointerCapture(e.pointerId)
+    if (clip) {
+      onSelect({ lane: lane.id, clipId: clip.id })
+      drag.current = {
+        pointerId: e.pointerId,
+        clipId: clip.id,
+        startX: e.clientX,
+        startSec: clip.startSample / sampleRate,
+        moved: false
+      }
       return
     }
-    e.currentTarget.setPointerCapture(e.pointerId)
-    onSelect({ lane: lane.id, clipId: clip.id })
-    drag.current = {
-      pointerId: e.pointerId,
-      clipId: clip.id,
-      startX: e.clientX,
-      startSec: clip.startSample / sampleRate,
-      moved: false
-    }
+    scrub.current = e.pointerId
+    useArrangement.getState().setScrub(at)
   }
 
   const onMove = (e: PointerEvent<HTMLDivElement>): void => {
+    if (scrub.current === e.pointerId) {
+      useArrangement.getState().setScrub(secAt(e.clientX))
+      return
+    }
     const held = drag.current
     if (!held || held.pointerId !== e.pointerId) return
     const travel = e.clientX - held.startX
@@ -112,7 +127,17 @@ export function ArrangementLane({
     if (Math.abs(delta) > 1e-6) useArrangement.getState().moveClip(lane.id, held.clipId, delta)
   }
 
-  const onUp = (): void => {
+  const onUp = (e: PointerEvent<HTMLDivElement>): void => {
+    if (scrub.current === e.pointerId) {
+      // The playhead is only handed to the transport on release, so a drag
+      // across a running arrangement does not restart it on every frame.
+      const arrangement = useArrangement.getState()
+      const at = arrangement.scrub
+      arrangement.setScrub(null)
+      if (at !== null) arrangement.seek(at)
+      scrub.current = null
+      return
+    }
     if (drag.current?.moved) useArrangement.getState().endDrag()
     drag.current = null
   }

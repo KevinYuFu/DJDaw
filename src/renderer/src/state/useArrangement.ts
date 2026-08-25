@@ -82,6 +82,10 @@ export interface ArrangementState {
   selection: ClipSelection | null
   /** The clip about to be dropped, and the lane it will land on. */
   preview: DropPreview | null
+  /** Where a drag is holding the playhead, or null when nothing is dragging it. */
+  scrub: number | null
+  /** Why the last edit did nothing, for the bar to show. */
+  notice: string | null
 
   init(): Promise<void>
   /** Lay a library track into a lane, warped onto the grid. */
@@ -96,6 +100,10 @@ export interface ArrangementState {
   ensurePeaks(trackId: string): Promise<void>
   select(selection: ClipSelection | null): void
   setPreview(preview: DropPreview | null): void
+  /** Hold the playhead under a drag. Committed with {@link seek} on release. */
+  setScrub(seconds: number | null): void
+  /** Where the playhead is drawn: under a drag, that drag's position. */
+  displaySeconds(): number
   /**
    * Length of a track's audio in frames: the decoded file when it is loaded,
    * the library's stored duration before that.
@@ -103,8 +111,9 @@ export interface ArrangementState {
   sourceFrames(trackId: string): number
   /** Delete the picked clip. Does nothing when nothing is picked. */
   removeSelected(): void
-  /** Cut the picked clip at the playhead. */
+  /** Cut the picked clip at the playhead. Sets {@link notice} when refused. */
   cutSelected(): void
+  clearNotice(): void
   setMasterBpm(bpm: number): void
   play(): void
   pause(): void
@@ -180,6 +189,8 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   channels: {},
   selection: null,
   preview: null,
+  scrub: null,
+  notice: null,
 
   async init() {
     if (engine) return
@@ -338,6 +349,14 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     set({ preview })
   },
 
+  setScrub(seconds) {
+    set({ scrub: seconds === null ? null : Math.max(0, seconds) })
+  },
+
+  displaySeconds() {
+    return get().scrub ?? ArrangementEngine.shared().positionSeconds()
+  },
+
   sourceFrames(trackId) {
     const loaded = sources.get(trackId)
     if (loaded) return loaded.length
@@ -352,9 +371,27 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
 
   cutSelected() {
     const picked = get().selection
-    if (!picked) return
+    if (!picked) {
+      set({ notice: 'Pick a clip by its title bar first' })
+      return
+    }
+    const lane = engine && laneById(engine.getState().tracks, picked.lane)
+    const clip = lane?.clips.find((c) => c.id === picked.clipId)
+    if (!clip) {
+      set({ notice: 'That clip has gone' })
+      return
+    }
+    const at = get().positionSeconds() * get().sampleRate
+    if (at <= clip.startSample || at >= clip.startSample + clip.durationSamples) {
+      set({ notice: 'The playhead is not over that clip' })
+      return
+    }
     get().splitClip(picked.lane, picked.clipId, get().positionSeconds())
-    set({ selection: null })
+    set({ selection: null, notice: null })
+  },
+
+  clearNotice() {
+    set({ notice: null })
   },
 
   /**
