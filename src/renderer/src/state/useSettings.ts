@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { applyTheme, DEFAULT_THEME_ID } from '@renderer/styles/themes'
 import { DECK_IDS, type DeckId } from '@shared/types'
 import type { EqMode } from '@shared/eq'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
@@ -38,6 +39,8 @@ export interface SettingsState {
   /** Which view is on screen. See {@link ViewName}. */
   view: ViewName
   waveformColorMode: WaveformColorMode
+  /** Which colour theme the app paints with. See `styles/themes.ts`. */
+  themeId: string
   /** Whether the browser panel is at full height. */
   browserExpanded: boolean
   /**
@@ -58,6 +61,7 @@ export interface SettingsState {
   /** `Tab` — the next deck. Shorthand for `cycleFocusedDeck(1)`. */
   toggleFocusedDeck(): void
   setWaveformColorMode(mode: WaveformColorMode): void
+  setThemeId(id: string): void
   /** Switch the EQ floor. Every deck's EQ is re-applied at once. */
   setEqMode(mode: EqMode): void
   setBrowserExpanded(expanded: boolean): void
@@ -86,6 +90,7 @@ export const useSettings = create<SettingsState>()(
       focusedDeck: 'A',
       view: 'performance',
       waveformColorMode: '3band',
+      themeId: DEFAULT_THEME_ID,
       browserExpanded: true,
       eqMode: 'eq',
 
@@ -124,6 +129,11 @@ export const useSettings = create<SettingsState>()(
         set({ waveformColorMode: mode })
       },
 
+      setThemeId(id) {
+        set({ themeId: id })
+        applyTheme(id)
+      },
+
       setEqMode(mode) {
         set({ eqMode: mode })
       },
@@ -139,12 +149,15 @@ export const useSettings = create<SettingsState>()(
     {
       name: 'djdaw.settings',
       version: 1,
+      // The stored theme has to reach the document, not just the store.
+      onRehydrateStorage: () => (state) => applyTheme(state?.themeId ?? DEFAULT_THEME_ID),
       // Actions are not serialisable and would only bloat the stored blob.
       partialize: (s) => ({
         masterVolume: s.masterVolume,
         focusedDeck: s.focusedDeck,
         view: s.view,
         waveformColorMode: s.waveformColorMode,
+        themeId: s.themeId,
         browserExpanded: s.browserExpanded,
         eqMode: s.eqMode
       })

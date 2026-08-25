@@ -9,7 +9,8 @@ import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { BeatGrid, DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
-import { BAND_COLORS, WAVE_ZOOM_LEVELS } from '@renderer/core/constants'
+import { WAVE_ZOOM_LEVELS } from '@renderer/core/constants'
+import { bandColors } from '@renderer/styles/themes'
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
@@ -66,9 +67,6 @@ const WAVE_GAIN = 0.8
  * the scan stops being free.
  */
 const MAX_SAMPLES_PER_COLUMN = 600
-
-/** Mono mode collapses the bands into the high band's near-white. */
-const MONO_COLOR = BAND_COLORS.high
 
 /** Playhead movement below this is invisible, so the frame can be skipped. */
 const MIN_PLAYHEAD_STEP_PX = 0.2
@@ -166,6 +164,10 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
   const track = useLibrary((s) => (trackId ? (s.trackById(trackId) ?? null) : null))
   const mono = useSettings((s) => s.waveformColorMode === 'mono')
   const rgb = useSettings((s) => s.waveformColorMode === 'rgb')
+  // The id is the selector, not the colours: a fresh object every render would
+  // never compare equal and the store would re-render forever.
+  const themeId = useSettings((s) => s.themeId)
+  const bands = useMemo(() => bandColors(themeId), [themeId])
   const buffer = useDecks((s) => s.decks[deckId].buffer)
   // Held as plain arrays so the draw loop never touches the AudioBuffer, whose
   // getChannelData is not free to call sixty times a second.
@@ -332,8 +334,8 @@ export function DetailWaveform({ deckId, selectClips = false }: DetailWaveformPr
         extentsRef.current = extents
         drawWaveform(ctx, cols, {
           height,
-          colors: BAND_COLORS,
-          mono: state.mono ? MONO_COLOR : undefined,
+          colors: bands,
+          mono: state.mono ? bands.high : undefined,
           rgb: state.rgb,
           gain: WAVE_GAIN,
           subpixel: dpr,

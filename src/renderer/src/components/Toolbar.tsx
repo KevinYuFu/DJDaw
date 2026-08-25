@@ -5,6 +5,7 @@ import { formatBpm } from '@renderer/core/format'
 import { KEYBOARD_SHORTCUTS } from '@renderer/hooks/useKeyboard'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
+import { THEMES, type Theme } from '@renderer/styles/themes'
 import { useArrangement } from '@renderer/state/useArrangement'
 import {
   clampMasterBpm,
@@ -215,32 +216,133 @@ const WAVEFORM_COLOR_OPTIONS: ReadonlyArray<{
   { value: 'mono', label: 'Mono', note: 'One envelope in the deck colour.' }
 ]
 
+/** The tokens a theme card shows, in the order they are drawn. */
+const SWATCH_TOKENS = ['accent', 'deck-a', 'deck-b', 'play', 'cue', 'danger'] as const
+
+/**
+ * One theme, shown in its own colours.
+ *
+ * The card is painted from the same token record the app is painted from, so
+ * what is on the card is what the theme does.
+ */
+function ThemeCard({
+  theme,
+  picked,
+  onPick
+}: {
+  theme: Theme
+  picked: boolean
+  onPick(): void
+}): ReactElement {
+  const t = theme.tokens
+  return (
+    <button
+      type="button"
+      className={`theme-card${picked ? ' is-on' : ''}`}
+      style={{ background: t['bg-panel'], borderColor: picked ? t.accent : t['border-soft'] }}
+      aria-pressed={picked}
+      onClick={onPick}
+    >
+      <span className="theme-card__preview" style={{ background: t['bg-app'] }}>
+        <span className="theme-card__bar" style={{ background: t['bg-panel-2'] }}>
+          <span className="theme-card__pip" style={{ background: t.accent }} />
+          <span className="theme-card__rule" style={{ background: t['text-faint'] }} />
+        </span>
+        <span className="theme-card__wave" style={{ background: t['bg-waveform'] }}>
+          <span style={{ background: t['wave-low'] }} />
+          <span style={{ background: t['wave-mid'] }} />
+          <span style={{ background: t['wave-high'] }} />
+          <span style={{ background: t['wave-low'] }} />
+          <span style={{ background: t['wave-mid'] }} />
+        </span>
+      </span>
+
+      <span className="theme-card__body">
+        <span className="theme-card__name" style={{ color: t.text }}>
+          {theme.name}
+        </span>
+        <span className="theme-card__note" style={{ color: t['text-dim'] }}>
+          {theme.note}
+        </span>
+        <span className="theme-card__swatches">
+          {SWATCH_TOKENS.map((token) => (
+            <span
+              key={token}
+              className="theme-card__swatch"
+              style={{ background: t[token], borderColor: t['bg-panel'] }}
+              title={token}
+            />
+          ))}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+const SETTINGS_TABS = [
+  { id: 'theme', label: 'Theme' },
+  { id: 'waveform', label: 'Waveform' }
+] as const
+
+type SettingsTab = (typeof SETTINGS_TABS)[number]['id']
+
 function SettingsModal({ onClose }: { onClose(): void }): ReactElement {
   const waveformColorMode = useSettings((s) => s.waveformColorMode)
   const setWaveformColorMode = useSettings((s) => s.setWaveformColorMode)
+  const themeId = useSettings((s) => s.themeId)
+  const setThemeId = useSettings((s) => s.setThemeId)
+  const [tab, setTab] = useState<SettingsTab>('theme')
 
   return (
     <Modal title="Settings" onClose={onClose}>
       <div className="settings">
-        <fieldset className="settings__group">
-          <legend className="settings__legend">Waveform colour</legend>
-          {WAVEFORM_COLOR_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className={`settings__choice${waveformColorMode === option.value ? ' is-on' : ''}`}
+        <div className="settings__tabs" role="tablist" aria-label="Settings sections">
+          {SETTINGS_TABS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === entry.id}
+              className={tab === entry.id ? 'active' : undefined}
+              onClick={() => setTab(entry.id)}
             >
-              <input
-                type="radio"
-                name="waveform-colour"
-                value={option.value}
-                checked={waveformColorMode === option.value}
-                onChange={() => setWaveformColorMode(option.value)}
-              />
-              <span className="settings__choice-label">{option.label}</span>
-              <span className="settings__choice-note">{option.note}</span>
-            </label>
+              {entry.label}
+            </button>
           ))}
-        </fieldset>
+        </div>
+
+        {tab === 'theme' ? (
+          <div className="theme-grid" role="group" aria-label="Colour theme">
+            {THEMES.map((entry) => (
+              <ThemeCard
+                key={entry.id}
+                theme={entry}
+                picked={entry.id === themeId}
+                onPick={() => setThemeId(entry.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <fieldset className="settings__group">
+            <legend className="settings__legend">Waveform colour</legend>
+            {WAVEFORM_COLOR_OPTIONS.map((option) => (
+              <label
+                key={option.value}
+                className={`settings__choice${waveformColorMode === option.value ? ' is-on' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="waveform-colour"
+                  value={option.value}
+                  checked={waveformColorMode === option.value}
+                  onChange={() => setWaveformColorMode(option.value)}
+                />
+                <span className="settings__choice-label">{option.label}</span>
+                <span className="settings__choice-note">{option.note}</span>
+              </label>
+            ))}
+          </fieldset>
+        )}
       </div>
     </Modal>
   )

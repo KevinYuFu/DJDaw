@@ -1,11 +1,11 @@
-import { useEffect, useRef, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, type ReactElement } from 'react'
 import type { ClipTrack } from '@waveform-playlist/core'
 import type { HotCue } from '@shared/types'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
 import { useArrangement } from '@renderer/state/useArrangement'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
-import { BAND_COLORS } from '@renderer/core/constants'
+import { bandColors } from '@renderer/styles/themes'
 import {
   buildColumns,
   drawWaveform,
@@ -164,6 +164,10 @@ export function ArrangementClips({
   const waveforms = useArrangement((s) => s.waveforms)
   const tracks = useLibrary((s) => s.tracks)
   const colorMode = useSettings((s) => s.waveformColorMode)
+  // The id is the selector, not the colours: a fresh object every render would
+  // never compare equal and the store would re-render forever.
+  const themeId = useSettings((s) => s.themeId)
+  const bands = useMemo(() => bandColors(themeId), [themeId])
   const sampleRate = useArrangement((s) => s.sampleRate)
 
   useEffect(() => {
@@ -220,9 +224,9 @@ export function ArrangementClips({
           height: h - CLIP_HEADER_H,
           y: CLIP_HEADER_H,
           x: x + visibleFrom,
-          colors: BAND_COLORS,
+          colors: bands,
           rgb: colorMode === 'rgb',
-          mono: colorMode === 'mono' ? '#cfd8e6' : undefined,
+          mono: colorMode === 'mono' ? bands.high : undefined,
           dim: selected ? 1 : 0.86
         })
       }
@@ -294,7 +298,8 @@ export function ArrangementClips({
     masterBpm,
     waveforms,
     tracks,
-    colorMode
+    colorMode,
+    bands
   ])
 
   return <canvas className="arr-lane__canvas" ref={canvasRef} />

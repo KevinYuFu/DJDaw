@@ -35,19 +35,6 @@ export const WAVEFORM_CACHE_VERSION = 1
 export const LIBRARY_VERSION = 1
 
 /** Waveform band colours. rekordbox's classic "3Band" look. */
-export const BAND_COLORS = {
-  low: '#1461d2',
-  mid: '#ef8c1c',
-  high: '#e8f2ff'
-} as const
-
-/** Dimmed variants used for the part of the overview already played. */
-export const BAND_COLORS_DIM = {
-  low: '#0d3a7d',
-  mid: '#8f5411',
-  high: '#7d879a'
-} as const
-
 export const CUE_COLOR = '#e8433a'
 export const MEMORY_CUE_COLOR = '#e8433a'
 export const LOOP_COLOR = '#f5a11c'

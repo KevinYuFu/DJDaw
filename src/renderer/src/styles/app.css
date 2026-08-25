@@ -29,7 +29,7 @@
   align-items: center;
   gap: 14px;
   padding: 0 12px;
-  background: linear-gradient(#26262c, #171719);
+  background: linear-gradient(var(--chrome-hi), var(--chrome-lo));
   border-bottom: 1px solid var(--border);
   /* The window is frameless on macOS, so this strip is the title bar. */
   -webkit-app-region: drag;
@@ -121,7 +121,7 @@
   width: 10px;
   height: 16px;
   border-radius: 2px;
-  border: 1px solid #0b0b0d;
+  border: 1px solid var(--bg-app);
   background: linear-gradient(#f2f2f5, #9a9aa4);
 }
 .toolbar__volume input[type='range']:focus {
@@ -523,7 +523,7 @@
 }
 .knob__body {
   fill: var(--bg-raised);
-  stroke: #0c0c0f;
+  stroke: var(--bg-app);
   stroke-width: 1;
 }
 .knob__track {
@@ -578,8 +578,8 @@
   width: 26px;
   height: 14px;
   transform: translate(-50%, -50%);
-  background: linear-gradient(#4a4a54, #26262c);
-  border: 1px solid #0b0b0d;
+  background: linear-gradient(var(--chrome-hi), var(--chrome-lo));
+  border: 1px solid var(--bg-app);
   border-radius: 2px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
@@ -594,7 +594,7 @@
 }
 .fader:hover .fader__cap {
   border-color: var(--border-strong);
-  background: linear-gradient(#585864, #2c2c33);
+  background: linear-gradient(var(--border-strong), var(--chrome-hi));
 }
 
 .crossfader {
@@ -629,8 +629,8 @@
   width: 18px;
   height: 20px;
   transform: translate(-50%, -50%);
-  background: linear-gradient(#4a4a54, #26262c);
-  border: 1px solid #0b0b0d;
+  background: linear-gradient(var(--chrome-hi), var(--chrome-lo));
+  border: 1px solid var(--bg-app);
   border-radius: 2px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
@@ -646,10 +646,142 @@
 }
 .crossfader:hover .crossfader__cap {
   border-color: var(--border-strong);
-  background: linear-gradient(#585864, #2c2c33);
+  background: linear-gradient(var(--border-strong), var(--chrome-hi));
 }
 
 /* Settings panel */
+.settings__tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 10px;
+}
+
+.settings__tabs button {
+  min-width: 84px;
+}
+
+/* One card per theme, painted in that theme's own colours. */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: transform 90ms ease, box-shadow 90ms ease;
+}
+
+.theme-card:hover {
+  transform: translateY(-1px);
+}
+
+.theme-card.is-on {
+  box-shadow: 0 0 0 1px currentColor inset;
+}
+
+.theme-card__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  height: 74px;
+}
+
+.theme-card__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 14px;
+  padding: 0 6px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.theme-card__pip {
+  width: 16px;
+  height: 6px;
+  border-radius: 2px;
+}
+
+.theme-card__rule {
+  flex: 1 1 auto;
+  height: 2px;
+  border-radius: 1px;
+  opacity: 0.5;
+}
+
+.theme-card__wave {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 2px;
+}
+
+.theme-card__wave > span {
+  flex: 1 1 auto;
+  border-radius: 1px;
+}
+
+.theme-card__wave > span:nth-child(1) {
+  height: 46%;
+}
+.theme-card__wave > span:nth-child(2) {
+  height: 76%;
+}
+.theme-card__wave > span:nth-child(3) {
+  height: 30%;
+}
+.theme-card__wave > span:nth-child(4) {
+  height: 62%;
+}
+.theme-card__wave > span:nth-child(5) {
+  height: 40%;
+}
+
+.theme-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px 11px;
+}
+
+.theme-card__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.theme-card__note {
+  font-size: 11px;
+  line-height: 1.35;
+  min-height: 30px;
+}
+
+.theme-card__swatches {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.theme-card__swatch {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid;
+}
+
 .settings {
   display: flex;
   flex-direction: column;
@@ -685,11 +817,11 @@
 }
 
 .settings__choice:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay);
 }
 
 .settings__choice.is-on {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--overlay-strong);
 }
 
 .settings__choice input {
@@ -747,7 +879,7 @@
   width: 120px;
   height: 2px;
   border-radius: 1px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--overlay-strong);
   overflow: hidden;
   pointer-events: none;
   z-index: 40;

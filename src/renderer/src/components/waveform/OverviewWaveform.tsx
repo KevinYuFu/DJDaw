@@ -8,7 +8,7 @@ import type { Slide } from '@renderer/components/waveform/clipSlide'
 import type { DeckId, HotCue, MemoryCue, WaveformData } from '@shared/types'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
-import { BAND_COLORS, BAND_COLORS_DIM } from '@renderer/core/constants'
+import { bandColors, bandColorsDim } from '@renderer/styles/themes'
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
@@ -64,10 +64,6 @@ export interface OverviewWaveformProps {
  */
 const WAVE_GAIN = 1.2
 
-/** Mono mode collapses the bands into the high band's near-white. */
-const MONO_COLOR = BAND_COLORS.high
-const MONO_COLOR_DIM = BAND_COLORS_DIM.high
-
 /** Opacity of the already-played half in RGB mode. */
 const RGB_DIM = 0.42
 
@@ -97,6 +93,7 @@ interface FrameState {
   draggable: boolean
   mono: boolean
   rgb: boolean
+  themeId: string
 }
 
 /** The two static layers, and what they were last rasterised from. */
@@ -111,6 +108,7 @@ interface Layers {
   dpr: number
   mono: boolean
   rgb: boolean
+  themeId: string
 }
 
 /** A needle drop: it began on empty space, or on a strip that does not drag. */
@@ -163,6 +161,7 @@ export function OverviewWaveform({
   const track = useLibrary((s) => (trackId ? (s.trackById(trackId) ?? null) : null))
   const mono = useSettings((s) => s.waveformColorMode === 'mono')
   const rgb = useSettings((s) => s.waveformColorMode === 'rgb')
+  const themeId = useSettings((s) => s.themeId)
 
   // The waveform's own bucket count is the most accurate length available; the
   // track's tag duration is only a fallback for the moments before it arrives.
@@ -189,7 +188,8 @@ export function OverviewWaveform({
     selectedClipId: null,
     draggable: false,
     mono: false,
-    rgb: false
+    rgb: false,
+    themeId: ''
   })
 
   // No dependency list: this is the one place the slow-changing store values
@@ -213,7 +213,8 @@ export function OverviewWaveform({
       selectedClipId: draggableClips ? selectedClipId : null,
       draggable: draggableClips,
       mono,
-      rgb
+      rgb,
+      themeId
     }
     dirtyRef.current = true
   })
@@ -268,7 +269,15 @@ export function OverviewWaveform({
       dirtyRef.current = false
       lastX = playX
 
-      const layers = rasterise(layersRef.current, state, width, height, dpr)
+      const layers = rasterise(
+        layersRef.current,
+        state,
+        width,
+        height,
+        dpr,
+        bandColors(state.themeId),
+        bandColorsDim(state.themeId)
+      )
       layersRef.current = layers
 
       const ctx = sizeCanvas(canvas, width, height, dpr)
@@ -516,7 +525,9 @@ function rasterise(
   state: FrameState,
   width: number,
   height: number,
-  dpr: number
+  dpr: number,
+  bands: BandColors,
+  dimBands: BandColors
 ): Layers {
   const layers: Layers = current ?? {
     played: document.createElement('canvas'),
@@ -528,13 +539,15 @@ function rasterise(
     height: 0,
     dpr: 0,
     mono: false,
-    rgb: false
+    rgb: false,
+    themeId: ''
   }
   const unchanged =
     current !== null &&
     layers.waveform === state.waveform &&
     layers.clips === state.clips &&
     layers.duration === state.duration &&
+    layers.themeId === state.themeId &&
     layers.width === width &&
     layers.height === height &&
     layers.dpr === dpr &&
@@ -550,6 +563,7 @@ function rasterise(
   layers.dpr = dpr
   layers.mono = state.mono
   layers.rgb = state.rgb
+  layers.themeId = state.themeId
 
   // Once a row is cut, timeline seconds stop matching source seconds, so the
   // pieces are the only honest way to lay the envelope out. A row with no
@@ -568,8 +582,8 @@ function rasterise(
         )
       : buildColumns(layers.waveform, 0, state.duration, width * dpr, layers.waveform.sampleRate)
   const passes: ReadonlyArray<[HTMLCanvasElement, BandColors, string, number]> = [
-    [layers.played, BAND_COLORS_DIM, MONO_COLOR_DIM, RGB_DIM],
-    [layers.live, BAND_COLORS, MONO_COLOR, 1]
+    [layers.played, dimBands, dimBands.high, RGB_DIM],
+    [layers.live, bands, bands.high, 1]
   ]
   for (const [canvas, colors, monoColor, dim] of passes) {
     const ctx = sizeCanvas(canvas, width, height, dpr)
