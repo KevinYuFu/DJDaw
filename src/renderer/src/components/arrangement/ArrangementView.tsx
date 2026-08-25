@@ -185,7 +185,7 @@ export function ArrangementView(): ReactElement {
             <span>−</span>
           </button>
           <span className="mono arr-view__grid">
-            {Math.round(barsInView)} bars · {BEATS_PER_BAR}/4 · 1 bar snap
+            {Math.round(barsInView)} bars · {BEATS_PER_BAR}/4 · 1/4 snap
           </span>
         </div>
       </div>
