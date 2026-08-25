@@ -63,7 +63,7 @@ async function openAudioFiles(event: IpcMainInvokeEvent): Promise<string[]> {
     ]
   }
 
-  // Owning the dialog makes it a sheet on macOS instead of a floating window.
+  // An owned dialog is a sheet on macOS, not a floating window.
   const result = owner
     ? await dialog.showOpenDialog(owner, options)
     : await dialog.showOpenDialog(options)
@@ -179,8 +179,7 @@ async function pickXmlFile(
 /**
  * Push a mirror refresh to every window.
  *
- * Broadcast rather than sent to one window because the mirror is process-wide
- * state: any window that exists is showing the same rekordbox collection.
+ * The mirror is process-wide state: every window shows the same collection.
  */
 function broadcastSync(result: RekordboxSyncResult): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -197,9 +196,8 @@ function syncRekordbox(): Promise<RekordboxSyncResult> {
 /**
  * Choose the XML export to mirror, remember it, and sync it now.
  *
- * Cancelling re-syncs whatever was already remembered instead of resolving
- * empty: the result replaces the renderer's mirror wholesale, so an empty one
- * would look exactly like the user having thrown their collection away.
+ * The result replaces the renderer's mirror wholesale, so cancelling re-syncs
+ * whatever was already remembered and never resolves empty.
  */
 async function chooseRekordboxXml(event: IpcMainInvokeEvent): Promise<RekordboxSyncResult> {
   const xmlPath = await pickXmlFile(event, 'Sync')
@@ -220,14 +218,13 @@ async function clearRekordboxXml(): Promise<void> {
 /**
  * Start mirroring the remembered export, if there is one, and push the result.
  *
- * Called once the first window has loaded so the mirror is populated at launch
- * without the user doing anything. The push can still land a moment before the
- * renderer subscribes, which is why `syncRekordbox` stays callable: a renderer
- * that missed it can simply ask.
+ * Called once the first window has loaded, so the mirror is populated at
+ * launch. The push can land before the renderer subscribes; a renderer that
+ * missed it calls `syncRekordbox`.
  */
 export async function startRekordboxSync(): Promise<void> {
-  // The path is read from disk rather than from `getRekordboxXmlPath`, since at
-  // launch nothing has loaded the library into main yet.
+  // Read from disk, not from `getRekordboxXmlPath`: at launch nothing has
+  // loaded the library into main yet.
   const lib = await loadLibrary()
   const remembered = lib.rekordboxXmlPath
 
@@ -262,11 +259,9 @@ export async function startRekordboxSync(): Promise<void> {
 /**
  * Read a rekordbox XML collection export.
  *
- * rekordbox 6/7 keeps its live library in an SQLCipher-encrypted `master.db`;
- * the XML export is the supported interchange format and the only one that is
- * safe to read, since it is a copy rather than the database rekordbox is using.
- * Parsing happens here rather than in the renderer so a large collection never
- * has to cross IPC as one huge string.
+ * The XML export is the supported interchange format, and a copy rather than
+ * the live database. Parsed here, so a large collection never crosses IPC as
+ * one string.
  */
 async function importRekordboxXml(event: IpcMainInvokeEvent): Promise<RekordboxImportResult> {
   const xmlPath = await pickXmlFile(event, 'Import')
@@ -338,8 +333,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('rekordbox:clear', (): Promise<void> => clearRekordboxXml())
 
-  // Never rejects: a failed export comes back as `error` on the result, so the
-  // renderer can show the reason instead of catching.
+  // Never rejects. A failed export comes back as `error` on the result.
   ipcMain.handle('audio:export', (_event, request: ExportRequest): Promise<ExportResult> =>
     exportAudio(request)
   )

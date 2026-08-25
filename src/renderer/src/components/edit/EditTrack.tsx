@@ -50,10 +50,7 @@ function preventFocus(e: ReactMouseEvent<HTMLElement>): void {
   e.preventDefault()
 }
 
-/**
- * A hot cue colour at reduced opacity, so a set pad reads as a cue marker
- * rather than as a lit button. Same treatment the deck's pads get.
- */
+/** A hot cue colour at reduced opacity, so a set pad reads as a cue marker. */
 function tint(hex: string, alpha: number): string {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex
   const n = parseInt(hex.slice(1), 16)
@@ -113,8 +110,8 @@ function arcPath(radius: number, fromDeg: number, toDeg: number): string {
 /**
  * What the knob is doing, in the units the knob is in.
  *
- * The mode only reaches the three bands: it decides how deep a full cut goes,
- * so in isolator mode the bottom of a band reads `KILL` rather than a number.
+ * The mode reaches the three bands only, where it sets how deep a full cut
+ * goes: in isolator mode the bottom of a band reads `KILL`.
  */
 function knobReadout(id: keyof ChannelEq, value: number, mode: EqMode): string {
   if (id === 'filter') return formatFilter(value)
@@ -139,10 +136,8 @@ interface ChannelFaderProps {
 /**
  * The channel fader for one row.
  *
- * Vertical, and tapered like a DAW fader rather than a mixer's trim: silent at
- * the bottom, 0 dB near the top and a little headroom over it. Sits between the
- * waveform and the rest of the controls because it is the one thing on the row
- * that is about the level of the track rather than about editing it.
+ * Vertical and tapered: silent at the bottom, 0 dB near the top, a little
+ * headroom over it. Sits between the waveform and the editing controls.
  */
 function ChannelFader({ deckId, disabled }: ChannelFaderProps): ReactElement {
   const position = useDecks((s) => s.decks[deckId].fader)
@@ -198,14 +193,11 @@ interface ChannelEqProps {
 /**
  * Trim, three-band EQ and filter for one row.
  *
- * Its own component so that a knob move re-renders five small SVGs instead of
- * the whole row: the waveform beside it is the expensive neighbour, and a drag
- * writes to the store on every pointer move.
+ * Its own component, so a knob move re-renders five small SVGs and not the
+ * whole row.
  *
- * Knobs are dragged vertically — up is more — and a double-click puts one back
- * to centre, which is how every mixer plugin behaves. The live value goes in a
- * readout floating above the strip rather than under each knob, because 26px
- * of width cannot hold `-26 dB`.
+ * Knobs drag vertically, up for more; a double-click returns one to centre.
+ * The live value goes in a readout above the strip, which has room for it.
  */
 function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
   const eq = useDecks((s) => s.decks[deckId].eq)
@@ -320,14 +312,12 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
 /**
  * One track of the editing view: a deck squeezed into a single row.
  *
- * It is the same deck underneath — every control calls the store the CDJ-style
- * deck calls, so `Q` / `W`, the number pads, the transport and the channel EQ
- * behave identically here. Only the chrome is smaller, because four of these have to
- * fit where two full decks did.
+ * The same deck underneath — every control calls the store the full deck calls,
+ * so `Q` / `W`, the number pads, the transport and the channel EQ behave
+ * identically here. Only the chrome is smaller.
  *
  * The clocks and the live BPM are written straight into their DOM nodes from a
- * rAF loop, as the deck header's are: four rows re-rendering sixty times a
- * second would cost more than everything else on screen.
+ * rAF loop, as the deck header's are.
  */
 export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   const status = useDecks((s) => s.decks[deckId].status)
@@ -356,8 +346,8 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
 
   useRaf(() => {
     if (!deck) return
-    // Read the stores here rather than closing over them, so a grid nudge or a
-    // tempo move lands on the next frame without restarting the loop.
+    // Read the stores here, so a grid nudge or a tempo move lands on the next
+    // frame without restarting the loop.
     const state = useDecks.getState().decks[deckId]
     const current = state.trackId ? useLibrary.getState().trackById(state.trackId) : undefined
     const grid = current?.grid ?? null

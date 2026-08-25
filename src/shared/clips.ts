@@ -2,9 +2,8 @@
  * Clips: the pieces an edit track is made of.
  *
  * A track row starts as one clip covering the whole file. Cutting it at the
- * playhead splits that clip in two, and from then on the row is a *timeline*
- * rather than a file: position along the row no longer equals position in the
- * source audio, because pieces can be removed or moved.
+ * playhead splits that clip in two, and from then on the row is a *timeline*:
+ * position along the row no longer equals position in the source audio.
  *
  * Two clocks, and keeping them straight is the whole job here:
  *   - timeline seconds: where you are on the row
@@ -25,11 +24,9 @@ export interface Clip {
   /**
    * A hole in the row: it takes up time and plays nothing.
    *
-   * Deleting a piece from the middle of a row leaves one of these rather than
-   * closing the row up, because the pieces after it were placed against the
-   * ones before and pulling them earlier is rarely what was meant. It is a
-   * piece like any other — it can be selected, reordered and deleted — and
-   * deleting it is what closes the row up.
+   * Deleting a piece from the middle of a row leaves one of these, holding the
+   * pieces after it in place. It is a piece like any other — selectable,
+   * reorderable, deletable — and deleting it closes the row up.
    */
   silent?: boolean
 }
@@ -65,9 +62,8 @@ export function segmentIndexAt(clips: readonly Clip[], timelineSec: number): num
  *
  * Measured against the row with the piece taken out, so the answer is an index
  * into that shorter list: dropping a piece where it already is gives back its
- * own index and nothing moves. The comparison is against each remaining
- * piece's middle, so a piece has to be dragged past half of its neighbour
- * before they trade places rather than flickering at the first pixel.
+ * own index. The comparison is against each remaining piece's middle, so a
+ * piece trades places once it is dragged past half of its neighbour.
  */
 export function dropIndex(clips: readonly Clip[], id: string, startSec: number): number {
   const rest = clips.filter((clip) => clip.id !== id)
@@ -205,8 +201,7 @@ export function clipAt(clips: readonly Clip[], timelineSec: number): Clip | null
 /**
  * Source position for a timeline position, or null in a gap.
  *
- * This is the conversion the waveform renderer and the playback engine both
- * need, and the reason clips exist as a shared module rather than as UI state.
+ * The conversion the waveform renderer and the playback engine both use.
  */
 export function sourceTimeAt(clips: readonly Clip[], timelineSec: number): number | null {
   const clip = clipAt(clips, timelineSec)
@@ -219,16 +214,15 @@ export interface SplitResult {
   /** The two halves, or null when nothing was cut. */
   left: Clip | null
   right: Clip | null
-  /** Why a cut did nothing, for the UI to report rather than failing silently. */
+  /** Why a cut did nothing, for the UI to report. */
   reason?: 'gap' | 'too-short'
 }
 
 /**
  * Cut the clip under the playhead in two.
  *
- * A cut exactly on a clip boundary, or one that would leave a sliver shorter
- * than {@link MIN_CLIP_SEC}, is refused rather than producing a clip too small
- * to grab. The clips array is returned unchanged in that case.
+ * A cut exactly on a clip boundary, or one leaving a sliver shorter than
+ * {@link MIN_CLIP_SEC}, is refused and the clips array returned unchanged.
  */
 export function splitAt(clips: readonly Clip[], timelineSec: number): SplitResult {
   const target = clipAt(clips, timelineSec)
@@ -268,8 +262,7 @@ export function removeClip(clips: readonly Clip[], id: string): Clip[] {
 
 /**
  * Remove a clip and pull everything after it back by its length, closing the
- * gap. This is a ripple delete, and it is what you want when trimming an intro
- * out of a track rather than punching a hole in it.
+ * gap. A ripple delete: use it to trim a section out of a track.
  */
 export function rippleRemoveClip(clips: readonly Clip[], id: string): Clip[] {
   const target = clips.find((clip) => clip.id === id)

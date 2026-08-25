@@ -48,13 +48,12 @@ import { useSettings } from '@renderer/state/useSettings'
 /**
  * Every deck and everything the transport does.
  *
- * The playhead is deliberately not in here: at 60 Hz it would re-render the
- * whole app every frame. Actions that need the live position ask the engine
- * for it with `Deck.positionSeconds()`, which is why almost none of them take
- * a time argument, and why nothing in this file runs a rAF loop.
+ * The playhead is not in here. Actions that need the live position ask the
+ * engine for it with `Deck.positionSeconds()`, so almost none of them take a
+ * time argument and nothing in this file runs a rAF loop.
  *
- * Persisted per-track data — cues, grid, BPM — is not duplicated here either.
- * It is read from and written back to `useLibrary`, the single source of truth.
+ * Persisted per-track data — cues, grid, BPM — lives in `useLibrary`, the
+ * single source of truth, and is read and written back there.
  */
 export interface DeckState {
   trackId: string | null
@@ -79,7 +78,7 @@ export interface DeckState {
   /** Kept with `active: false` after a loop exits, so the UI can re-loop it. */
   loop: { active: boolean; startSec: number; endSec: number } | null
   zoomIndex: number
-  /** Waveform data, kept out of the library store because it is large. */
+  /** Waveform data. Held here, not in the library store, for its size. */
   waveform: WaveformData | null
   /** The AudioBuffer stays here so analysis and export can reach it. */
   buffer: AudioBuffer | null
@@ -90,8 +89,7 @@ export interface DeckState {
    * it into a timeline, and from then on a position along the deck is no
    * longer a position in the source audio — `sourceTimeAt` does that
    * conversion. Every deck carries one, the two performance decks included, so
-   * playback and drawing take a single path instead of special-casing the
-   * decks that happen never to be cut.
+   * playback and drawing take a single path.
    */
   clips: Clip[]
   /** The clip the edit view has selected, or null. */
@@ -99,9 +97,8 @@ export interface DeckState {
   /**
    * Trim, three-band EQ and filter positions for this channel, 0.5 flat.
    *
-   * Session state belonging to the channel rather than to the track, so it
-   * outlives a track swap: a DJ sets a channel up and then changes what runs
-   * through it. Ejecting the deck is the channel going away, and does clear it.
+   * Session state belonging to the channel, not the track: it outlives a track
+   * swap. Ejecting the deck clears it.
    */
   eq: ChannelEq
   /**
@@ -127,8 +124,7 @@ export interface DecksState {
   loadTrack(deck: DeckId, trackId: string): Promise<void>
   /**
    * Eject: stop the deck, drop its audio and put it back to empty. Also how a
-   * deck recovers when its track leaves the library, because every other
-   * action needs that track to find anything to act on.
+   * deck recovers when its track leaves the library.
    */
   unloadDeck(deck: DeckId): void
   togglePlay(deck: DeckId): void
@@ -186,8 +182,7 @@ export interface DecksState {
    * Cut the clip under the playhead in two. Snaps to the grid first when
    * Quantize is on.
    *
-   * A refusal comes back with its reason so the button can say why instead of
-   * looking broken.
+   * A refusal comes back with its reason, for the button to show.
    */
   cutAtPlayhead(deck: DeckId): CutResult
   selectClip(deck: DeckId, clipId: string | null): void
@@ -210,8 +205,8 @@ export interface DecksState {
   /**
    * Put a piece at a place in the order.
    *
-   * Driven straight from a drag: the row rearranges under the hand rather than
-   * on release, so what the drop will do is what is already on screen.
+   * Driven straight from a drag: the row rearranges under the hand, so the
+   * drop does what is already on screen.
    */
   reorderClipTo(deck: DeckId, clipId: string, index: number): void
   /** Move one channel knob. `value` is a 0-1 position, 0.5 flat. */
@@ -386,7 +381,7 @@ function trackDuration(ctx: DeckContext): number {
 
 /**
  * Seeking never starts or stops the deck, but it can end a loop: a jump out of
- * the looped region leaves the loop rather than being pulled back into it.
+ * the looped region leaves the loop.
  */
 function seekDeck(ctx: DeckContext, sec: number): void {
   const target = clamp(sec, 0, trackDuration(ctx))
@@ -418,13 +413,12 @@ function playDeck(ctx: DeckContext): void {
 }
 
 /**
- * Is a paused deck sitting on the cue point? Judged from where the deck was
- * commanded to as well as from what it reported, because a report can be a
- * whole interval out of date and the two answers are not equally costly: a
- * false "no" makes a CUE press overwrite the saved cue point instead of
- * previewing from it. The commanded position only counts while the reported
- * one still agrees with it, so a jog scrub — which moves the playhead behind
- * the store's back — cannot keep it alive.
+ * Is a paused deck sitting on the cue point?
+ *
+ * Judged from where the deck was commanded to as well as from what it
+ * reported, since a report can be a whole interval out of date. The commanded
+ * position counts only while the reported one still agrees with it, so a jog
+ * scrub cannot keep it alive.
  */
 function atCuePoint(ctx: DeckContext, cue: number): boolean {
   if (Math.abs(ctx.position - cue) <= CUE_TOLERANCE_SEC) return true
@@ -446,9 +440,8 @@ function beatsAfter(grid: BeatGrid | null, startSec: number, beats: number): num
  * How far from the playhead a marker still counts as the one the DJ means:
  * one beat, or {@link UNGRIDDED_BEAT_SEC} on a track with no grid yet.
  *
- * A beat is the right unit because that is the resolution locators are dropped
- * at — quantize snaps them to the grid — so anything further away is a
- * different marker, not this one read imprecisely.
+ * A beat is the resolution locators are dropped at, since quantize snaps them
+ * to the grid. Anything further away is a different marker.
  */
 function pointWindow(ctx: DeckContext): number {
   return beatsAfter(ctx.grid, ctx.position, 1) - ctx.position
@@ -458,13 +451,11 @@ function pointWindow(ctx: DeckContext): number {
  * Edit a deck's track, following the record the edit landed on.
  *
  * The first write to a mirrored track forks it into the local collection, so
- * the id the deck is holding stops being the one that carries its cues and
- * grid. Adopting the returned id here is what keeps the two in step: without
- * it the next edit would fork from the mirror all over again and this one
- * would be stranded on a record nothing points at.
+ * the id the deck holds stops carrying its cues and grid. The returned id is
+ * adopted here to keep the two in step.
  *
- * The re-point is conditional because the deck may have been ejected or loaded
- * with something else while an async caller was away.
+ * The re-point is conditional: the deck may have been ejected or loaded with
+ * something else while an async caller was away.
  */
 function writeTrack(id: DeckId, trackId: string, patch: Partial<Track>): string | null {
   const written = useLibrary.getState().updateTrack(trackId, patch)
@@ -517,10 +508,9 @@ function setEq(id: DeckId, eq: ChannelEq): void {
 /**
  * Hand one channel's knobs to the engine at the current EQ mode.
  *
- * The mode is read here rather than stored per deck because it is a global
- * preference: see {@link useSettings}'s `eqMode`. Nothing is written to the
- * store, so this is also the way a mode change reaches a channel whose knobs
- * have not moved.
+ * The mode is a global preference, read here from {@link useSettings}'s
+ * `eqMode`. Nothing is written to the store, so this is also how a mode change
+ * reaches a channel whose knobs have not moved.
  */
 function applyEq(id: DeckId, eq: ChannelEq): void {
   if (!runtime[id].watching) return
@@ -557,8 +547,7 @@ function watchDeck(id: DeckId, deck: Deck): void {
   })
   deck.onEnded(() => {
     // Running off the end stops the deck without any release, so the preview
-    // ends here too — and with it the position it would have returned to,
-    // which the deck has long since played past.
+    // ends here too, along with the position it would return to.
     clearPreview(id)
     patchDeck(id, { playing: false })
   })
@@ -631,8 +620,7 @@ export const useDecks = create<DecksState>()(() => ({
       deck = engine.deck(id)
       watchDeck(id, deck)
       // The channel keeps whatever it was set to, so a new track drops into an
-      // EQ'd channel rather than resetting it. This also lands knobs that were
-      // moved before the engine existed.
+      // EQ'd channel. Also lands knobs moved before the engine existed.
       applyEq(id, useDecks.getState().decks[id].eq)
       applyFader(id)
 
@@ -663,7 +651,7 @@ export const useDecks = create<DecksState>()(() => ({
       patchDeck(id, { waveform, status: 'ready' })
 
       // Detecting a grid can have forked the track, so bookkeeping goes to
-      // whatever the deck is pointing at now rather than to the id it loaded.
+      // whatever the deck points at now, not the id it loaded.
       const written = useDecks.getState().decks[id].trackId ?? trackId
       const current = useLibrary.getState().trackById(written)
       const patch: Partial<Track> = {}
@@ -747,10 +735,9 @@ export const useDecks = create<DecksState>()(() => ({
     const previewing = rt.cuePreview || rt.previewCueIndex !== null
     clearPreview(id)
     if (previewing) {
-      // PLAY during a preview latches rather than toggles: the deck is already
-      // rolling from the cue point and simply keeps going. `clearPreview` above
-      // dropped the return position with the flag, which is what stops the
-      // release that follows from yanking the playhead back to the cue.
+      // PLAY during a preview latches: the deck is already rolling from the cue
+      // point and keeps going. `clearPreview` above dropped the return position
+      // with the flag, so the release that follows leaves the playhead alone.
       if (!ctx.deck.playing) ctx.deck.play()
       patchDeck(id, { playing: true, previewing: false })
       return
@@ -1093,9 +1080,8 @@ export const useDecks = create<DecksState>()(() => ({
     // The hole comes back selected, so a second delete closes the row up
     // without having to find it again.
     const { clips, selectId } = deleteSegment(ctx.state.clips, selected)
-    // Deleting the last piece leaves a deck that is still loaded and simply
-    // plays nothing. The buffer, waveform and track stay put, so the row is a
-    // silent piece of the edit rather than an empty slot.
+    // Deleting the last piece leaves a deck still loaded, playing nothing. The
+    // buffer, waveform and track stay put: a silent piece of the edit.
     setClips(ctx, clips, { selectedClipId: selectId })
   },
 

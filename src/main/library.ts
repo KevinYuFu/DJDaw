@@ -39,10 +39,8 @@ const MAX_ARTWORK_BYTES = 512 * 1024
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/
 
 /**
- * Library writes are chained rather than run concurrently. Two overlapping
- * temp-file renames can complete in the opposite order to the calls that
- * started them, which would leave the older snapshot on disk; chaining also
- * gives `whenLibraryIdle` something to wait on when the app is quitting.
+ * Library writes are chained, never concurrent, so renames land in call order.
+ * `whenLibraryIdle` waits on the chain when the app is quitting.
  */
 let libraryWrites: Promise<void> = Promise.resolve()
 
@@ -52,9 +50,8 @@ let knownTrackIds: Set<string> | null = null
 /**
  * The remembered rekordbox XML export, as last read from or written to disk.
  *
- * Main owns this rather than the renderer: a library save carries whatever the
- * renderer loaded at startup, so trusting the incoming field would resurrect a
- * path the user cleared a moment earlier.
+ * Owned by main. The field on an incoming library save is ignored: it carries
+ * whatever the renderer loaded at startup.
  */
 let rememberedXmlPath: string | null = null
 
@@ -83,9 +80,8 @@ export function toArrayBuffer(buf: Buffer): ArrayBuffer {
 }
 
 /**
- * Write via a sibling temp file and rename. Rename is atomic within a
- * filesystem, so a crash or a power cut mid-write leaves the previous file
- * intact instead of a half-written one.
+ * Write via a sibling temp file and rename, which is atomic within a
+ * filesystem: an interrupted write leaves the previous file intact.
  */
 async function writeFileAtomic(target: string, data: Buffer | string): Promise<void> {
   await mkdir(dirname(target), { recursive: true })
@@ -100,9 +96,8 @@ async function writeFileAtomic(target: string, data: Buffer | string): Promise<v
 }
 
 /**
- * Stable id for a file: the SHA-1 of its absolute path. Hashing the path
- * rather than the audio means re-importing a file is instant and lands on the
- * analysis and waveform cache written the last time it was imported.
+ * Stable id for a file: the SHA-1 of its absolute path. Re-importing a file is
+ * instant and lands on the analysis and waveform cache already written for it.
  */
 export function trackIdForPath(path: string): string {
   return createHash('sha1').update(resolvePath(path)).digest('hex')
@@ -160,9 +155,8 @@ function trackFromMetadata(audioKey: string, path: string, meta: IAudioMetadata)
 }
 
 /**
- * Read tags for each path and build a fresh Track record. Files that cannot be
- * parsed are skipped and logged rather than failing the whole import, so one
- * corrupt file in a dropped folder does not lose the other ninety-nine.
+ * Read tags for each path and build a fresh Track record. A file that cannot be
+ * parsed is skipped and logged; the rest of the import goes through.
  */
 export async function importPaths(paths: string[]): Promise<Track[]> {
   const tracks: Track[] = []
@@ -222,8 +216,8 @@ async function readLibraryFile(path: string): Promise<LibraryFile> {
           : undefined
     }
   } catch (err) {
-    // Keep the damaged file aside instead of overwriting it: it may still be
-    // recoverable by hand, and the app has to start either way.
+    // Keep the damaged file aside for recovery by hand. The app starts either
+    // way.
     console.error(`[library] ${path} is corrupt (${describeError(err)}), starting empty`)
     await rename(path, `${path}.corrupt-${Date.now()}`).catch(() => undefined)
     return emptyLibrary()
@@ -271,18 +265,16 @@ export function getRekordboxXmlPath(): string | null {
 /**
  * Remember (or, with null, forget) the rekordbox XML export and persist it.
  *
- * The tracks are re-read rather than taken from the caller because this is the
- * only write main makes on its own: the renderer holds the collection, and
- * writing a stale copy of it back would undo whatever it saved last.
+ * The only write main makes on its own. The tracks are re-read from disk, since
+ * the renderer holds the collection.
  */
 export function setRekordboxXmlPath(path: string | null): Promise<void> {
   rememberedXmlPath = path
 
   const write = libraryWrites.then(async () => {
     const current = await readLibraryFile(userDataPath('library.json'))
-    // `null` is written out, not dropped: it is what tells the next launch the
-    // user disconnected on purpose, so auto-detection must not re-adopt the
-    // default export location behind their back.
+    // `null` is written out, not dropped. It tells the next launch the user
+    // disconnected, and auto-detection leaves the default location alone.
     await persistLibrary({ ...current, rekordboxXmlPath: path })
   })
   libraryWrites = write.catch(() => undefined)

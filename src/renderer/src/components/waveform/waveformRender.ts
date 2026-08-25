@@ -21,22 +21,17 @@ import {
  * that safe on a retina panel.
  */
 
-/** A peak too small to fill a pixel still draws a hairline rather than vanishing. */
+/** Minimum drawn height, so a very small peak still shows as a hairline. */
 const MIN_BAR_HALF_PX = 0.5
 
-/**
- * Playhead colour. Deliberately not in `core/constants.ts`: it is a property of
- * these two views rather than of the palette, and both take it from here.
- */
+/** Playhead colour, shared by both waveform views. */
 export const PLAYHEAD_COLOR = '#ffffff'
 
 /**
- * Locator colour, here for the same reason {@link PLAYHEAD_COLOR} is.
+ * Locator colour.
  *
- * Neutral on purpose. Every hue on a waveform is already spoken for — the
- * eight pad colours are hot cues and red is the CUE point — so a locator that
- * picked a colour would read as one of those. Off-white belongs to none of
- * them and still carries dark label text.
+ * Off-white: every hue on a waveform belongs to a hot cue or the CUE point, and
+ * this one still carries dark label text.
  */
 export const LOCATOR_COLOR = '#dfe6f2'
 
@@ -78,12 +73,9 @@ export interface WaveformColumns {
  * Reduce the bucket envelope to one peak per pixel column over `[fromSec,
  * toSec]`.
  *
- * Both views go through here: the overview asks for the whole track across a
- * few hundred columns, the detail view for a couple of seconds across the same
- * columns. Where a column spans many buckets it takes their maximum, so a
- * transient never disappears between two pixels; where a bucket spans many
- * columns every one of them holds that bucket's value, so a heavily zoomed
- * view draws a plateau rather than a comb.
+ * A column spanning many buckets takes their maximum, so a transient survives.
+ * A bucket spanning many columns fills every one of them, so a zoomed view
+ * draws a plateau.
  *
  * `sampleRate` is the rate the bucket grid is expressed in — normally
  * `wave.sampleRate`. Pass `reuse` to write into an existing set of arrays.
@@ -189,19 +181,15 @@ export function fillColumns(
 }
 
 /**
- * Columns for a row made of clips: every clip's own slice of the source drawn
- * at its place on the timeline, and gaps left at zero so they draw as empty
- * background rather than as audio.
+ * Columns for a row made of clips: each clip's slice of the source drawn at its
+ * place on the timeline, with gaps left at zero so they draw as background.
  *
- * This is the only correct way to draw a row once it has been cut. Timeline
- * seconds stop matching source seconds the moment a clip is rippled away or
- * moved, and a clip's `sourceOffsetSec` is what puts the two back together.
- * An uncut row is one whole-track clip and comes out identical to
- * {@link buildColumns}, which is why every deck can go through here.
+ * On a cut row, timeline seconds and source seconds differ; a clip's
+ * `sourceOffsetSec` maps between them. An uncut row is one whole-track clip and
+ * comes out identical to {@link buildColumns}.
  *
- * `clips` must be in timeline order — everything in `shared/clips.ts` returns
- * them that way — so this walks them once and stops at the right-hand edge
- * instead of scanning the whole row for every pixel column.
+ * `clips` must be in timeline order, as `shared/clips.ts` returns them: this
+ * walks them once and stops at the right-hand edge.
  */
 export function buildClipColumns(
   wave: WaveformData,
@@ -211,7 +199,7 @@ export function buildClipColumns(
   width: number,
   sampleRate: number,
   reuse?: WaveformColumns | null,
-  /** Draw on a grid fixed to the track rather than to the view. */
+  /** Draw on a grid fixed to the track, not to the view. */
   grid?: ColumnGrid
 ): WaveformColumns {
   const count = Math.max(1, Math.floor(width))
@@ -271,21 +259,18 @@ export interface ColumnExtents {
   min: Float32Array
   /** Highest sample, 0 to 1. */
   max: Float32Array
-  /** Root mean square, 0 to 1: the body of the sound rather than its tips. */
+  /** Root mean square, 0 to 1: the body of the sound, not its tips. */
   rms: Float32Array
 }
 
 /**
  * The lowest and highest sample under each column, read from the decoded audio.
  *
- * Not an envelope of absolute peaks: the two edges are tracked separately, so
- * what gets drawn is the shape of the signal rather than a symmetrical block.
- * On a loud master that is the whole difference between a readable waveform and
- * a solid bar, because a limited mix peaks near full scale almost everywhere
- * while the signal itself still swings through zero.
+ * The two edges are tracked separately, so the drawn shape follows the signal
+ * instead of forming a symmetrical block.
  *
- * Clips are walked exactly as {@link buildClipColumns} walks them, so a cut row
- * reads from the right part of the file.
+ * Clips are walked as {@link buildClipColumns} walks them, so a cut row reads
+ * from the right part of the file.
  */
 export function buildClipExtents(
   channels: readonly Float32Array[],
@@ -374,16 +359,15 @@ export interface WaveformDrawOptions {
   y?: number
   /** Collapse the bands into one envelope in this colour: the 'mono' mode. */
   mono?: string
-  /** Tint each column by its frequency balance instead of stacking the bands. */
+  /** Tint each column by its frequency balance in place of stacking the bands. */
   rgb?: boolean
   /** Opacity for the RGB pass, 1 full. The overview's played half uses this. */
   dim?: number
   /** Vertical exaggeration. 1 means a full-scale peak exactly fills the strip. */
   gain?: number
   /**
-   * Columns per CSS pixel. Pass the device pixel ratio and build that many
-   * more columns to draw at the panel's real resolution rather than at half of
-   * it, which is what makes a transient read as a spike instead of a block.
+   * Columns per CSS pixel. Pass the device pixel ratio and build that many more
+   * columns to draw at the panel's real resolution.
    */
   subpixel?: number
   /**
@@ -434,10 +418,8 @@ export function drawWaveform(
 /**
  * Band weights applied before the colour is worked out.
  *
- * Bass first, then highs, then mids. A column with real low end reads red even
- * when the bands above it are just as loud, because the kick is the thing a DJ
- * is looking for; between the other two, hats and snares place a section
- * faster than the mids do.
+ * Bass first, then highs, then mids: a column with real low end reads red even
+ * when the bands above it are as loud.
  */
 const BAND_WEIGHT = { low: 1, mid: 0.4, high: 0.55 }
 
@@ -459,9 +441,7 @@ const MID_LIFTS_BLUE = 0.5
 /**
  * How far a colour is lifted towards white when one band owns the column.
  *
- * A fully saturated hue on black is a neon stripe and it is hard to read a
- * shape through. Lifting keeps the hue but puts the light back in, which is
- * what a meter looks like: salmon and mint rather than red and green.
+ * Keeps the hue while adding light: salmon and mint, not red and green.
  */
 const WHITE_LIFT = 0.05
 
@@ -486,10 +466,9 @@ const RGB_STEPS = 16
  * The RGB waveform: red lows, green mids, blue highs, white where all three
  * are present.
  *
- * Height is the loudest band, so the silhouette matches the three-band stack;
- * only the colour differs. Each channel is scaled against the loudest band in
- * its own column, which is what makes the hue show the balance of the sound
- * rather than how loud it is.
+ * Height is the loudest band, so the silhouette matches the three-band stack.
+ * Each channel is scaled against the loudest band in its own column, so the hue
+ * shows the balance of the sound and not its level.
  */
 function fillRgb(
   ctx: CanvasRenderingContext2D,
@@ -533,9 +512,8 @@ function fillRgb(
 /**
  * The colour for one column of an RGB waveform, from its three band peaks.
  *
- * The bands are scaled against the loudest of the three first, so the hue
- * shows the balance of the sound rather than how loud it is, then mixed
- * through {@link BAND_TO_RGB}. Silence is black.
+ * Scaled against the loudest of the three, then mixed through
+ * {@link BAND_TO_RGB}, so the hue shows balance and not level. Silence is black.
  */
 export function rgbColumnColor(low: number, mid: number, high: number): string {
   const l = low * BAND_WEIGHT.low
@@ -798,12 +776,8 @@ export function drawLocators(
 }
 
 /**
- * One locator's tag: a pointed flag holding the name, or a plain nub when
- * there is no name or no room for one.
- *
- * An unnamed locator gets a nub rather than a number. The numbering would
- * shift the moment a locator earlier in the track was deleted, so a printed
- * number is a label that lies exactly when it is being relied on.
+ * One locator's tag: a pointed flag holding the name, or a plain nub when there
+ * is no name or no room for one. Unnamed locators are never numbered.
  */
 function drawLocatorTag(
   ctx: CanvasRenderingContext2D,
@@ -883,7 +857,7 @@ export const DETAIL_CUE_STYLE: CueMarkerStyle = {
   labelColor: '#0e0e10'
 }
 
-/** The overview strip is 38 px tall: tabs instead of lettered flags. */
+/** The overview strip is 38 px tall, so it draws tabs, not lettered flags. */
 export const OVERVIEW_CUE_STYLE: CueMarkerStyle = {
   ...DETAIL_CUE_STYLE,
   lineWidth: 1,
@@ -1030,13 +1004,7 @@ export function drawPlayhead(
   ctx.restore()
 }
 
-/**
- * How the pieces of a cut row are marked out.
- *
- * These colours live here rather than in `core/constants.ts` for the same
- * reason {@link PLAYHEAD_COLOR} does: they are chrome belonging to this view,
- * not part of the track palette.
- */
+/** How the pieces of a cut row are marked out. Chrome, not track palette. */
 export interface ClipStyle {
   /** Vertical division between two pieces. */
   edgeColor: string
@@ -1088,11 +1056,7 @@ export const DEFAULT_CLIP_STYLE: ClipStyle = {
   bandFill: 'rgba(255,255,255,0.07)'
 }
 
-/**
- * The MACRO view uses the same numbers, so a piece is marked the same amount
- * whichever strip it is looked at on. Spread rather than copied: two lists of
- * the same values drift the moment one of them is tuned.
- */
+/** The MACRO view spreads these, so both strips mark a piece the same amount. */
 export const OVERVIEW_CLIP_STYLE: ClipStyle = {
   ...DEFAULT_CLIP_STYLE,
   // No handle here. The strip is thirty pixels tall, and a press anywhere on a
@@ -1104,9 +1068,8 @@ export const OVERVIEW_CLIP_STYLE: ClipStyle = {
 /**
  * The selected piece as a background wash over `[from, to]`.
  *
- * Drawn before the waveform so the envelope stays the brightest thing in the
- * row: the selection lifts the piece off the background rather than veiling it.
- * Nothing is drawn when no piece is selected, which is every performance deck.
+ * Drawn before the waveform, so the envelope stays the brightest thing in the
+ * row. Draws nothing when no piece is selected.
  */
 export function drawClipHighlight(
   ctx: CanvasRenderingContext2D,
@@ -1147,11 +1110,9 @@ export function drawClipHighlight(
  * `clips` must be in timeline order.
  */
 /**
- * A wash under every other piece, so a cut row reads as blocks rather than as
- * a run of audio with lines through it.
+ * A wash under every other piece, so a cut row reads as blocks.
  *
- * Nothing is drawn for a row that has never been cut: one piece covering the
- * whole track would just tint the strip for no reason.
+ * Draws nothing for a row that has never been cut.
  */
 /** A piece's rectangle on screen, with the gap between pieces taken out. */
 function cardRect(
@@ -1244,14 +1205,11 @@ export function drawClipEdges(
   ctx.restore()
 }
 
-/** One division, skipped rather than half drawn when it falls outside the view. */
+/** One division. Skipped entirely when it falls outside the view. */
 
 /**
- * How a piece being dragged is previewed at the place it would land.
- *
- * A filled block with a bright outline, not a copy of the waveform: the MACRO
- * strip is short, and re-drawing the envelope at the destination would leave
- * the eye comparing two sets of bars instead of reading one target.
+ * How a piece being dragged is previewed at the place it would land: a filled
+ * block with a bright outline, not a copy of the waveform.
  */
 export interface ClipGhostStyle {
   /** Wash inside the block. */
@@ -1272,9 +1230,8 @@ export const DEFAULT_CLIP_GHOST_STYLE: ClipGhostStyle = {
 /**
  * Where a dragged piece would land if it were dropped now, over `[from, to]`.
  *
- * Drawn last, over the waveform and the markers, because during a drag it is
- * the thing being aimed: the answer to "where does this go" has to be the
- * brightest mark on the strip.
+ * Drawn last, over the waveform and the markers, so it is the brightest mark
+ * on the strip.
  */
 export function drawClipGhost(
   ctx: CanvasRenderingContext2D,
