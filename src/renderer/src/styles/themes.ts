@@ -77,8 +77,6 @@ export interface ThemeTokens {
   'clip-edge-on': string
   /** Text on a clip's title strip. */
   'clip-text': string
-  /** Labels over the timeline, which is a dark surface in every theme. */
-  'lane-text': string
 }
 
 function theme(id: string, name: string, note: string, tokens: ThemeTokens): Theme {
@@ -128,9 +126,8 @@ export const THEMES: readonly Theme[] = [
     'grid-beat': 'rgba(232, 239, 252, 0.12)',
     'grid-bar': 'rgba(232, 239, 252, 0.3)',
     'grid-phrase': 'rgba(240, 245, 255, 0.5)',
-    'lane-text': '#b7becb',
-    'clip-body': 'rgba(0, 15, 27, 0.9)',
-    'clip-body-on': 'rgba(0, 22, 36, 0.94)',
+    'clip-body': 'rgba(111, 203, 254, 0.2)',
+    'clip-body-on': 'rgba(111, 203, 254, 0.32)',
     'clip-head': 'rgba(111, 203, 254, 0.5)',
     'clip-head-on': 'rgba(111, 203, 254, 0.78)',
     'clip-edge': 'rgba(168, 174, 187, 0.45)',
@@ -180,9 +177,8 @@ export const THEMES: readonly Theme[] = [
     'grid-beat': 'rgba(232, 239, 252, 0.12)',
     'grid-bar': 'rgba(232, 239, 252, 0.3)',
     'grid-phrase': 'rgba(240, 245, 255, 0.5)',
-    'lane-text': '#b7becb',
-    'clip-body': 'rgba(25, 0, 40, 0.9)',
-    'clip-body-on': 'rgba(33, 0, 52, 0.94)',
+    'clip-body': 'rgba(217, 167, 255, 0.2)',
+    'clip-body-on': 'rgba(217, 167, 255, 0.32)',
     'clip-head': 'rgba(217, 167, 255, 0.5)',
     'clip-head-on': 'rgba(217, 167, 255, 0.78)',
     'clip-edge': 'rgba(168, 174, 187, 0.45)',
@@ -232,9 +228,8 @@ export const THEMES: readonly Theme[] = [
     'grid-beat': 'rgba(247, 237, 224, 0.12)',
     'grid-bar': 'rgba(247, 237, 224, 0.3)',
     'grid-phrase': 'rgba(253, 244, 231, 0.5)',
-    'lane-text': '#c5bcb0',
-    'clip-body': 'rgba(24, 9, 0, 0.9)',
-    'clip-body-on': 'rgba(32, 16, 0, 0.94)',
+    'clip-body': 'rgba(254, 171, 56, 0.2)',
+    'clip-body-on': 'rgba(254, 171, 56, 0.32)',
     'clip-head': 'rgba(254, 171, 56, 0.5)',
     'clip-head-on': 'rgba(254, 171, 56, 0.78)',
     'clip-edge': 'rgba(182, 172, 160, 0.45)',
@@ -284,9 +279,8 @@ export const THEMES: readonly Theme[] = [
     'grid-beat': 'rgba(229, 240, 252, 0.12)',
     'grid-bar': 'rgba(229, 240, 252, 0.3)',
     'grid-phrase': 'rgba(238, 246, 254, 0.5)',
-    'lane-text': '#b4bfca',
-    'clip-body': 'rgba(0, 17, 15, 0.9)',
-    'clip-body-on': 'rgba(0, 25, 22, 0.94)',
+    'clip-body': 'rgba(0, 220, 203, 0.2)',
+    'clip-body-on': 'rgba(0, 220, 203, 0.32)',
     'clip-head': 'rgba(0, 220, 203, 0.5)',
     'clip-head-on': 'rgba(0, 220, 203, 0.78)',
     'clip-edge': 'rgba(165, 175, 186, 0.45)',
@@ -332,13 +326,12 @@ export const THEMES: readonly Theme[] = [
     'overlay-strong': 'rgba(26, 21, 11, 0.13)',
     thumb: '#bbb7ae',
     'thumb-hover': '#9c988f',
-    playhead: '#fffbf4',
-    'grid-beat': 'rgba(245, 238, 224, 0.12)',
-    'grid-bar': 'rgba(245, 238, 224, 0.3)',
-    'grid-phrase': 'rgba(251, 244, 230, 0.5)',
-    'lane-text': '#c4bdb0',
-    'clip-body': 'rgba(0, 36, 52, 0.9)',
-    'clip-body-on': 'rgba(0, 44, 62, 0.94)',
+    playhead: '#181611',
+    'grid-beat': 'rgba(38, 33, 23, 0.12)',
+    'grid-bar': 'rgba(38, 33, 23, 0.3)',
+    'grid-phrase': 'rgba(26, 21, 11, 0.5)',
+    'clip-body': 'rgba(0, 118, 157, 0.16)',
+    'clip-body-on': 'rgba(0, 118, 157, 0.26)',
     'clip-head': 'rgba(0, 118, 157, 0.5)',
     'clip-head-on': 'rgba(0, 118, 157, 0.78)',
     'clip-edge': 'rgba(90, 85, 73, 0.45)',
@@ -388,9 +381,8 @@ export const THEMES: readonly Theme[] = [
     'grid-beat': 'rgba(238, 236, 251, 0.12)',
     'grid-bar': 'rgba(238, 236, 251, 0.3)',
     'grid-phrase': 'rgba(245, 244, 254, 0.5)',
-    'lane-text': '#bdbcca',
-    'clip-body': 'rgba(31, 0, 24, 0.9)',
-    'clip-body-on': 'rgba(42, 0, 33, 0.94)',
+    'clip-body': 'rgba(255, 156, 227, 0.3)',
+    'clip-body-on': 'rgba(255, 156, 227, 0.46)',
     'clip-head': 'rgba(255, 156, 227, 0.66)',
     'clip-head-on': 'rgba(255, 156, 227, 0.9)',
     'clip-edge': 'rgba(174, 172, 186, 0.45)',
@@ -436,13 +428,12 @@ export const THEMES: readonly Theme[] = [
     'overlay-strong': 'rgba(15, 23, 31, 0.13)',
     thumb: '#a2b1c2',
     'thumb-hover': '#8393a3',
-    playhead: '#fafcfe',
-    'grid-beat': 'rgba(229, 240, 252, 0.12)',
-    'grid-bar': 'rgba(229, 240, 252, 0.3)',
-    'grid-phrase': 'rgba(238, 246, 254, 0.5)',
-    'lane-text': '#b4bfca',
-    'clip-body': 'rgba(44, 0, 92, 0.9)',
-    'clip-body-on': 'rgba(53, 0, 108, 0.94)',
+    playhead: '#13161a',
+    'grid-beat': 'rgba(26, 34, 43, 0.12)',
+    'grid-bar': 'rgba(26, 34, 43, 0.3)',
+    'grid-phrase': 'rgba(15, 23, 31, 0.5)',
+    'clip-body': 'rgba(116, 2, 222, 0.16)',
+    'clip-body-on': 'rgba(116, 2, 222, 0.26)',
     'clip-head': 'rgba(116, 2, 222, 0.5)',
     'clip-head-on': 'rgba(116, 2, 222, 0.78)',
     'clip-edge': 'rgba(77, 86, 96, 0.45)',
@@ -519,7 +510,6 @@ export interface CanvasChrome {
   clipEdge: string
   clipEdgeOn: string
   clipText: string
-  laneText: string
 }
 
 /** The colours a canvas draws chrome with, which cannot read a CSS variable. */
@@ -536,7 +526,6 @@ export function canvasChrome(id: string): CanvasChrome {
     clipHeadOn: t['clip-head-on'],
     clipEdge: t['clip-edge'],
     clipEdgeOn: t['clip-edge-on'],
-    clipText: t['clip-text'],
-    laneText: t['lane-text']
+    clipText: t['clip-text']
   }
 }
