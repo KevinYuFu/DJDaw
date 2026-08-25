@@ -58,6 +58,7 @@
   --grid-beat: rgba(214, 228, 250, 0.1);
   --grid-bar: rgba(214, 228, 250, 0.26);
   --grid-phrase: rgba(220, 233, 255, 0.42);
+  --lane-text: #b7bec9;
 
   /* Metrics */
   --row-h: 22px;
