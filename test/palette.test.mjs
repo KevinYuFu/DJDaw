@@ -78,6 +78,11 @@ const READABLE = [
   ['deck-b', 'bg-panel', 60],
   ['deck-c', 'bg-panel', 60],
   ['deck-d', 'bg-panel', 60],
+  // A lane writes its name in its own colour, on the head's ground.
+  ['deck-a', 'bg-panel-2', 60],
+  ['deck-b', 'bg-panel-2', 60],
+  ['deck-c', 'bg-panel-2', 60],
+  ['deck-d', 'bg-panel-2', 60],
   ['wave-high', 'bg-waveform', 75],
   ['wave-mid', 'bg-waveform', 60],
   ['wave-low', 'bg-waveform', 45]

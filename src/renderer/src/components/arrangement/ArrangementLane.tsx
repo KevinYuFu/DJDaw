@@ -6,6 +6,7 @@ import { draggedTrackId, TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
 import { ChannelFader, ChannelKnobs } from '@renderer/components/mixer/ChannelKnobs'
 import { useSettings } from '@renderer/state/useSettings'
 import { useArrangement, type ClipSelection } from '@renderer/state/useArrangement'
+import { laneTitle } from '@renderer/arrangement/laneTitle'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
 import {
   ArrangementClips,
@@ -22,6 +23,8 @@ const DRAG_SLOP_PX = 3
 
 export interface ArrangementLaneProps {
   lane: ClipTrack
+  /** Where the lane sits in the list, for a lane that has no name yet. */
+  index: number
   fromSec: number
   secPerPx: number
   width: number
@@ -54,6 +57,7 @@ function clipAt(lane: ClipTrack, sec: number, sampleRate: number): ArrangementCl
  */
 export function ArrangementLane({
   lane,
+  index,
   fromSec,
   secPerPx,
   width,
@@ -64,6 +68,7 @@ export function ArrangementLane({
   onSelect
 }: ArrangementLaneProps): ReactElement {
   const eqMode = useSettings((s) => s.eqMode)
+  const title = useArrangement((s) => laneTitle(s.titles, lane.id, index, lane.clips.length > 0))
   const channel = useArrangement((s) => s.channels[lane.id])
   const sampleRate = useArrangement((s) => s.sampleRate)
   const ghost = useArrangement((s) => (s.preview?.lane === lane.id ? s.preview : null))
@@ -214,7 +219,9 @@ export function ArrangementLane({
       <div className="arr-lane__edge" />
 
       <div className="arr-lane__info">
-        <span className="arr-lane__badge">{lane.name}</span>
+        <span className="arr-lane__title" title={title}>
+          {title}
+        </span>
         <div className="arr-lane__buttons">
           <button
             type="button"

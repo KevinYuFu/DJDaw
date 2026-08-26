@@ -197,10 +197,11 @@ export function ArrangementView(): ReactElement {
       </div>
 
       <div className="arr-view__lanes" onWheel={onWheel}>
-        {lanes.map((lane) => (
+        {lanes.map((lane, index) => (
           <ArrangementLane
             key={lane.id}
             lane={lane}
+            index={index}
             fromSec={fromSec}
             secPerPx={secPerPx}
             width={width}
