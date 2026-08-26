@@ -274,6 +274,7 @@ export function ArrangementLane({
         disabled={false}
         prefix="arr"
         showFlat={false}
+        colourFirst
         onChange={(id, value) =>
           useArrangement.getState().setLaneEq(lane.id, { ...knobs.eq, [id]: value })
         }

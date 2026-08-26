@@ -54,9 +54,14 @@ interface EqKnobSpec {
 const EQ_KNOBS: readonly EqKnobSpec[] = [
   { id: 'low', label: 'LO', name: 'Low' },
   { id: 'mid', label: 'MID', name: 'Mid' },
-  { id: 'high', label: 'HI', name: 'High' },
-  { id: 'filter', label: 'F', name: 'Filter' }
+  { id: 'high', label: 'HI', name: 'High' }
 ]
+
+/**
+ * The filter, which mixer hardware calls the colour knob: it is not one of the
+ * three bands and does not belong in their run.
+ */
+const COLOUR_KNOB: EqKnobSpec = { id: 'filter', label: 'COL', name: 'Colour' }
 
 /** Point on the knob circle. 0 degrees is 12 o'clock, positive is clockwise. */
 function polar(radius: number, degrees: number): [number, number] {
@@ -174,6 +179,8 @@ export interface ChannelKnobsProps {
   prefix?: string
   /** Whether to draw the button that puts every knob back to flat. */
   showFlat?: boolean
+  /** Put the colour knob ahead of the three bands, set apart from them. */
+  colourFirst?: boolean
   onChange(id: keyof ChannelEq, value: number): void
   onReset(id: keyof ChannelEq): void
   onFlat(): void
@@ -198,6 +205,7 @@ export function ChannelKnobs({
   disabled,
   prefix = 'v2-edit',
   showFlat = true,
+  colourFirst = false,
   onChange,
   onReset,
   onFlat
@@ -240,7 +248,7 @@ export function ChannelKnobs({
     <div className={`${prefix}-eq`}>
       {readout !== null ? <span className={`${prefix}-note mono`}>{readout}</span> : null}
 
-      {EQ_KNOBS.map((spec) => {
+      {(colourFirst ? [COLOUR_KNOB, ...EQ_KNOBS] : [...EQ_KNOBS, COLOUR_KNOB]).map((spec) => {
         const value = eq[spec.id]
         const angle = -KNOB_SWEEP / 2 + clamp(value, 0, 1) * KNOB_SWEEP
         const moved = Math.abs(value - CENTRE) > 0.001
@@ -249,7 +257,7 @@ export function ChannelKnobs({
         return (
           <div
             key={spec.id}
-            className={`${prefix}-knob${moved ? ' is-moved' : ''}${disabled ? ' is-disabled' : ''}`}
+            className={`${prefix}-knob${spec.id === 'filter' ? ` ${prefix}-knob--colour` : ''}${moved ? ' is-moved' : ''}${disabled ? ' is-disabled' : ''}`}
             role="slider"
             aria-label={`${label} ${spec.name}`}
             aria-disabled={disabled}
