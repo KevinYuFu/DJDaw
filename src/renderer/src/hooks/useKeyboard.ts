@@ -54,7 +54,7 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Y', action: 'Toggle quantize' },
   { keys: '- / =', action: 'Waveform zoom out / in' },
   { keys: '← / →', action: 'Nudge the playhead by one beat' },
-  { keys: 'A', action: 'Load the track picked in the browser into the focused deck' },
+  { keys: 'A', action: 'Load the picked track into the focused deck, or V3\u2019s first free lane' },
   { keys: 'Tab', action: 'Move the focus to the next deck' },
   { keys: 'Shift + Tab', action: 'Move the focus back one deck' },
   { keys: 'Cmd / Ctrl + E', action: 'Cut the picked clip at the playhead' },
@@ -331,7 +331,10 @@ export function useKeyboard(): void {
           break
 
         case 'KeyA':
-          loadSelection(deck)
+          // The arrangement has lanes rather than decks, so the pick goes to
+          // the first one with nothing on it.
+          if (inArrangement()) void useArrangement.getState().dropSelectedIntoFreeLane()
+          else loadSelection(deck)
           break
 
         case 'KeyQ':
