@@ -90,6 +90,8 @@ export interface ArrangementState {
   init(): Promise<void>
   /** Lay a library track into a lane, warped onto the grid. */
   dropTrack(lane: string, trackId: string, atSeconds: number): Promise<void>
+  /** Lay the browser's pick into the first lane with nothing on it. */
+  dropSelectedIntoFreeLane(): Promise<void>
   moveClip(lane: string, clipId: string, deltaSeconds: number): void
   /** Group everything a drag does into one undo step. */
   beginDrag(): void
@@ -289,6 +291,21 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     const existing = laneById(playlist.getState().tracks, lane)
     if (!existing) return
     playlist.updateTrack(lane, { ...existing, clips: [...existing.clips, clip] })
+  },
+
+  async dropSelectedIntoFreeLane() {
+    const trackId = useLibrary.getState().selectedId
+    if (!trackId) {
+      set({ notice: 'Pick a track in the browser first' })
+      return
+    }
+    const free = get().lanes.find((lane) => lane.clips.length === 0)
+    if (!free) {
+      set({ notice: 'Every lane already has something on it' })
+      return
+    }
+    set({ notice: null })
+    await get().dropTrack(free.id, trackId, 0)
   },
 
   moveClip(lane, clipId, deltaSeconds) {
