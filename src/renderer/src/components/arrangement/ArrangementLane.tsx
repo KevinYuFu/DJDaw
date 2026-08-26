@@ -75,7 +75,10 @@ export function ArrangementLane({
   /** The pointer holding the playhead, or null. */
   const scrub = useRef<number | null>(null)
 
-  const snap = (sec: number): number => Math.max(0, Math.round(sec / barSec) * barSec)
+  // Everything that lands on the timeline lands on the grid: the playhead, a
+  // clip being dragged, and a track dropped in from the browser.
+  const step = barSec / Math.max(1, beatsPerBar)
+  const snap = (sec: number): number => Math.max(0, Math.round(sec / step) * step)
   const secAt = (clientX: number): number => {
     const box = stripRef.current?.getBoundingClientRect()
     if (!box) return fromSec
@@ -83,20 +86,24 @@ export function ArrangementLane({
   }
 
   /**
-   * A press on a clip's title strip picks that clip up. A press anywhere else —
-   * over a waveform or over empty grid — takes hold of the playhead, which then
-   * follows the pointer until it is released.
+   * A press picks the clip under it, wherever on that clip it lands.
+   *
+   * On the title strip it also takes hold of the clip, which then follows the
+   * pointer. Anywhere else it takes hold of the playhead instead, so one press
+   * on a waveform both picks the clip and says where in it to cut. A press on
+   * empty grid picks nothing and only moves the playhead.
    */
   const onDown = (e: PointerEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return
     const box = stripRef.current?.getBoundingClientRect()
     const at = secAt(e.clientX)
+    const clip = clipAt(lane, at, sampleRate)
     const onHeader = box ? e.clientY - box.top < CLIP_HEADER_H : false
-    const clip = onHeader ? clipAt(lane, at, sampleRate) : null
 
     e.currentTarget.setPointerCapture(e.pointerId)
-    if (clip) {
-      onSelect({ lane: lane.id, clipId: clip.id })
+    onSelect(clip ? { lane: lane.id, clipId: clip.id } : null)
+
+    if (clip && onHeader) {
       drag.current = {
         pointerId: e.pointerId,
         clipId: clip.id,
@@ -107,12 +114,12 @@ export function ArrangementLane({
       return
     }
     scrub.current = e.pointerId
-    useArrangement.getState().setScrub(at)
+    useArrangement.getState().setScrub(snap(at))
   }
 
   const onMove = (e: PointerEvent<HTMLDivElement>): void => {
     if (scrub.current === e.pointerId) {
-      useArrangement.getState().setScrub(secAt(e.clientX))
+      useArrangement.getState().setScrub(snap(secAt(e.clientX)))
       return
     }
     const held = drag.current
@@ -121,8 +128,10 @@ export function ArrangementLane({
     if (!held.moved && Math.abs(travel) < DRAG_SLOP_PX) return
     if (!held.moved) useArrangement.getState().beginDrag()
     held.moved = true
-    // Snapped where it lands, so a clip that started on a bar line stays on one.
-    const wanted = snap(held.startSec + travel * secPerPx)
+    // Moved by whole grid steps rather than snapped to them. A clip is placed so
+    // its downbeat sits on the grid, which its own start need not; stepping keeps
+    // that alignment, where snapping the start would break it.
+    const wanted = held.startSec + Math.round((travel * secPerPx) / step) * step
     const current = useArrangement.getState().lanes.find((l) => l.id === lane.id)
     const clip = current?.clips.find((c) => c.id === held.clipId)
     if (!clip) return
@@ -221,9 +230,6 @@ export function ArrangementLane({
             S
           </button>
         </div>
-        <span className="arr-lane__count mono">
-          {lane.clips.length === 0 ? '—' : `${lane.clips.length} clip${lane.clips.length > 1 ? 's' : ''}`}
-        </span>
       </div>
 
       <div
@@ -267,6 +273,7 @@ export function ArrangementLane({
         mode={eqMode}
         disabled={false}
         prefix="arr"
+        showFlat={false}
         onChange={(id, value) =>
           useArrangement.getState().setLaneEq(lane.id, { ...knobs.eq, [id]: value })
         }
