@@ -80,9 +80,9 @@ export interface ArrangementState {
   waveforms: Record<string, WaveformData>
   channels: Record<string, LaneChannel>
   /**
-   * What each lane calls itself, by lane id. A lane takes the name of the
-   * first track laid into it and keeps it; until then it has no entry here
-   * and shows its number. See {@link laneTitle}.
+   * The name each lane took from the track laid on it, by lane id. A lane
+   * with nothing on it ignores this and shows its number instead. See
+   * `arrangement/laneTitle`.
    */
   titles: Record<string, string>
   /** The clip CUT and DELETE act on, or null when nothing is picked. */
@@ -300,8 +300,10 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     if (!existing) return
     playlist.updateTrack(lane, { ...existing, clips: [...existing.clips, clip] })
 
-    // A lane takes the name of the first track laid into it.
-    set({ titles: nameLane(get().titles, lane, track.title) })
+    // A lane takes the name of the track that lands on it while it is empty.
+    if (existing.clips.length === 0) {
+      set({ titles: nameLane(get().titles, lane, track.title) })
+    }
   },
 
   async dropSelectedIntoFreeLane() {

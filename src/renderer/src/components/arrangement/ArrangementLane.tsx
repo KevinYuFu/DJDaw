@@ -68,7 +68,7 @@ export function ArrangementLane({
   onSelect
 }: ArrangementLaneProps): ReactElement {
   const eqMode = useSettings((s) => s.eqMode)
-  const title = useArrangement((s) => laneTitle(s.titles, lane.id, index))
+  const title = useArrangement((s) => laneTitle(s.titles, lane.id, index, lane.clips.length > 0))
   const channel = useArrangement((s) => s.channels[lane.id])
   const sampleRate = useArrangement((s) => s.sampleRate)
   const ghost = useArrangement((s) => (s.preview?.lane === lane.id ? s.preview : null))
