@@ -41,6 +41,7 @@ import {
   stopWatching,
   syncFromXml
 } from './rekordboxSync'
+import { transcodeArgs } from '@shared/ffmpegArgs'
 
 /** Extensions offered by the import dialog. */
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'aiff', 'aif', 'ogg', 'opus', 'wma']
@@ -107,9 +108,18 @@ function repairWavSizes(buf: Buffer): Buffer {
   return buf
 }
 
-function transcodeToWav(path: string): Promise<ArrayBuffer> {
+/**
+ * Decode `path` to a float WAV.
+ *
+ * `untrimmed` keeps the encoder's own padding at the front and back of the
+ * stream instead of dropping it. A compressed file carries a little silence
+ * either end that gapless playback throws away; a beat grid written against
+ * the untrimmed stream counts that silence as part of the track, so the audio
+ * has to keep it or every position in the file lands early.
+ */
+function transcodeToWav(path: string, untrimmed = false): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
-    const args = ['-v', 'error', '-i', path, '-f', 'wav', '-acodec', 'pcm_f32le', '-']
+    const args = transcodeArgs(path, untrimmed)
     const child = spawn(FFMPEG_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] })
 
     const chunks: Buffer[] = []
@@ -304,8 +314,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('audio:readFile', (_event, path: string): Promise<ArrayBuffer> => readAudioFile(path))
 
-  ipcMain.handle('audio:transcodeToWav', (_event, path: string): Promise<ArrayBuffer> =>
-    transcodeToWav(path)
+  ipcMain.handle(
+    'audio:transcodeToWav',
+    (_event, path: string, untrimmed?: boolean): Promise<ArrayBuffer> =>
+      transcodeToWav(path, untrimmed === true)
   )
 
   ipcMain.handle('library:load', (): Promise<LibraryFile> => loadLibrary())

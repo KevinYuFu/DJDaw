@@ -26,7 +26,8 @@ const api: DJDawApi = {
   syncRekordbox: () => ipcRenderer.invoke('rekordbox:syncNow'),
   clearRekordboxXml: () => ipcRenderer.invoke('rekordbox:clear'),
   readAudioFile: (path) => ipcRenderer.invoke('audio:readFile', path),
-  transcodeToWav: (path) => ipcRenderer.invoke('audio:transcodeToWav', path),
+  transcodeToWav: (path, untrimmed) =>
+    ipcRenderer.invoke('audio:transcodeToWav', path, untrimmed),
   loadLibrary: () => ipcRenderer.invoke('library:load'),
   saveLibrary: (lib) => ipcRenderer.invoke('library:save', lib),
   readWaveformCache: (audioKey) => ipcRenderer.invoke('waveform:read', audioKey),

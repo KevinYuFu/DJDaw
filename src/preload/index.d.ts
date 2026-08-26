@@ -46,7 +46,11 @@ export interface DJDawApi {
   /** Raw bytes for decodeAudioData. */
   readAudioFile(path: string): Promise<ArrayBuffer>
   /** ffmpeg fallback -> 32-bit float WAV bytes, for formats Chromium rejects. */
-  transcodeToWav(path: string): Promise<ArrayBuffer>
+  /**
+   * Decode to a float WAV via ffmpeg. `untrimmed` keeps the encoder padding
+   * the stream carries at each end. See `transcodeToWav` in the main process.
+   */
+  transcodeToWav(path: string, untrimmed?: boolean): Promise<ArrayBuffer>
   loadLibrary(): Promise<LibraryFile>
   saveLibrary(lib: LibraryFile): Promise<void>
   /**
