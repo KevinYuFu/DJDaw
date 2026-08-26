@@ -14,6 +14,9 @@ import {
 import { placeClip } from '@renderer/arrangement/placement'
 import { useLibrary } from '@renderer/state/useLibrary'
 
+/** High to low, then the colour knob, which is not one of the bands. */
+const LANE_KNOBS = ['high', 'mid', 'low', 'filter'] as const
+
 /** How far a pointer moves before a click on a clip becomes a drag. */
 const DRAG_SLOP_PX = 3
 
@@ -274,6 +277,7 @@ export function ArrangementLane({
         disabled={false}
         prefix="arr"
         showFlat={false}
+        knobOrder={LANE_KNOBS}
         onChange={(id, value) =>
           useArrangement.getState().setLaneEq(lane.id, { ...knobs.eq, [id]: value })
         }

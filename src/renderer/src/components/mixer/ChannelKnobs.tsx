@@ -34,6 +34,8 @@ const KNOB_RADIUS = 10
 /** Sweep of a rotary control, -135 to +135 degrees, as on the hardware. */
 const KNOB_SWEEP = 270
 
+type KnobId = 'low' | 'mid' | 'high' | 'filter'
+
 interface EqKnobSpec {
   id: keyof ChannelEq
   /** One or two characters: the strip only has 26px per knob. */
@@ -51,12 +53,16 @@ interface EqKnobSpec {
  * left, the way a spectrum or a piano runs. The two orders disagree on
  * purpose; do not make one match the other.
  */
-const EQ_KNOBS: readonly EqKnobSpec[] = [
-  { id: 'low', label: 'LO', name: 'Low' },
-  { id: 'mid', label: 'MID', name: 'Mid' },
-  { id: 'high', label: 'HI', name: 'High' },
-  { id: 'filter', label: 'F', name: 'Filter' }
-]
+/** Every knob a channel has. The caller decides what order they are laid in. */
+const KNOBS: Readonly<Record<KnobId, EqKnobSpec>> = {
+  low: { id: 'low', label: 'LO', name: 'Low' },
+  mid: { id: 'mid', label: 'MID', name: 'Mid' },
+  high: { id: 'high', label: 'HI', name: 'High' },
+  filter: { id: 'filter', label: 'COL', name: 'Colour' }
+}
+
+/** Low to high, then the colour knob, which is not one of the bands. */
+const DEFAULT_ORDER: readonly KnobId[] = ['low', 'mid', 'high', 'filter']
 
 /** Point on the knob circle. 0 degrees is 12 o'clock, positive is clockwise. */
 function polar(radius: number, degrees: number): [number, number] {
@@ -174,6 +180,8 @@ export interface ChannelKnobsProps {
   prefix?: string
   /** Whether to draw the button that puts every knob back to flat. */
   showFlat?: boolean
+  /** The order the knobs are laid in, left to right. */
+  knobOrder?: readonly KnobId[]
   onChange(id: keyof ChannelEq, value: number): void
   onReset(id: keyof ChannelEq): void
   onFlat(): void
@@ -198,6 +206,7 @@ export function ChannelKnobs({
   disabled,
   prefix = 'v2-edit',
   showFlat = true,
+  knobOrder = DEFAULT_ORDER,
   onChange,
   onReset,
   onFlat
@@ -240,7 +249,7 @@ export function ChannelKnobs({
     <div className={`${prefix}-eq`}>
       {readout !== null ? <span className={`${prefix}-note mono`}>{readout}</span> : null}
 
-      {EQ_KNOBS.map((spec) => {
+      {knobOrder.map((id) => KNOBS[id]).map((spec) => {
         const value = eq[spec.id]
         const angle = -KNOB_SWEEP / 2 + clamp(value, 0, 1) * KNOB_SWEEP
         const moved = Math.abs(value - CENTRE) > 0.001
@@ -249,7 +258,7 @@ export function ChannelKnobs({
         return (
           <div
             key={spec.id}
-            className={`${prefix}-knob${moved ? ' is-moved' : ''}${disabled ? ' is-disabled' : ''}`}
+            className={`${prefix}-knob${spec.id === 'filter' ? ` ${prefix}-knob--colour` : ''}${moved ? ' is-moved' : ''}${disabled ? ' is-disabled' : ''}`}
             role="slider"
             aria-label={`${label} ${spec.name}`}
             aria-disabled={disabled}
