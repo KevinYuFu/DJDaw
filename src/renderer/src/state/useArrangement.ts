@@ -7,6 +7,7 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { ArrangementEngine } from '@renderer/audio/ArrangementEngine'
 import { decodeTrack } from '@renderer/audio/decode'
 import { playbackRate } from '@renderer/analysis/playbackRate'
+import { nameLane } from '@renderer/arrangement/laneTitle'
 import { placeClip } from '@renderer/arrangement/placement'
 import { peekWaveform, resolveWaveform } from '@renderer/analysis/waveformCache'
 import { WorkletPlayout, type ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
@@ -78,6 +79,12 @@ export interface ArrangementState {
   /** Peaks for every source laid into the arrangement, for drawing clips. */
   waveforms: Record<string, WaveformData>
   channels: Record<string, LaneChannel>
+  /**
+   * What each lane calls itself, by lane id. A lane takes the name of the
+   * first track laid into it and keeps it; until then it has no entry here
+   * and shows its number. See {@link laneTitle}.
+   */
+  titles: Record<string, string>
   /** The clip CUT and DELETE act on, or null when nothing is picked. */
   selection: ClipSelection | null
   /** The clip about to be dropped, and the lane it will land on. */
@@ -183,6 +190,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   sampleRate: 48000,
   masterBpm: 120,
   lanes: [],
+  titles: {},
   version: 0,
   playing: false,
   duration: 0,
@@ -291,6 +299,9 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     const existing = laneById(playlist.getState().tracks, lane)
     if (!existing) return
     playlist.updateTrack(lane, { ...existing, clips: [...existing.clips, clip] })
+
+    // A lane takes the name of the first track laid into it.
+    set({ titles: nameLane(get().titles, lane, track.title) })
   },
 
   async dropSelectedIntoFreeLane() {

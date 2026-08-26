@@ -6,12 +6,12 @@ import { draggedTrackId, TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
 import { ChannelFader, ChannelKnobs } from '@renderer/components/mixer/ChannelKnobs'
 import { useSettings } from '@renderer/state/useSettings'
 import { useArrangement, type ClipSelection } from '@renderer/state/useArrangement'
+import { laneTitle } from '@renderer/arrangement/laneTitle'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
 import {
   ArrangementClips,
   CLIP_HEADER_H
 } from '@renderer/components/arrangement/ArrangementClips'
-import { LaneHeader } from '@renderer/components/arrangement/LaneHeader'
 import { placeClip } from '@renderer/arrangement/placement'
 import { useLibrary } from '@renderer/state/useLibrary'
 
@@ -23,6 +23,8 @@ const DRAG_SLOP_PX = 3
 
 export interface ArrangementLaneProps {
   lane: ClipTrack
+  /** Where the lane sits in the list, for a lane that has no name yet. */
+  index: number
   fromSec: number
   secPerPx: number
   width: number
@@ -55,6 +57,7 @@ function clipAt(lane: ClipTrack, sec: number, sampleRate: number): ArrangementCl
  */
 export function ArrangementLane({
   lane,
+  index,
   fromSec,
   secPerPx,
   width,
@@ -65,6 +68,7 @@ export function ArrangementLane({
   onSelect
 }: ArrangementLaneProps): ReactElement {
   const eqMode = useSettings((s) => s.eqMode)
+  const title = useArrangement((s) => laneTitle(s.titles, lane.id, index))
   const channel = useArrangement((s) => s.channels[lane.id])
   const sampleRate = useArrangement((s) => s.sampleRate)
   const ghost = useArrangement((s) => (s.preview?.lane === lane.id ? s.preview : null))
@@ -214,13 +218,29 @@ export function ArrangementLane({
     <section className={`arr-lane${lane.soloed ? ' is-soloed' : ''}`} data-lane={lane.name}>
       <div className="arr-lane__edge" />
 
-      <LaneHeader
-        name={lane.name}
-        muted={lane.muted}
-        soloed={lane.soloed}
-        onToggleMute={() => useArrangement.getState().toggleMute(lane.id)}
-        onToggleSolo={() => useArrangement.getState().toggleSolo(lane.id)}
-      />
+      <div className="arr-lane__info">
+        <span className="arr-lane__title" title={title}>
+          {title}
+        </span>
+        <div className="arr-lane__buttons">
+          <button
+            type="button"
+            className={`arr-btn arr-btn--mute${lane.muted ? ' is-lit' : ''}`}
+            title="Mute this lane"
+            onClick={() => useArrangement.getState().toggleMute(lane.id)}
+          >
+            M
+          </button>
+          <button
+            type="button"
+            className={`arr-btn arr-btn--solo${lane.soloed ? ' is-lit' : ''}`}
+            title="Solo this lane"
+            onClick={() => useArrangement.getState().toggleSolo(lane.id)}
+          >
+            S
+          </button>
+        </div>
+      </div>
 
       <div
         ref={stripRef}
