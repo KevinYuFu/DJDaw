@@ -30,6 +30,7 @@ const MODULES = [
   'src/shared/wav.ts',
   'src/shared/deckList.ts',
   'src/shared/fader.ts',
+  'src/shared/latency.ts',
   'src/renderer/src/components/waveform/waveformRender.ts',
   'src/renderer/src/components/waveform/clipSlide.ts',
   'src/renderer/src/analysis/playbackRate.ts',

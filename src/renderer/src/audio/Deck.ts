@@ -23,6 +23,7 @@ import {
   type DeckEvent,
   type RegionFrames
 } from '@renderer/audio/deckProtocol'
+import { audibleTime, outputLatencySec } from '@shared/latency'
 
 /**
  * One deck: the typed façade over `worklets/deck-processor.js`.
@@ -556,7 +557,7 @@ export class Deck {
     this.post({ type: 'play' })
     // Playing from the end restarts the file in the worklet; mirror that here
     // so the playhead does not sit at the end until the next report.
-    if (this.positionFrame() >= this.timelineFrames() - 1) {
+    if (this.renderFrame() >= this.timelineFrames() - 1) {
       this.lastSnapshot = { ...this.lastSnapshot, frame: 0, ctxTime: this.ctx.currentTime }
     }
     this.expectPlaying(true)
@@ -569,7 +570,9 @@ export class Deck {
     // coasts on the old rate until the next report lands.
     this.lastSnapshot = {
       ...this.lastSnapshot,
-      frame: this.positionFrame(),
+      // The queued audio still reaches the speakers, so freeze on the render
+      // clock; freezing on the audible one would replay what was already heard.
+      frame: this.renderFrame(),
       rate: 0,
       ctxTime: this.ctx.currentTime
     }
@@ -610,10 +613,23 @@ export class Deck {
    * enough to call several times per animation frame.
    */
   positionFrame(): number {
+    return this.frameAt(audibleTime(this.ctx.currentTime, outputLatencySec(this.ctx)))
+  }
+
+  /**
+   * Where the render clock has reached, in timeline frames. The worklet and
+   * the device queue count from this; the playhead does not.
+   */
+  private renderFrame(): number {
+    return this.frameAt(this.ctx.currentTime)
+  }
+
+  /** The frame the deck is at on the context clock at `at`. */
+  private frameAt(at: number): number {
     const snap = this.lastSnapshot
     let frame = snap.frame
     if (snap.rate !== 0) {
-      frame += (this.ctx.currentTime - snap.ctxTime) * snap.rate * this.fileSampleRate
+      frame += (at - snap.ctxTime) * snap.rate * this.fileSampleRate
     }
     return clamp(frame, 0, this.timelineFrames())
   }

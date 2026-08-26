@@ -1,6 +1,7 @@
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { Lane, type LaneSource } from '@renderer/audio/Lane'
 import { VOICE_WORKLET_URL } from '@renderer/audio/voiceProtocol'
+import { audibleTime, outputLatencySec } from '@shared/latency'
 
 /**
  * The arrangement's audio: a set of lanes and one clock.
@@ -74,7 +75,7 @@ export class ArrangementEngine {
     // A voice built while the transport runs joins the run in progress.
     if (this.startedAt === null || fresh.length === 0) return
     const at = this.atNextStart()
-    const from = this.positionSeconds() + START_LEAD_SEC
+    const from = this.renderSeconds() + START_LEAD_SEC
     const frame = Math.round(from * this.sampleRate)
     for (const voice of fresh) voice.start(frame, at)
   }
@@ -83,8 +84,18 @@ export class ArrangementEngine {
     return this.startedAt !== null
   }
 
-  /** Where the playhead is now, in seconds. */
+  /**
+   * Where the playhead is now, in seconds: the audio leaving the speakers,
+   * not the audio being rendered. See `shared/latency`.
+   */
   positionSeconds(): number {
+    if (this.startedAt === null) return this.restAt
+    const now = audibleTime(this.ctx.currentTime, outputLatencySec(this.ctx))
+    return this.startedFrom + Math.max(0, now - this.startedAt)
+  }
+
+  /** Where the render clock has reached. Scheduling counts from this. */
+  private renderSeconds(): number {
     if (this.startedAt === null) return this.restAt
     return this.startedFrom + Math.max(0, this.ctx.currentTime - this.startedAt)
   }
@@ -100,7 +111,9 @@ export class ArrangementEngine {
 
   pause(): void {
     if (this.startedAt === null) return
-    this.restAt = this.positionSeconds()
+    // The queued audio still reaches the speakers, so resume from the render
+    // clock; resting on the audible one would replay what was already heard.
+    this.restAt = this.renderSeconds()
     this.startedAt = null
     for (const lane of this.lanes.values()) lane.stop()
   }
