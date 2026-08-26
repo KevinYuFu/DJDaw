@@ -43,6 +43,40 @@ function oklch(hex) {
   return { L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, C: Math.hypot(a, b), H }
 }
 
+/** OKLab coordinates of a hex colour. */
+function oklab(hex) {
+  const [R, G, B] = rgb(hex).map(lin)
+  const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B)
+  const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B)
+  const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B)
+  return {
+    L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    a: 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    b: 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+  }
+}
+
+const hex2 = (v) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')
+const gam = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055)
+
+/** `color-mix(in oklab, a share%, b)`, the same blend the stylesheets ask for. */
+function mix(aHex, share, bHex) {
+  const a = oklab(aHex)
+  const b = oklab(bHex)
+  const L = a.L * share + b.L * (1 - share)
+  const A = a.a * share + b.a * (1 - share)
+  const B = a.b * share + b.b * (1 - share)
+  const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3
+  const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3
+  const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3
+  return (
+    '#' +
+    hex2(gam(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)) +
+    hex2(gam(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)) +
+    hex2(gam(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s))
+  )
+}
+
 /** Perceptual distance in OKLab: lightness, chroma and hue at once. */
 function distance(a, b) {
   const ax = a.C * Math.cos((a.H * Math.PI) / 180)
@@ -71,6 +105,10 @@ const READABLE = [
   // Lit fills carry short bold uppercase, which sits a tier below body text.
   ['text-inverse', 'accent', 65],
   ['text-inverse', 'play', 65],
+  ['text-inverse', 'danger', 60],
+  // The lane head's switch: its labels sit unlit in a sunken well.
+  ['text-faint', 'bg-sunken', 45],
+  ['text-faint', 'bg-panel-2', 45],
   ['play', 'bg-panel', 60],
   ['cue', 'bg-panel', 60],
   ['danger', 'bg-panel', 60],
@@ -92,6 +130,22 @@ for (const theme of THEMES) {
     const got = lc(t[fg], t[bg])
     ok(`${theme.name}: ${fg} on ${bg} reads at Lc ${got.toFixed(0)}, needs ${min}`, got >= min)
   }
+
+  // A lane head names its lane with a big letter in the lane's own colour, and
+  // drains that letter to --text-faint when the lane is muted. So the drained
+  // letter has to be unmistakable against every colour a lane can wear, or a
+  // lane whose colour happens to sit near the drained grey would read as muted
+  // when it is not.
+  const drained = mix(t['text-faint'], 0.65, t['bg-panel-2'])
+  for (const deck of ['deck-a', 'deck-b', 'deck-c', 'deck-d']) {
+    const worn = mix(t[deck], 0.82, t.text)
+    const apart = distance(oklch(drained), oklch(worn))
+    ok(`${theme.name}: a muted letter sits ${apart.toFixed(2)} from ${deck}`, apart >= 0.15)
+  }
+
+  // Drained, but still saying which lane it is.
+  const stillReads = lc(drained, t['bg-panel-2'])
+  ok(`${theme.name}: a muted letter still reads at Lc ${stillReads.toFixed(0)}`, stillReads >= 30)
 
   // Surfaces have to step far enough apart to read as different levels.
   const surfaces = SURFACES.map((s) => oklch(t[s]))

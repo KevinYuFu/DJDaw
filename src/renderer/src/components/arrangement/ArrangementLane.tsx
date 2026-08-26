@@ -11,6 +11,7 @@ import {
   ArrangementClips,
   CLIP_HEADER_H
 } from '@renderer/components/arrangement/ArrangementClips'
+import { LaneHeader } from '@renderer/components/arrangement/LaneHeader'
 import { placeClip } from '@renderer/arrangement/placement'
 import { useLibrary } from '@renderer/state/useLibrary'
 
@@ -213,27 +214,13 @@ export function ArrangementLane({
     <section className={`arr-lane${lane.soloed ? ' is-soloed' : ''}`} data-lane={lane.name}>
       <div className="arr-lane__edge" />
 
-      <div className="arr-lane__info">
-        <span className="arr-lane__badge">{lane.name}</span>
-        <div className="arr-lane__buttons">
-          <button
-            type="button"
-            className={`arr-btn arr-btn--mute${lane.muted ? ' is-lit' : ''}`}
-            title="Mute this lane"
-            onClick={() => useArrangement.getState().toggleMute(lane.id)}
-          >
-            M
-          </button>
-          <button
-            type="button"
-            className={`arr-btn arr-btn--solo${lane.soloed ? ' is-lit' : ''}`}
-            title="Solo this lane"
-            onClick={() => useArrangement.getState().toggleSolo(lane.id)}
-          >
-            S
-          </button>
-        </div>
-      </div>
+      <LaneHeader
+        name={lane.name}
+        muted={lane.muted}
+        soloed={lane.soloed}
+        onToggleMute={() => useArrangement.getState().toggleMute(lane.id)}
+        onToggleSolo={() => useArrangement.getState().toggleSolo(lane.id)}
+      />
 
       <div
         ref={stripRef}
