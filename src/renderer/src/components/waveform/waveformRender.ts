@@ -1200,69 +1200,6 @@ export function drawClipEdges(
   ctx.restore()
 }
 
-/** One division. Skipped entirely when it falls outside the view. */
-
-/**
- * How a piece being dragged is previewed at the place it would land: a filled
- * block with a bright outline, not a copy of the waveform.
- */
-export interface ClipGhostStyle {
-  /** Wash inside the block. */
-  fill: string
-  edgeColor: string
-  edgeWidth: number
-  /** Narrowest the block may draw, so a short piece is still visible. */
-  minWidth: number
-}
-
-export const DEFAULT_CLIP_GHOST_STYLE: ClipGhostStyle = {
-  fill: 'rgba(255,255,255,0.18)',
-  edgeColor: '#ffffff',
-  edgeWidth: 2,
-  minWidth: 3
-}
-
-/**
- * Where a dragged piece would land if it were dropped now, over `[from, to]`.
- *
- * Drawn last, over the waveform and the markers, so it is the brightest mark
- * on the strip.
- */
-export function drawClipGhost(
-  ctx: CanvasRenderingContext2D,
-  startSec: number,
-  durationSec: number,
-  from: number,
-  to: number,
-  width: number,
-  height: number,
-  style: ClipGhostStyle = DEFAULT_CLIP_GHOST_STYLE
-): void {
-  const span = to - from
-  if (!(span > 0) || width <= 0 || !(durationSec > 0)) return
-  const scale = width / span
-
-  const x0 = (startSec - from) * scale
-  const x1 = Math.max((startSec + durationSec - from) * scale, x0 + style.minWidth)
-  if (x1 < 0 || x0 > width) return
-
-  ctx.save()
-  ctx.fillStyle = style.fill
-  ctx.fillRect(x0, 0, x1 - x0, height)
-  // Inset by half the line width: a stroke straddles its path, so an outline
-  // on the block's own edges would lose half of its top and bottom off-canvas.
-  const inset = style.edgeWidth / 2
-  ctx.strokeStyle = style.edgeColor
-  ctx.lineWidth = style.edgeWidth
-  ctx.strokeRect(
-    x0 + inset,
-    inset,
-    Math.max(x1 - x0 - style.edgeWidth, 0),
-    Math.max(height - style.edgeWidth, 0)
-  )
-  ctx.restore()
-}
-
 /** Backing-store size a canvas of this CSS box needs at this pixel ratio. */
 function backingSize(cssWidth: number, cssHeight: number, dpr: number): { w: number; h: number } {
   const ratio = dpr > 0 ? dpr : 1

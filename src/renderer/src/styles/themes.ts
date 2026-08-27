@@ -18,8 +18,6 @@ export interface Theme {
   tokens: Record<string, string>
 }
 
-export const THEME_STORAGE_KEY = 'djdaw.theme'
-
 /** The tokens a theme sets. Anything else is a metric and does not change. */
 export interface ThemeTokens {
   'bg-app': string

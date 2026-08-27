@@ -19,7 +19,6 @@
     "test": "node test/run.mjs"
   },
   "dependencies": {
-    "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^4.0.0",
     "@waveform-playlist/core": "^12.6.1",
     "@waveform-playlist/engine": "^13.6.0",

@@ -123,14 +123,6 @@ export interface WaveformData extends WaveformMeta {
   high: Uint8Array
 }
 
-export interface AnalysisResult {
-  waveform: WaveformData
-  grid: BeatGrid
-  bpm: number
-  /** 0-1 confidence in the detected tempo. */
-  confidence: number
-}
-
 export interface LibraryFile {
   version: number
   /** Local records only. The rekordbox mirror is derived, never stored. */
@@ -178,12 +170,6 @@ export interface RekordboxPlaylistRef {
   folders: string[]
   /** DJDaw track ids, in playlist order. */
   trackIds: string[]
-}
-
-export interface ImportedFile {
-  track: Track
-  /** Raw bytes of the audio file, for `decodeAudioData` in the renderer. */
-  data?: ArrayBuffer
 }
 
 /** What an export is written as. WAV is the render itself; MP3 is encoded from it. */
