@@ -110,6 +110,14 @@ function encodeFlac(channels: Float32Array[], to: string): Promise<void> {
   })
 }
 
+/**
+ * Running the model here takes the whole app down: onnxruntime loads and builds
+ * a session fine under Electron, then dies on the first inference. The
+ * separation is moving to the renderer, which runs the same model on WebGPU.
+ * Until then this refuses rather than crashing.
+ */
+const RUNS_HERE = false
+
 let session: InferenceSession | null = null
 
 /** The model, loaded once and kept. Loading it takes a couple of seconds. */
@@ -138,6 +146,9 @@ export async function separateStems(
   if (already) {
     onProgress(1)
     return already
+  }
+  if (!RUNS_HERE) {
+    throw new Error('Splitting is not finished yet — the model does not run here')
   }
   const dir = stemDir(audioKey)
   if (!dir) throw new Error(`"${audioKey}" cannot name a folder`)

@@ -578,7 +578,8 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
       }
     } catch (err) {
       console.error('[arrangement] could not split', track.path, err)
-      set({ notice: 'That track could not be split' })
+      const why = err instanceof Error ? err.message : String(err)
+      set({ notice: why || 'That track could not be split' })
     } finally {
       const rest = { ...get().splitting }
       delete rest[track.audioKey]
