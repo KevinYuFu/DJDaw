@@ -36,7 +36,6 @@ export const LIBRARY_VERSION = 1
 
 /** Waveform band colours. rekordbox's classic "3Band" look. */
 export const CUE_COLOR = '#e8433a'
-export const MEMORY_CUE_COLOR = '#e8433a'
 export const LOOP_COLOR = '#f5a11c'
 export const GRID_BEAT_COLOR = 'rgba(255,255,255,0.28)'
 export const GRID_DOWNBEAT_COLOR = 'rgba(255,255,255,0.85)'

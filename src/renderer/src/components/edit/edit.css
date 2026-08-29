@@ -288,15 +288,6 @@
   min-height: 0;
 }
 
-.edit-transport {
-  display: flex;
-  gap: 5px;
-  flex: 0 0 auto;
-  /* The anchor for the cut notice, which floats above the row rather than
-     taking a line of its own: there is no spare height for one. */
-  position: relative;
-}
-
 /*
  * Why a cut did nothing. Brief, and out of the way of the pointer, so a second
  * try does not have to wait for it to clear.
@@ -339,9 +330,6 @@
 .edit-btn--play:not(.is-lit) .edit-btn__icon {
   fill: var(--play);
 }
-.edit-btn--cue:not(.is-lit) .edit-btn__icon {
-  fill: var(--cue);
-}
 
 /* Cut carries its shortcut instead of an icon: the shortcut is the point of
    the button, and the row is too narrow to spend width on both. */
@@ -370,14 +358,6 @@
   color: var(--text-inverse);
   box-shadow: 0 0 12px var(--play-glow);
 }
-.edit-btn--cue.is-lit,
-.edit-btn--cue.is-lit:hover:not(:disabled) {
-  background: var(--cue);
-  border-color: var(--cue);
-  color: var(--text-inverse);
-  box-shadow: 0 0 12px var(--cue-glow);
-}
-
 /* One row of eight rather than the deck's 2x4: the row is wide and short, so
    the pads spend width, which there is plenty of, instead of height. */
 .edit-pads {
@@ -641,66 +621,6 @@
 }
 .edit-export__go:not(:disabled):hover {
   filter: brightness(1.1);
-}
-
-/* Trim, as a horizontal slider rather than a knob: an edit row is an
-   arrangement track, and a level on one reads better as a bar than a dial. */
-.edit-trim {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 2px;
-  cursor: ew-resize;
-  touch-action: none;
-}
-.edit-trim.is-disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.edit-trim__track {
-  position: relative;
-  width: 100%;
-  height: 11px;
-  border-radius: 2px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
-  overflow: hidden;
-}
-
-.edit-trim__fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: var(--text-dim);
-  opacity: 0.55;
-}
-.edit-trim:not(.is-disabled):hover .edit-trim__fill {
-  opacity: 0.75;
-}
-.edit-trim.is-moved .edit-trim__fill {
-  background: var(--deck-color, var(--accent));
-  opacity: 0.85;
-}
-
-/* 0 dB. Trim cuts and boosts, so the slider needs the flat point marked. */
-.edit-trim__unity {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.edit-trim__cap {
-  position: absolute;
-  top: -1px;
-  bottom: -1px;
-  width: 3px;
-  margin-left: -1.5px;
-  border-radius: 1px;
-  background: var(--text);
 }
 
 /* Channel fader: level, kept apart from the EQ because it is not part of it. */

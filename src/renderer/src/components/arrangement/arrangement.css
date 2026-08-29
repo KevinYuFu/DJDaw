@@ -200,11 +200,6 @@
   gap: 4px;
 }
 
-.arr-lane__count {
-  color: var(--text-dim);
-  font-size: 10px;
-}
-
 /* ---------------------------------------------------------------- strip */
 
 .arr-lane__strip {

@@ -219,15 +219,3 @@ export function scaleGridBpm(grid: BeatGrid, factor: number): BeatGrid {
   return { ...grid, anchors: grid.anchors.map((a) => ({ ...a, bpm: a.bpm * factor })) }
 }
 
-/** Insert a tempo change at `time`, splitting the grid into two sections. */
-export function addAnchor(grid: BeatGrid, time: number, bpm: number): BeatGrid {
-  const anchors = grid.anchors.filter((a) => Math.abs(a.time - time) > 1e-6)
-  anchors.push({ time, bpm })
-  anchors.sort((a, b) => a.time - b.time)
-  return { ...grid, anchors }
-}
-
-export function removeAnchor(grid: BeatGrid, index: number): BeatGrid {
-  if (grid.anchors.length <= 1 || index <= 0) return grid
-  return { ...grid, anchors: grid.anchors.filter((_, i) => i !== index) }
-}

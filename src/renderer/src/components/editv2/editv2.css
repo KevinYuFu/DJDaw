@@ -279,15 +279,6 @@
   min-height: 0;
 }
 
-.v2-edit-transport {
-  display: flex;
-  gap: 5px;
-  flex: 0 0 auto;
-  /* The anchor for the cut notice, which floats above the row rather than
-     taking a line of its own: there is no spare height for one. */
-  position: relative;
-}
-
 /*
  * Why a cut did nothing. Brief, and out of the way of the pointer, so a second
  * try does not have to wait for it to clear.

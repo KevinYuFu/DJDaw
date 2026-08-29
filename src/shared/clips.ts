@@ -76,21 +76,6 @@ export function dropIndex(clips: readonly Clip[], id: string, startSec: number):
   return rest.length
 }
 
-/**
- * Where a piece dropped at `startSec` would actually come to rest.
- *
- * The drop is a reordering, so a piece does not land under the pointer — it
- * lands at the place in the order the pointer picked out. The ghost has to
- * show that, or a drag against a long neighbour promises a move that will not
- * happen and the row looks broken when it does not.
- */
-export function dropStartSec(clips: readonly Clip[], id: string, startSec: number): number {
-  const to = dropIndex(clips, id, startSec)
-  const rest = clips.filter((clip) => clip.id !== id)
-  let at = 0
-  for (let i = 0; i < to && i < rest.length; i++) at += rest[i].durationSec
-  return at
-}
 
 /**
  * Move a piece to a new place in the order. The rest close up behind it and

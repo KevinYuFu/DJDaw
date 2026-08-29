@@ -40,9 +40,3 @@ export type VoiceCommand =
   /** Jump the playhead. Click-free: the voice crossfades across the splice. */
   | { type: 'seek'; frame: number }
 
-/** The voice's playhead, reported a few times a second. */
-export interface VoicePosition {
-  type: 'pos'
-  frame: number
-  playing: boolean
-}
