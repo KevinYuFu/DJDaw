@@ -516,6 +516,8 @@ export interface CanvasChrome {
   clipHeadOn: string
   clipEdge: string
   clipEdgeOn: string
+  /** Marks a clip being copied rather than moved. */
+  copy: string
   clipText: string
 }
 
@@ -533,6 +535,7 @@ export function canvasChrome(id: string): CanvasChrome {
     clipHeadOn: t['clip-head-on'],
     clipEdge: t['clip-edge'],
     clipEdgeOn: t['clip-edge-on'],
+    copy: t.play,
     clipText: t['clip-text']
   }
 }

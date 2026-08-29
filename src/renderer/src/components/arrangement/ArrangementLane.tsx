@@ -1,4 +1,11 @@
-import { useRef, useState, type DragEvent, type PointerEvent, type ReactElement } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type PointerEvent,
+  type ReactElement
+} from 'react'
 import type { ClipTrack } from '@waveform-playlist/core'
 import { flatChannel } from '@shared/eq'
 import { faderGain, faderPositionForDb } from '@shared/fader'
@@ -89,6 +96,9 @@ export function ArrangementLane({
     startX: number
     startSec: number
     moved: boolean
+    /** Where the shadow was last put, so holding Cmd can redraw it in place. */
+    atLane?: string
+    atSample?: number
   } | null>(null)
   /** The clip end the pointer is over, which shows a grip and resizes. */
   const [grip, setGrip] = useState<{ clipId: string; edge: ClipEdge } | null>(null)
@@ -175,6 +185,12 @@ export function ArrangementLane({
       setGrip(clip && edge ? { clipId: clip.id, edge } : null)
       return
     }
+    // A release that never arrived would otherwise leave the lane holding the
+    // clip for good, with nothing able to put it down.
+    if (e.buttons === 0) {
+      onUp(e)
+      return
+    }
     const travel = e.clientX - grabbed.startX
     if (!grabbed.moved && Math.abs(travel) < DRAG_SLOP_PX) return
     const arrangement = useArrangement.getState()
@@ -188,8 +204,9 @@ export function ArrangementLane({
       // so its downbeat sits on the grid, which its own start need not; stepping
       // keeps that alignment, where snapping the start would break it.
       const wanted = grabbed.startSec + Math.round((travel * secPerPx) / step) * step
-      const onto = laneAt(e.clientY) ?? lane.id
-      arrangement.previewClipMove(onto, Math.max(0, wanted) * sampleRate)
+      grabbed.atLane = laneAt(e.clientY) ?? lane.id
+      grabbed.atSample = Math.max(0, wanted) * sampleRate
+      arrangement.previewClipMove(grabbed.atLane, grabbed.atSample, e.metaKey || e.ctrlKey)
       return
     }
     arrangement.previewClipTrim(snap(secAt(e.clientX)) * sampleRate)
@@ -209,6 +226,26 @@ export function ArrangementLane({
     if (drag.current?.moved) useArrangement.getState().commitClipDrag()
     drag.current = null
   }
+
+  // Cmd can be taken up or let go without the pointer moving, and the shadow
+  // has to say which it is at that moment.
+  useEffect(() => {
+    const onModifier = (e: KeyboardEvent): void => {
+      if (e.key !== 'Meta' && e.key !== 'Control') return
+      const grabbed = drag.current
+      if (!grabbed || grabbed.kind !== 'move' || grabbed.atLane === undefined) return
+      if (grabbed.atSample === undefined) return
+      useArrangement
+        .getState()
+        .previewClipMove(grabbed.atLane, grabbed.atSample, e.type === 'keydown')
+    }
+    window.addEventListener('keydown', onModifier)
+    window.addEventListener('keyup', onModifier)
+    return () => {
+      window.removeEventListener('keydown', onModifier)
+      window.removeEventListener('keyup', onModifier)
+    }
+  }, [])
 
   const onCancel = (e: PointerEvent<HTMLDivElement>): void => {
     if (scrub.current === e.pointerId) {
@@ -258,7 +295,7 @@ export function ArrangementLane({
     ) {
       return
     }
-    arrangement.setPreview({ lane: lane.id, sourceId: trackId, ...placed })
+    arrangement.setPreview({ lane: lane.id, sourceId: trackId, copy: false, ...placed })
   }
 
   const onDrop = (e: DragEvent<HTMLDivElement>): void => {

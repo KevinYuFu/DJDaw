@@ -30,6 +30,8 @@ export interface ClipGhost {
   durationSamples: number
   offsetSamples: number
   rate: number
+  /** Drawn in the copy colour, saying the original is staying where it is. */
+  copy: boolean
 }
 
 export interface ArrangementClipsProps {
@@ -188,7 +190,12 @@ export function ArrangementClips({
     ctx.clearRect(0, 0, w, h)
 
     const seen = new Set<string>()
-    const paint = (clip: ArrangementClip, selected: boolean, preview: boolean): void => {
+    const paint = (
+      clip: ArrangementClip,
+      selected: boolean,
+      preview: boolean,
+      copying = false
+    ): void => {
       const startSec = clip.startSample / sampleRate
       const lengthSec = clip.durationSamples / sampleRate
       const x = Math.round((startSec - fromSec) / secPerPx)
@@ -206,7 +213,7 @@ export function ArrangementClips({
 
       ctx.fillStyle = selected ? chrome.clipBodyOn : chrome.clipBody
       ctx.fillRect(x, 0, px, h)
-      ctx.fillStyle = selected ? chrome.clipHeadOn : chrome.clipHead
+      ctx.fillStyle = copying ? chrome.copy : selected ? chrome.clipHeadOn : chrome.clipHead
       ctx.fillRect(x, 0, px, CLIP_HEADER_H)
 
       if (wave) {
@@ -251,7 +258,7 @@ export function ArrangementClips({
 
       if (preview) {
         // Dashed: a place, not a clip that is there.
-        ctx.strokeStyle = chrome.clipEdgeOn
+        ctx.strokeStyle = copying ? chrome.copy : chrome.clipEdgeOn
         ctx.lineWidth = 2
         ctx.setLineDash([5, 3])
       } else {
@@ -292,7 +299,8 @@ export function ArrangementClips({
           name: tracks[ghost.sourceId]?.title
         },
         false,
-        true
+        true,
+        ghost.copy
       )
     }
     drawGrid(ctx, { chrome, width: w, height: h, fromSec, secPerPx, barSec, beatsPerBar })
