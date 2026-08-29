@@ -23,6 +23,50 @@ export const CLIP_HEADER_H = 14
 /** Width of the grip drawn on a clip end the pointer can pull. */
 const GRIP_W = 3
 
+/** Side of the plus that marks a clip being copied. */
+const COPY_MARK = 14
+
+/**
+ * The plus that says a drag is making a copy, in the top corner of the clip.
+ *
+ * Drawn on its own ground rather than straight onto the clip: over a bright
+ * waveform, or on a light theme, the mark alone would not read.
+ */
+function drawCopyMark(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  px: number,
+  width: number,
+  chrome: CanvasChrome
+): void {
+  const size = COPY_MARK
+  // Held inside the strip, so a clip at either edge still shows its mark.
+  const left = Math.max(1, Math.min(x + px - size - 3, width - size - 1))
+  const top = 3
+  const r = 3
+  ctx.save()
+  ctx.globalAlpha = 1
+  ctx.beginPath()
+  ctx.roundRect(left, top, size, size, r)
+  ctx.fillStyle = chrome.copyPlate
+  ctx.fill()
+  ctx.strokeStyle = chrome.copy
+  ctx.lineWidth = 1
+  ctx.stroke()
+  const mid = size / 2
+  const arm = 4
+  ctx.strokeStyle = chrome.copy
+  ctx.lineWidth = 2
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(left + mid - arm, top + mid)
+  ctx.lineTo(left + mid + arm, top + mid)
+  ctx.moveTo(left + mid, top + mid - arm)
+  ctx.lineTo(left + mid, top + mid + arm)
+  ctx.stroke()
+  ctx.restore()
+}
+
 /** A clip about to be dropped, drawn where it will actually land. */
 export interface ClipGhost {
   sourceId: string
@@ -213,7 +257,7 @@ export function ArrangementClips({
 
       ctx.fillStyle = selected ? chrome.clipBodyOn : chrome.clipBody
       ctx.fillRect(x, 0, px, h)
-      ctx.fillStyle = copying ? chrome.copy : selected ? chrome.clipHeadOn : chrome.clipHead
+      ctx.fillStyle = selected ? chrome.clipHeadOn : chrome.clipHead
       ctx.fillRect(x, 0, px, CLIP_HEADER_H)
 
       if (wave) {
@@ -258,7 +302,7 @@ export function ArrangementClips({
 
       if (preview) {
         // Dashed: a place, not a clip that is there.
-        ctx.strokeStyle = copying ? chrome.copy : chrome.clipEdgeOn
+        ctx.strokeStyle = chrome.clipEdgeOn
         ctx.lineWidth = 2
         ctx.setLineDash([5, 3])
       } else {
@@ -267,6 +311,7 @@ export function ArrangementClips({
       }
       ctx.strokeRect(x + 0.5, 0.5, px - 1, h - 1)
       ctx.restore()
+      if (copying) drawCopyMark(ctx, x, px, w, chrome)
       ctx.globalAlpha = 1
     }
 
