@@ -31,7 +31,7 @@ export const DEFAULT_ZOOM_INDEX = 3
 
 /** Samples of audio summarised by one waveform bucket. */
 export const WAVEFORM_BUCKET = 128
-export const WAVEFORM_CACHE_VERSION = 1
+export const WAVEFORM_CACHE_VERSION = 2
 export const LIBRARY_VERSION = 1
 
 /** Waveform band colours. rekordbox's classic "3Band" look. */
