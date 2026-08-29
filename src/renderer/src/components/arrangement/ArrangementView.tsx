@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -17,6 +18,9 @@ import './arrangement.css'
 
 /** Height of one lane's clip strip, in CSS pixels. */
 const LANE_H = 84
+
+/** Height of a lane that has been collapsed: its name and its buttons, no more. */
+const LANE_H_SHUT = 30
 
 /** Bars across the width of the timeline, and how far the zoom goes. */
 const DEFAULT_BARS_IN_VIEW = 32
@@ -48,10 +52,19 @@ export function ArrangementView(): ReactElement {
   // of the chrome uses rather than from a second colour.
   const rulerText = useMemo(() => themeById(themeId).tokens['text-dim'], [themeId])
   const selected = useArrangement((s) => s.selection)
+  const collapsed = useArrangement((s) => s.collapsed)
+  const splitting = useArrangement((s) => s.splitting)
+  // At most one split runs at a time, so the first is the one to show.
+  const busy = Object.values(splitting)[0] ?? null
   const [width, setWidth] = useState(900)
   const [barsInView, setBarsInView] = useState(DEFAULT_BARS_IN_VIEW)
   const [fromBar, setFromBar] = useState(0)
   const lanesRef = useRef<HTMLDivElement>(null)
+  const laneBoxes = useRef(new Map<string, HTMLElement>())
+  const registerLane = useCallback((id: string, el: HTMLElement | null): void => {
+    if (el) laneBoxes.current.set(id, el)
+    else laneBoxes.current.delete(id)
+  }, [])
   const stripsRef = useRef<HTMLDivElement>(null)
   const rulerRef = useRef<HTMLCanvasElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
@@ -138,13 +151,20 @@ export function ArrangementView(): ReactElement {
 
   /**
    * The lane a screen position falls on, so a clip carried off its own lane
-   * lands on the one under the pointer. Lanes are a fixed height, stacked.
+   * lands on the one under the pointer.
+   *
+   * Read off the lanes themselves rather than worked out from a row height:
+   * a collapsed lane is shorter than an open one, and the list scrolls.
    */
   const laneAt = (clientY: number): string | null => {
-    const box = lanesRef.current?.getBoundingClientRect()
-    if (!box || lanes.length === 0) return null
-    const row = Math.floor((clientY - box.top) / LANE_H)
-    return lanes[Math.min(lanes.length - 1, Math.max(0, row))]?.id ?? null
+    let nearest: { id: string; gap: number } | null = null
+    for (const [id, el] of laneBoxes.current) {
+      const box = el.getBoundingClientRect()
+      if (clientY >= box.top && clientY < box.bottom) return id
+      const gap = clientY < box.top ? box.top - clientY : clientY - box.bottom
+      if (!nearest || gap < nearest.gap) nearest = { id, gap }
+    }
+    return nearest?.id ?? null
   }
 
   return (
@@ -175,6 +195,18 @@ export function ArrangementView(): ReactElement {
             title="Delete the selected clip"
           >
             <span>DELETE</span>
+          </button>
+          <button
+            type="button"
+            className="arr-btn arr-btn--split"
+            disabled={!selected || busy !== null}
+            onClick={() => void useArrangement.getState().splitSelectedStems()}
+            title="Split the selected clip into drums, bass, other and vocals"
+          >
+            <span>{busy === null ? 'SPLIT' : `SPLIT ${Math.round(busy * 100)}%`}</span>
+            {busy === null ? null : (
+              <span className="arr-btn__meter" style={{ transform: `scaleX(${busy})` }} />
+            )}
           </button>
           {notice ? <span className="arr-view__note is-warn">{notice}</span> : null}
           {loading.length > 0 ? <span className="arr-view__note">Loading a track…</span> : null}
@@ -208,24 +240,29 @@ export function ArrangementView(): ReactElement {
         <div className="arr-view__tail" />
       </div>
 
-      <div className="arr-view__lanes" ref={lanesRef} onWheel={onWheel}>
-        {lanes.map((lane, index) => (
-          <ArrangementLane
-            key={lane.id}
-            lane={lane}
-            index={index}
-            fromSec={fromSec}
-            secPerPx={secPerPx}
-            width={width}
-            height={LANE_H}
-            barSec={barSec}
-            beatsPerBar={BEATS_PER_BAR}
-            selected={selected}
-            onSelect={(next) => useArrangement.getState().select(next)}
-            laneAt={laneAt}
-          />
-        ))}
-        {/* Over the strips only, not the channel columns either side. */}
+      <div className="arr-view__stage">
+        <div className="arr-view__lanes" ref={lanesRef} onWheel={onWheel}>
+          {lanes.map((lane, index) => (
+            <ArrangementLane
+              key={lane.id}
+              lane={lane}
+              index={index}
+              fromSec={fromSec}
+              secPerPx={secPerPx}
+              width={width}
+              height={collapsed[lane.id] ? LANE_H_SHUT : LANE_H}
+              collapsed={collapsed[lane.id] === true}
+              barSec={barSec}
+              beatsPerBar={BEATS_PER_BAR}
+              selected={selected}
+              onSelect={(next) => useArrangement.getState().select(next)}
+              laneAt={laneAt}
+              register={registerLane}
+            />
+          ))}
+        </div>
+        {/* Over the strips only, not the channel columns either side. The
+            playhead spans what can be seen, so scrolling does not cut it. */}
         <div className="arr-view__overlay" ref={stripsRef}>
           <div className="arr-view__playhead" ref={headRef} />
         </div>

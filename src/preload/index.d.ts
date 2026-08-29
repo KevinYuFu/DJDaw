@@ -1,3 +1,4 @@
+import type { StemName } from '@shared/stems'
 import type {
   ExportRequest,
   ExportResult,
@@ -51,6 +52,15 @@ export interface DJDawApi {
    * the stream carries at each end. See `transcodeToWav` in the main process.
    */
   transcodeToWav(path: string, untrimmed?: boolean): Promise<ArrayBuffer>
+  /**
+   * Split a track into drums, bass, other and vocals, writing each beside the
+   * waveform caches. A track already split comes straight back.
+   */
+  splitStems(audioKey: string, path: string): Promise<Record<StemName, string>>
+  /** The four stem files for a track, or null when it has not been split. */
+  cachedStems(audioKey: string): Promise<Record<StemName, string> | null>
+  /** Watch how far a split has got. Returns the function that stops watching. */
+  onStemProgress(fn: (audioKey: string, ratio: number) => void): () => void
   loadLibrary(): Promise<LibraryFile>
   saveLibrary(lib: LibraryFile): Promise<void>
   /**

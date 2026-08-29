@@ -122,11 +122,20 @@
 
 /* ---------------------------------------------------------------- lanes */
 
-.arr-view__lanes {
+/* The lanes scroll; the playhead over them does not, so it always spans what
+   can be seen rather than being cut off at the fold. */
+.arr-view__stage {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.arr-view__lanes {
+  position: absolute;
+  inset: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 /* Sits over the clip strips only, so the playhead never crosses a channel. */
@@ -156,6 +165,79 @@
   align-items: stretch;
   height: var(--arr-lane-h);
   border-bottom: 1px solid var(--border-soft);
+}
+
+/* Collapsed: the name and the two toggles on one line, the clips hidden. The
+   lane stays in the list at a height that still reads as a lane. */
+.arr-lane.is-shut .arr-fader,
+.arr-lane.is-shut .arr-eq {
+  visibility: hidden;
+}
+
+.arr-lane.is-shut .arr-lane__info {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.arr-lane.is-shut .arr-lane__row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.arr-lane.is-shut .arr-lane__buttons .arr-btn {
+  height: 16px;
+  min-width: 18px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+
+.arr-lane.is-shut .arr-lane__strip {
+  opacity: 0.55;
+}
+
+/* Name and the fold arrow beside it. */
+.arr-lane__row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.arr-lane__fold {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.arr-lane__fold svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 120ms ease;
+}
+
+.arr-lane__fold:hover {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+/* Pointing right when there is something folded away behind it. */
+.arr-lane__fold[aria-expanded='false'] svg {
+  transform: rotate(-90deg);
 }
 
 .arr-lane__edge {
@@ -192,6 +274,20 @@
   --deck-color: var(--deck-c, #46d38a);
 }
 .arr-lane[data-lane='D'] {
+  --deck-color: var(--deck-d, #ff5f6d);
+}
+/* Past four the colours start again: eight lanes, four deck colours. A lane is
+   told apart by its name, which is why it carries one. */
+.arr-lane[data-lane='E'] {
+  --deck-color: var(--deck-a, #4a9eff);
+}
+.arr-lane[data-lane='F'] {
+  --deck-color: var(--deck-b, #ff9d3c);
+}
+.arr-lane[data-lane='G'] {
+  --deck-color: var(--deck-c, #46d38a);
+}
+.arr-lane[data-lane='H'] {
   --deck-color: var(--deck-d, #ff5f6d);
 }
 
@@ -348,4 +444,19 @@
   font-size: 10px;
   white-space: nowrap;
   z-index: 2;
+}
+
+/* How far a split has got, drawn under its own button. */
+.arr-btn--split {
+  position: relative;
+  overflow: hidden;
+}
+
+.arr-btn__meter {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 120ms linear;
 }

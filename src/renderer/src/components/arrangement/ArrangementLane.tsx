@@ -51,6 +51,10 @@ export interface ArrangementLaneProps {
   onSelect(selection: ClipSelection | null): void
   /** The lane under a screen position, so a clip can be dragged onto another. */
   laneAt(clientY: number): string | null
+  /** Drawn short, with its clips hidden. */
+  collapsed: boolean
+  /** Hand the lane's box to the view, which needs it to place a drag. */
+  register(id: string, el: HTMLElement | null): void
 }
 
 /** The clip under an arrangement position, if any. */
@@ -82,7 +86,9 @@ export function ArrangementLane({
   beatsPerBar,
   selected,
   onSelect,
-  laneAt
+  laneAt,
+  collapsed,
+  register
 }: ArrangementLaneProps): ReactElement {
   const eqMode = useSettings((s) => s.eqMode)
   const title = useArrangement((s) => laneTitle(s.titles, lane.id, index, lane.clips.length > 0))
@@ -310,13 +316,31 @@ export function ArrangementLane({
   const laneSelected = selected?.lane === lane.id ? selected.clipId : null
 
   return (
-    <section className={`arr-lane${lane.soloed ? ' is-soloed' : ''}`} data-lane={lane.name}>
+    <section
+      ref={(el) => register(lane.id, el)}
+      className={`arr-lane${lane.soloed ? ' is-soloed' : ''}${collapsed ? ' is-shut' : ''}`}
+      data-lane={lane.name}
+      style={{ height }}
+    >
       <div className="arr-lane__edge" />
 
       <div className="arr-lane__info">
-        <span className="arr-lane__title" title={title}>
-          {title}
-        </span>
+        <div className="arr-lane__row">
+          <button
+            type="button"
+            className="arr-lane__fold"
+            aria-expanded={!collapsed}
+            title={collapsed ? 'Open this track' : 'Collapse this track'}
+            onClick={() => useArrangement.getState().toggleCollapsed(lane.id)}
+          >
+            <svg viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M2.5 4 L5 6.5 L7.5 4" />
+            </svg>
+          </button>
+          <span className="arr-lane__title" title={title}>
+            {title}
+          </span>
+        </div>
         <div className="arr-lane__buttons">
           <button
             type="button"

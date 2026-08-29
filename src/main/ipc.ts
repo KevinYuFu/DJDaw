@@ -42,6 +42,7 @@ import {
   syncFromXml
 } from './rekordboxSync'
 import { transcodeArgs } from '@shared/ffmpegArgs'
+import { separateStems, cachedStems } from './stems'
 
 /** Extensions offered by the import dialog. */
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'aiff', 'aif', 'ogg', 'opus', 'wma']
@@ -319,6 +320,16 @@ export function registerIpcHandlers(): void {
     (_event, path: string, untrimmed?: boolean): Promise<ArrayBuffer> =>
       transcodeToWav(path, untrimmed === true)
   )
+
+  ipcMain.handle(
+    'stems:split',
+    async (event, audioKey: string, path: string): Promise<Record<string, string>> =>
+      separateStems(audioKey, path, (ratio) => {
+        if (!event.sender.isDestroyed()) event.sender.send('stems:progress', audioKey, ratio)
+      })
+  )
+
+  ipcMain.handle('stems:cached', (_event, audioKey: string) => cachedStems(audioKey))
 
   ipcMain.handle('library:load', (): Promise<LibraryFile> => loadLibrary())
 
