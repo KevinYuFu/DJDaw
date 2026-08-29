@@ -516,6 +516,10 @@ export interface CanvasChrome {
   clipHeadOn: string
   clipEdge: string
   clipEdgeOn: string
+  /** The mark on a clip being copied rather than moved. */
+  copy: string
+  /** What that mark sits on, so it reads over any waveform. */
+  copyPlate: string
   clipText: string
 }
 
@@ -533,6 +537,8 @@ export function canvasChrome(id: string): CanvasChrome {
     clipHeadOn: t['clip-head-on'],
     clipEdge: t['clip-edge'],
     clipEdgeOn: t['clip-edge-on'],
+    copy: t.play,
+    copyPlate: t['bg-panel'],
     clipText: t['clip-text']
   }
 }

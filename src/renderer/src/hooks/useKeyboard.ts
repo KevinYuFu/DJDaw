@@ -287,8 +287,15 @@ export function useKeyboard(): void {
 
     const onKeyDown = (event: KeyboardEvent): void => {
       if (isTypingTarget(event.target)) return
-      // Cut is the one binding that wants a modifier, so it is matched ahead of
-      // the guard below, which hands every other Cmd/Ctrl chord to the menu.
+      // Cut and duplicate are the bindings that want a modifier, so they are
+      // matched ahead of the guard below, which hands every other Cmd/Ctrl
+      // chord to the menu.
+      if (event.code === 'KeyD' && (event.metaKey || event.ctrlKey) && !event.altKey) {
+        if (!inArrangement()) return
+        event.preventDefault()
+        if (!event.repeat) useArrangement.getState().duplicateSelected()
+        return
+      }
       if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey) && !event.altKey) {
         if (inArrangement()) {
           event.preventDefault()

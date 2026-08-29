@@ -55,6 +55,8 @@ export interface DropPreview {
   offsetSamples: number
   sourceDurationSamples: number
   rate: number
+  /** True while the drag is making a copy and leaving the original in place. */
+  copy: boolean
 }
 
 /** Which edge of a clip a trim is pulling. */
@@ -113,8 +115,13 @@ export interface ArrangementState {
    * to where it started leaves everything as it was.
    */
   beginClipMove(lane: string, clipId: string): void
-  /** Where the held clip would land. Draws the shadow; moves nothing yet. */
-  previewClipMove(toLane: string, startSample: number): void
+  /**
+   * Where the held clip would land. Draws the shadow; moves nothing yet.
+   *
+   * `copy` leaves the original where it is and puts a second clip down, on the
+   * same audio. The shadow says which it will be.
+   */
+  previewClipMove(toLane: string, startSample: number, copy?: boolean): void
   beginClipTrim(lane: string, clipId: string, edge: ClipEdge): void
   /** Pull the held edge to `atSample`. */
   previewClipTrim(atSample: number): void
@@ -124,6 +131,11 @@ export interface ArrangementState {
   cancelClipDrag(): void
   /** The clip being dragged, so it can be drawn as held. */
   heldClipId(): string | null
+  /**
+   * Put a second copy of the picked clip on the lane, straight after it, on
+   * the same audio. Does nothing when nothing is picked.
+   */
+  duplicateSelected(): void
   /** Group everything a drag does into one undo step. */
   beginDrag(): void
   endDrag(): void
@@ -384,14 +396,14 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     get().beginDrag()
   },
 
-  previewClipMove(toLane, startSample) {
+  previewClipMove(toLane, startSample, copy = false) {
     const grip = held
     if (!grip || grip.kind !== 'move') return
     const clip = grip.before[grip.fromLane]?.find((c) => c.id === grip.clipId)
     if (!clip) return
     const at = Math.max(0, Math.round(startSample))
     const shown = get().preview
-    if (shown && shown.lane === toLane && shown.startSample === at) return
+    if (shown && shown.lane === toLane && shown.startSample === at && shown.copy === copy) return
     set({
       preview: {
         lane: toLane,
@@ -400,7 +412,8 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
         durationSamples: clip.durationSamples,
         offsetSamples: clip.offsetSamples,
         sourceDurationSamples: clip.sourceDurationSamples,
-        rate: clip.rate
+        rate: clip.rate,
+        copy
       }
     })
   },
@@ -440,13 +453,16 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
       const clip = grip.before[grip.fromLane]?.find((c) => c.id === grip.clipId)
       set({ preview: null })
       if (target && clip) {
-        const moved = { ...clip, startSample: target.startSample }
+        // A copy is a second clip on the same audio, so it needs its own name.
+        const moved = target.copy
+          ? { ...clip, id: freshClipId(), startSample: target.startSample }
+          : { ...clip, startSample: target.startSample }
         const laid = layOver(
           grip.before[target.lane] as unknown as Placed[],
           moved as unknown as Placed,
           freshClipId
         ) as unknown as ArrangementClip[]
-        if (target.lane !== grip.fromLane) {
+        if (!target.copy && target.lane !== grip.fromLane) {
           const source = laneById(engine.getState().tracks, grip.fromLane)
           if (source) {
             engine.updateTrack(source.id, {
@@ -457,7 +473,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
         }
         const into = laneById(engine.getState().tracks, target.lane)
         if (into) engine.updateTrack(into.id, { ...into, clips: laid })
-        set({ selection: { lane: target.lane, clipId: grip.clipId } })
+        set({ selection: { lane: target.lane, clipId: moved.id } })
       }
     }
     get().endDrag()
@@ -477,6 +493,31 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
 
   heldClipId() {
     return held ? held.clipId : null
+  },
+
+  duplicateSelected() {
+    if (!engine) return
+    const picked = get().selection
+    if (!picked) return
+    const lane = laneById(engine.getState().tracks, picked.lane)
+    const clip = (lane?.clips as ArrangementClip[] | undefined)?.find((c) => c.id === picked.clipId)
+    if (!lane || !clip) return
+    const copy = {
+      ...clip,
+      id: freshClipId(),
+      startSample: clip.startSample + clip.durationSamples
+    }
+    engine.beginTransaction()
+    engine.updateTrack(lane.id, {
+      ...lane,
+      clips: layOver(
+        lane.clips as unknown as Placed[],
+        copy as unknown as Placed,
+        freshClipId
+      ) as unknown as ArrangementClip[]
+    })
+    engine.commitTransaction()
+    set({ selection: { lane: lane.id, clipId: copy.id } })
   },
 
   beginDrag() {
