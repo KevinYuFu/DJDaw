@@ -1,11 +1,15 @@
-import { useRef, type DragEvent, type PointerEvent, type ReactElement } from 'react'
+import { useRef, useState, type DragEvent, type PointerEvent, type ReactElement } from 'react'
 import type { ClipTrack } from '@waveform-playlist/core'
 import { flatChannel } from '@shared/eq'
 import { faderGain, faderPositionForDb } from '@shared/fader'
 import { draggedTrackId, TRACK_DRAG_MIME } from '@renderer/core/dragTypes'
 import { ChannelFader, ChannelKnobs } from '@renderer/components/mixer/ChannelKnobs'
 import { useSettings } from '@renderer/state/useSettings'
-import { useArrangement, type ClipSelection } from '@renderer/state/useArrangement'
+import {
+  useArrangement,
+  type ClipEdge,
+  type ClipSelection
+} from '@renderer/state/useArrangement'
 import { laneTitle } from '@renderer/arrangement/laneTitle'
 import type { ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
 import {
@@ -21,6 +25,9 @@ const LANE_KNOBS = ['high', 'mid', 'low', 'filter'] as const
 /** How far a pointer moves before a click on a clip becomes a drag. */
 const DRAG_SLOP_PX = 3
 
+/** How near a clip's end a press counts as taking hold of that end. */
+const TRIM_GRIP_PX = 7
+
 export interface ArrangementLaneProps {
   lane: ClipTrack
   /** Where the lane sits in the list, for a lane that has no name yet. */
@@ -35,6 +42,8 @@ export interface ArrangementLaneProps {
   beatsPerBar: number
   selected: ClipSelection | null
   onSelect(selection: ClipSelection | null): void
+  /** The lane under a screen position, so a clip can be dragged onto another. */
+  laneAt(clientY: number): string | null
 }
 
 /** The clip under an arrangement position, if any. */
@@ -65,7 +74,8 @@ export function ArrangementLane({
   barSec,
   beatsPerBar,
   selected,
-  onSelect
+  onSelect,
+  laneAt
 }: ArrangementLaneProps): ReactElement {
   const eqMode = useSettings((s) => s.eqMode)
   const title = useArrangement((s) => laneTitle(s.titles, lane.id, index, lane.clips.length > 0))
@@ -74,11 +84,14 @@ export function ArrangementLane({
   const ghost = useArrangement((s) => (s.preview?.lane === lane.id ? s.preview : null))
   const drag = useRef<{
     pointerId: number
+    kind: 'move' | 'left' | 'right'
     clipId: string
     startX: number
     startSec: number
     moved: boolean
   } | null>(null)
+  /** The clip end the pointer is over, which shows a grip and resizes. */
+  const [grip, setGrip] = useState<{ clipId: string; edge: ClipEdge } | null>(null)
   const stripRef = useRef<HTMLDivElement>(null)
   /** The pointer holding the playhead, or null. */
   const scrub = useRef<number | null>(null)
@@ -93,13 +106,34 @@ export function ArrangementLane({
     return fromSec + (clientX - box.left) * secPerPx
   }
 
+  /** The x a time sits at, in pixels from the left of the strip. */
+  const pxAt = (sec: number): number => (sec - fromSec) / secPerPx
+
+  /**
+   * The end of `clip` the pointer is near enough to take hold of, if any.
+   *
+   * The grip never takes more than a third of the clip from either side, so
+   * the middle of even a very short clip is always somewhere to pick it up by.
+   */
+  const edgeOf = (clip: ArrangementClip, atSec: number): ClipEdge | null => {
+    const left = pxAt(clip.startSample / sampleRate)
+    const right = pxAt((clip.startSample + clip.durationSamples) / sampleRate)
+    const reach = Math.min(TRIM_GRIP_PX, (right - left) / 3)
+    const x = pxAt(atSec)
+    if (x - left <= reach) return 'left'
+    if (right - x <= reach) return 'right'
+    return null
+  }
+
   /**
    * A press picks the clip under it, wherever on that clip it lands.
    *
-   * On the title strip it also takes hold of the clip, which then follows the
-   * pointer. Anywhere else it takes hold of the playhead instead, so one press
-   * on a waveform both picks the clip and says where in it to cut. A press on
-   * empty grid picks nothing and only moves the playhead.
+   * On the title strip it also takes hold: near either end of the clip that
+   * end follows the pointer, showing more or less of the clip's source;
+   * anywhere else along the strip the whole clip does, and it can be carried
+   * onto any lane. Away from the title strip the press takes the playhead
+   * instead, so one press on a waveform both picks the clip and says where in
+   * it to cut. A press on empty grid picks nothing and only moves the playhead.
    */
   const onDown = (e: PointerEvent<HTMLDivElement>): void => {
     if (e.button !== 0) return
@@ -114,6 +148,7 @@ export function ArrangementLane({
     if (clip && onHeader) {
       drag.current = {
         pointerId: e.pointerId,
+        kind: edgeOf(clip, at) ?? 'move',
         clipId: clip.id,
         startX: e.clientX,
         startSec: clip.startSample / sampleRate,
@@ -130,21 +165,34 @@ export function ArrangementLane({
       useArrangement.getState().setScrub(snap(secAt(e.clientX)))
       return
     }
-    const held = drag.current
-    if (!held || held.pointerId !== e.pointerId) return
-    const travel = e.clientX - held.startX
-    if (!held.moved && Math.abs(travel) < DRAG_SLOP_PX) return
-    if (!held.moved) useArrangement.getState().beginDrag()
-    held.moved = true
-    // Moved by whole grid steps rather than snapped to them. A clip is placed so
-    // its downbeat sits on the grid, which its own start need not; stepping keeps
-    // that alignment, where snapping the start would break it.
-    const wanted = held.startSec + Math.round((travel * secPerPx) / step) * step
-    const current = useArrangement.getState().lanes.find((l) => l.id === lane.id)
-    const clip = current?.clips.find((c) => c.id === held.clipId)
-    if (!clip) return
-    const delta = wanted - clip.startSample / sampleRate
-    if (Math.abs(delta) > 1e-6) useArrangement.getState().moveClip(lane.id, held.clipId, delta)
+    const grabbed = drag.current
+    if (!grabbed || grabbed.pointerId !== e.pointerId) {
+      // Not dragging: show which end the pointer would take hold of.
+      const box = stripRef.current?.getBoundingClientRect()
+      const over = box && e.clientY - box.top < CLIP_HEADER_H
+      const clip = over ? clipAt(lane, secAt(e.clientX), sampleRate) : null
+      const edge = clip ? edgeOf(clip, secAt(e.clientX)) : null
+      setGrip(clip && edge ? { clipId: clip.id, edge } : null)
+      return
+    }
+    const travel = e.clientX - grabbed.startX
+    if (!grabbed.moved && Math.abs(travel) < DRAG_SLOP_PX) return
+    const arrangement = useArrangement.getState()
+    if (!grabbed.moved) {
+      grabbed.moved = true
+      if (grabbed.kind === 'move') arrangement.beginClipMove(lane.id, grabbed.clipId)
+      else arrangement.beginClipTrim(lane.id, grabbed.clipId, grabbed.kind)
+    }
+    if (grabbed.kind === 'move') {
+      // Moved by whole grid steps rather than snapped to them. A clip is placed
+      // so its downbeat sits on the grid, which its own start need not; stepping
+      // keeps that alignment, where snapping the start would break it.
+      const wanted = grabbed.startSec + Math.round((travel * secPerPx) / step) * step
+      const onto = laneAt(e.clientY) ?? lane.id
+      arrangement.previewClipMove(onto, Math.max(0, wanted) * sampleRate)
+      return
+    }
+    arrangement.previewClipTrim(snap(secAt(e.clientX)) * sampleRate)
   }
 
   const onUp = (e: PointerEvent<HTMLDivElement>): void => {
@@ -158,7 +206,17 @@ export function ArrangementLane({
       scrub.current = null
       return
     }
-    if (drag.current?.moved) useArrangement.getState().endDrag()
+    if (drag.current?.moved) useArrangement.getState().commitClipDrag()
+    drag.current = null
+  }
+
+  const onCancel = (e: PointerEvent<HTMLDivElement>): void => {
+    if (scrub.current === e.pointerId) {
+      useArrangement.getState().setScrub(null)
+      scrub.current = null
+      return
+    }
+    if (drag.current?.moved) useArrangement.getState().cancelClipDrag()
     drag.current = null
   }
 
@@ -248,7 +306,9 @@ export function ArrangementLane({
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
-        onPointerCancel={onUp}
+        onPointerCancel={onCancel}
+        onPointerLeave={() => setGrip(null)}
+        style={grip ? { cursor: 'ew-resize' } : undefined}
         onDragOver={onDragOver}
         onDragLeave={() => useArrangement.getState().setPreview(null)}
         onDrop={onDrop}
@@ -260,6 +320,7 @@ export function ArrangementLane({
           width={width}
           height={height}
           selectedClipId={laneSelected}
+          grip={grip}
           ghost={ghost}
           barSec={barSec}
           beatsPerBar={beatsPerBar}

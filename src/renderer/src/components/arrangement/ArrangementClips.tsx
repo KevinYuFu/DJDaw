@@ -20,6 +20,9 @@ import {
  */
 export const CLIP_HEADER_H = 14
 
+/** Width of the grip drawn on a clip end the pointer can pull. */
+const GRIP_W = 3
+
 /** A clip about to be dropped, drawn where it will actually land. */
 export interface ClipGhost {
   sourceId: string
@@ -38,6 +41,8 @@ export interface ArrangementClipsProps {
   height: number
   width: number
   selectedClipId: string | null
+  /** The clip end the pointer is over, drawn as a grip to say it can be pulled. */
+  grip: { clipId: string; edge: 'left' | 'right' } | null
   ghost: ClipGhost | null
   /** Seconds in one bar of the master grid. */
   barSec: number
@@ -146,6 +151,7 @@ export function ArrangementClips({
   height,
   width,
   selectedClipId,
+  grip,
   ghost,
   barSec,
   beatsPerBar
@@ -261,6 +267,20 @@ export function ArrangementClips({
       const clip = raw as ArrangementClip
       paint(clip, clip.id === selectedClipId, false)
     }
+
+    // The end the pointer can take hold of, marked on the title strip.
+    if (grip) {
+      const held = lane.clips.find((c) => c.id === grip.clipId) as ArrangementClip | undefined
+      if (held) {
+        const at =
+          grip.edge === 'left'
+            ? held.startSample
+            : held.startSample + held.durationSamples
+        const x = Math.round((at / sampleRate - fromSec) / secPerPx)
+        ctx.fillStyle = chrome.playhead
+        ctx.fillRect(grip.edge === 'left' ? x : x - GRIP_W, 0, GRIP_W, CLIP_HEADER_H)
+      }
+    }
     if (ghost) {
       paint(
         {
@@ -288,6 +308,7 @@ export function ArrangementClips({
     width,
     height,
     selectedClipId,
+    grip,
     ghost,
     barSec,
     beatsPerBar,
