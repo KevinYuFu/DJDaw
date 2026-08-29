@@ -7,6 +7,7 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { ArrangementEngine } from '@renderer/audio/ArrangementEngine'
 import { decodeTrack } from '@renderer/audio/decode'
 import { playbackRate } from '@renderer/analysis/playbackRate'
+import { layOver, trimWithin, type Placed } from '@renderer/arrangement/laneEdit'
 import { nameLane } from '@renderer/arrangement/laneTitle'
 import { placeClip } from '@renderer/arrangement/placement'
 import { peekWaveform, resolveWaveform } from '@renderer/analysis/waveformCache'
@@ -52,8 +53,12 @@ export interface DropPreview {
   startSample: number
   durationSamples: number
   offsetSamples: number
+  sourceDurationSamples: number
   rate: number
 }
+
+/** Which edge of a clip a trim is pulling. */
+export type ClipEdge = 'left' | 'right'
 
 /** A lane's channel knobs, which the timeline library does not model. */
 export interface LaneChannel {
@@ -100,6 +105,25 @@ export interface ArrangementState {
   /** Lay the browser's pick into the first lane with nothing on it. */
   dropSelectedIntoFreeLane(): Promise<void>
   moveClip(lane: string, clipId: string, deltaSeconds: number): void
+  /**
+   * Take hold of a clip. A move shows where it would land and puts it there on
+   * release; a trim slides the clip's own edge as the pointer goes.
+   *
+   * Both work from the lanes as they were when the drag began, so pulling back
+   * to where it started leaves everything as it was.
+   */
+  beginClipMove(lane: string, clipId: string): void
+  /** Where the held clip would land. Draws the shadow; moves nothing yet. */
+  previewClipMove(toLane: string, startSample: number): void
+  beginClipTrim(lane: string, clipId: string, edge: ClipEdge): void
+  /** Pull the held edge to `atSample`. */
+  previewClipTrim(atSample: number): void
+  /** Put the held clip down. Whatever it covers gives way. */
+  commitClipDrag(): void
+  /** Let go and leave the lanes as they were. */
+  cancelClipDrag(): void
+  /** The clip being dragged, so it can be drawn as held. */
+  heldClipId(): string | null
   /** Group everything a drag does into one undo step. */
   beginDrag(): void
   endDrag(): void
@@ -183,6 +207,30 @@ function inheritSource(lane: ClipTrack, source: ArrangementClip): ClipTrack {
           { ...clip, name: source.name, sourceId: source.sourceId, rate: source.rate }
     )
   }
+}
+
+/**
+ * A clip drag in flight, with the lanes as they were when it began. Working
+ * from that snapshot is what lets a drag be pulled back to where it started.
+ */
+let held: {
+  kind: 'move' | ClipEdge
+  fromLane: string
+  clipId: string
+  before: Record<string, ArrangementClip[]>
+} | null = null
+
+let clipSerial = 0
+
+/** A name for a piece left behind when a clip is laid across another. */
+function freshClipId(): string {
+  clipSerial += 1
+  return `clip-${Date.now().toString(36)}-${clipSerial}`
+}
+
+/** The clips of every lane, as the placement maths wants them. */
+function laneClips(lanes: ClipTrack[], id: string): ArrangementClip[] {
+  return (laneById(lanes, id)?.clips ?? []) as ArrangementClip[]
 }
 
 export const useArrangement = create<ArrangementState>()((set, get) => ({
@@ -324,6 +372,111 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   moveClip(lane, clipId, deltaSeconds) {
     if (!engine) return
     engine.moveClip(lane, clipId, Math.round(deltaSeconds * get().sampleRate))
+  },
+
+  beginClipMove(lane, clipId) {
+    if (!engine || held) return
+    const clips = laneClips(engine.getState().tracks, lane)
+    if (!clips.some((c) => c.id === clipId)) return
+    const before: Record<string, ArrangementClip[]> = {}
+    for (const l of engine.getState().tracks) before[l.id] = l.clips as ArrangementClip[]
+    held = { kind: 'move', fromLane: lane, clipId, before }
+    get().beginDrag()
+  },
+
+  previewClipMove(toLane, startSample) {
+    const grip = held
+    if (!grip || grip.kind !== 'move') return
+    const clip = grip.before[grip.fromLane]?.find((c) => c.id === grip.clipId)
+    if (!clip) return
+    const at = Math.max(0, Math.round(startSample))
+    const shown = get().preview
+    if (shown && shown.lane === toLane && shown.startSample === at) return
+    set({
+      preview: {
+        lane: toLane,
+        sourceId: clip.sourceId,
+        startSample: at,
+        durationSamples: clip.durationSamples,
+        offsetSamples: clip.offsetSamples,
+        sourceDurationSamples: clip.sourceDurationSamples,
+        rate: clip.rate
+      }
+    })
+  },
+
+  beginClipTrim(lane, clipId, edge) {
+    if (!engine || held) return
+    const clips = laneClips(engine.getState().tracks, lane)
+    if (!clips.some((c) => c.id === clipId)) return
+    held = { kind: edge, fromLane: lane, clipId, before: { [lane]: clips } }
+    get().beginDrag()
+  },
+
+  previewClipTrim(atSample) {
+    const grip = held
+    if (!engine || !grip || grip.kind === 'move') return
+    const lane = laneById(engine.getState().tracks, grip.fromLane)
+    if (!lane) return
+    const clips = trimWithin(
+      grip.before[grip.fromLane] as unknown as Placed[],
+      grip.clipId,
+      grip.kind,
+      Math.max(0, Math.round(atSample)),
+      freshClipId
+    ) as unknown as ArrangementClip[]
+    engine.updateTrack(lane.id, { ...lane, clips })
+  },
+
+  commitClipDrag() {
+    if (!engine || !held) {
+      get().endDrag()
+      return
+    }
+    const grip = held
+    held = null
+    if (grip.kind === 'move') {
+      const target = get().preview
+      const clip = grip.before[grip.fromLane]?.find((c) => c.id === grip.clipId)
+      set({ preview: null })
+      if (target && clip) {
+        const moved = { ...clip, startSample: target.startSample }
+        const laid = layOver(
+          grip.before[target.lane] as unknown as Placed[],
+          moved as unknown as Placed,
+          freshClipId
+        ) as unknown as ArrangementClip[]
+        if (target.lane !== grip.fromLane) {
+          const source = laneById(engine.getState().tracks, grip.fromLane)
+          if (source) {
+            engine.updateTrack(source.id, {
+              ...source,
+              clips: grip.before[grip.fromLane].filter((c) => c.id !== grip.clipId)
+            })
+          }
+        }
+        const into = laneById(engine.getState().tracks, target.lane)
+        if (into) engine.updateTrack(into.id, { ...into, clips: laid })
+        set({ selection: { lane: target.lane, clipId: grip.clipId } })
+      }
+    }
+    get().endDrag()
+  },
+
+  cancelClipDrag() {
+    if (!engine || !held) return
+    const grip = held
+    held = null
+    set({ preview: null })
+    for (const [id, clips] of Object.entries(grip.before)) {
+      const lane = laneById(engine.getState().tracks, id)
+      if (lane) engine.updateTrack(id, { ...lane, clips })
+    }
+    get().endDrag()
+  },
+
+  heldClipId() {
+    return held ? held.clipId : null
   },
 
   beginDrag() {

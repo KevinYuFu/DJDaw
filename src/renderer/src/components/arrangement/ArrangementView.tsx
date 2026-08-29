@@ -51,6 +51,7 @@ export function ArrangementView(): ReactElement {
   const [width, setWidth] = useState(900)
   const [barsInView, setBarsInView] = useState(DEFAULT_BARS_IN_VIEW)
   const [fromBar, setFromBar] = useState(0)
+  const lanesRef = useRef<HTMLDivElement>(null)
   const stripsRef = useRef<HTMLDivElement>(null)
   const rulerRef = useRef<HTMLCanvasElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
@@ -135,6 +136,17 @@ export function ArrangementView(): ReactElement {
     head.style.transform = `translateX(${(at - fromSec) / secPerPx}px)`
   }, true)
 
+  /**
+   * The lane a screen position falls on, so a clip carried off its own lane
+   * lands on the one under the pointer. Lanes are a fixed height, stacked.
+   */
+  const laneAt = (clientY: number): string | null => {
+    const box = lanesRef.current?.getBoundingClientRect()
+    if (!box || lanes.length === 0) return null
+    const row = Math.floor((clientY - box.top) / LANE_H)
+    return lanes[Math.min(lanes.length - 1, Math.max(0, row))]?.id ?? null
+  }
+
   return (
     <div className="arr-view">
       <div className="arr-view__bar">
@@ -196,7 +208,7 @@ export function ArrangementView(): ReactElement {
         <div className="arr-view__tail" />
       </div>
 
-      <div className="arr-view__lanes" onWheel={onWheel}>
+      <div className="arr-view__lanes" ref={lanesRef} onWheel={onWheel}>
         {lanes.map((lane, index) => (
           <ArrangementLane
             key={lane.id}
@@ -210,6 +222,7 @@ export function ArrangementView(): ReactElement {
             beatsPerBar={BEATS_PER_BAR}
             selected={selected}
             onSelect={(next) => useArrangement.getState().select(next)}
+            laneAt={laneAt}
           />
         ))}
         {/* Over the strips only, not the channel columns either side. */}
