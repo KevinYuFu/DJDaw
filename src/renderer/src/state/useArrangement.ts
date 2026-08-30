@@ -10,6 +10,33 @@ import { playbackRate } from '@renderer/analysis/playbackRate'
 import { layOver, trimWithin, type Placed } from '@renderer/arrangement/laneEdit'
 import { nameLane } from '@renderer/arrangement/laneTitle'
 import { STEM_NAMES, type StemName } from '@shared/stems'
+import { splitIntoStems } from '@renderer/analysis/stemSplit'
+
+/**
+ * Split a track and keep the result, handing back where each stem went.
+ *
+ * The audio the arrangement already holds is what gets split, so a track does
+ * not have to be read off disk a second time.
+ */
+async function splitAndKeep(
+  track: Track,
+  ctx: BaseAudioContext,
+  onProgress: (ratio: number) => void
+): Promise<Record<StemName, string>> {
+  const buffer = sources.get(track.id) ?? (await decodeTrack(ctx, track.path))
+  const { stems } = await splitIntoStems(buffer, onProgress)
+  const interleaved = {} as Record<StemName, Float32Array>
+  for (const name of STEM_NAMES) {
+    const { left, right } = stems[name]
+    const out = new Float32Array(left.length * 2)
+    for (let i = 0; i < left.length; i++) {
+      out[i * 2] = left[i]
+      out[i * 2 + 1] = right[i]
+    }
+    interleaved[name] = out
+  }
+  return window.api.writeStems(track.audioKey, interleaved)
+}
 
 /** The id a stem's audio is held under: the track it came from, and which part. */
 export function stemSourceId(trackId: string, stem: StemName): string {
@@ -552,16 +579,12 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
 
     set({ notice: null, splitting: { ...get().splitting, [track.audioKey]: 0 } })
     try {
-      const stop = window.api.onStemProgress((key, ratio) => {
-        if (key === track.audioKey) set({ splitting: { ...get().splitting, [key]: ratio } })
-      })
-      let files: Record<StemName, string>
-      try {
-        files = await window.api.splitStems(track.audioKey, track.path)
-      } finally {
-        stop()
-      }
       const ctx = AudioEngine.shared().ctx
+      const files =
+        (await window.api.cachedStems(track.audioKey)) ??
+        (await splitAndKeep(track, ctx, (ratio) =>
+          set({ splitting: { ...get().splitting, [track.audioKey]: ratio } })
+        ))
       for (let i = 0; i < STEM_NAMES.length; i++) {
         const name = STEM_NAMES[i]
         const sourceId = stemSourceId(clip.sourceId, name)

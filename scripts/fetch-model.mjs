@@ -1,7 +1,7 @@
 /**
  * Fetch the stem separation model.
  *
- * The model is 302 MB, which does not belong in the repository, so it is
+ * The model is 172 MB, which does not belong in the repository, so it is
  * pulled once and left in `resources/` where the build picks it up. Already
  * there and the right size, nothing happens.
  */
@@ -13,10 +13,11 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const INTO = join(HERE, '..', 'resources', 'htdemucs.onnx')
-const FROM = 'https://huggingface.co/StemSplitio/htdemucs-onnx/resolve/main/htdemucs.onnx'
+const INTO = join(HERE, '..', 'resources', 'htdemucs_embedded.onnx')
+const FROM =
+  'https://huggingface.co/timcsy/demucs-web-onnx/resolve/main/htdemucs_embedded.onnx'
 /** Anything much smaller than this is a truncated download, not the model. */
-const LEAST_BYTES = 250_000_000
+const LEAST_BYTES = 150_000_000
 
 const have = await stat(INTO).catch(() => null)
 if (have && have.size >= LEAST_BYTES) {
@@ -24,7 +25,7 @@ if (have && have.size >= LEAST_BYTES) {
   process.exit(0)
 }
 
-console.log('fetching the stem model, 302 MB, once')
+console.log('fetching the stem model, 172 MB, once')
 const res = await fetch(FROM)
 if (!res.ok || !res.body) {
   console.error(`could not fetch the model: ${res.status} ${res.statusText}`)
