@@ -13,6 +13,21 @@ import { STEM_NAMES, type StemName } from '@shared/stems'
 import { splitIntoStems } from '@renderer/analysis/stemSplit'
 
 /**
+ * What to put in front of someone whose split did not work.
+ *
+ * The main process only picks up new code when the app restarts, so a session
+ * left open across an update reaches for something that is not there yet. That
+ * reads as a missing handler, which means nothing on its own.
+ */
+function whySplitFailed(err: unknown): string {
+  const why = err instanceof Error ? err.message : String(err)
+  if (/no handler registered|is not a function/i.test(why)) {
+    return 'Restart DJDaw to finish setting up splitting'
+  }
+  return why || 'That track could not be split'
+}
+
+/**
  * Split a track and keep the result, handing back where each stem went.
  *
  * The audio the arrangement already holds is what gets split, so a track does
@@ -601,8 +616,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
       }
     } catch (err) {
       console.error('[arrangement] could not split', track.path, err)
-      const why = err instanceof Error ? err.message : String(err)
-      set({ notice: why || 'That track could not be split' })
+      set({ notice: whySplitFailed(err) })
     } finally {
       const rest = { ...get().splitting }
       delete rest[track.audioKey]
