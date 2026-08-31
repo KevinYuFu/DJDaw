@@ -1,3 +1,4 @@
+import type { StemName } from '@shared/stems'
 import type {
   ExportRequest,
   ExportResult,
@@ -51,6 +52,16 @@ export interface DJDawApi {
    * the stream carries at each end. See `transcodeToWav` in the main process.
    */
   transcodeToWav(path: string, untrimmed?: boolean): Promise<ArrayBuffer>
+  /** The stem model, for the renderer to hand to ONNX Runtime. */
+  readStemModel(): Promise<ArrayBuffer>
+  /** Keep a track's stems beside the waveform caches, as FLAC. */
+  writeStems(
+    audioKey: string,
+    stems: Record<StemName, Float32Array>
+  ): Promise<Record<StemName, string>>
+  /** The four stem files for a track, or null when it has not been split. */
+  cachedStems(audioKey: string): Promise<Record<StemName, string> | null>
+
   loadLibrary(): Promise<LibraryFile>
   saveLibrary(lib: LibraryFile): Promise<void>
   /**

@@ -9,6 +9,54 @@ import { decodeTrack } from '@renderer/audio/decode'
 import { playbackRate } from '@renderer/analysis/playbackRate'
 import { layOver, trimWithin, type Placed } from '@renderer/arrangement/laneEdit'
 import { nameLane } from '@renderer/arrangement/laneTitle'
+import { STEM_NAMES, type StemName } from '@shared/stems'
+import { splitIntoStems } from '@renderer/analysis/stemSplit'
+
+/**
+ * What to put in front of someone whose split did not work.
+ *
+ * The main process only picks up new code when the app restarts, so a session
+ * left open across an update reaches for something that is not there yet. That
+ * reads as a missing handler, which means nothing on its own.
+ */
+function whySplitFailed(err: unknown): string {
+  const why = err instanceof Error ? err.message : String(err)
+  if (/no handler registered|is not a function/i.test(why)) {
+    return 'Restart DJDaw to finish setting up splitting'
+  }
+  return why || 'That track could not be split'
+}
+
+/**
+ * Split a track and keep the result, handing back where each stem went.
+ *
+ * The audio the arrangement already holds is what gets split, so a track does
+ * not have to be read off disk a second time.
+ */
+async function splitAndKeep(
+  track: Track,
+  ctx: BaseAudioContext,
+  onProgress: (ratio: number) => void
+): Promise<Record<StemName, string>> {
+  const buffer = sources.get(track.id) ?? (await decodeTrack(ctx, track.path))
+  const { stems } = await splitIntoStems(buffer, onProgress)
+  const interleaved = {} as Record<StemName, Float32Array>
+  for (const name of STEM_NAMES) {
+    const { left, right } = stems[name]
+    const out = new Float32Array(left.length * 2)
+    for (let i = 0; i < left.length; i++) {
+      out[i * 2] = left[i]
+      out[i * 2 + 1] = right[i]
+    }
+    interleaved[name] = out
+  }
+  return window.api.writeStems(track.audioKey, interleaved)
+}
+
+/** The id a stem's audio is held under: the track it came from, and which part. */
+export function stemSourceId(trackId: string, stem: StemName): string {
+  return `${trackId}::${stem}`
+}
 import { placeClip } from '@renderer/arrangement/placement'
 import { peekWaveform, resolveWaveform } from '@renderer/analysis/waveformCache'
 import { WorkletPlayout, type ArrangementClip } from '@renderer/arrangement/WorkletPlayout'
@@ -33,8 +81,14 @@ export function clampMasterBpm(bpm: number): number {
   return Math.min(MASTER_BPM_MAX, Math.max(MASTER_BPM_MIN, bpm))
 }
 
-/** Lanes the arrangement opens with. More is a longer list, nothing else. */
-const LANE_NAMES = ['A', 'B', 'C', 'D'] as const
+/**
+ * Lanes the arrangement opens with.
+ *
+ * Eight, so a track and the four stems split out of it fit together with room
+ * left over. Colours run out after four and start again, which is why a lane
+ * says its name rather than relying on its colour alone.
+ */
+const LANE_NAMES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
 
 function laneId(index: number): string {
   return `lane-${index + 1}`
@@ -100,6 +154,10 @@ export interface ArrangementState {
   scrub: number | null
   /** Why the last edit did nothing, for the bar to show. */
   notice: string | null
+  /** How far the split of each track has got, 0-1, while one is running. */
+  splitting: Record<string, number>
+  /** Lanes drawn at a fraction of their height, by lane id. */
+  collapsed: Record<string, boolean>
 
   init(): Promise<void>
   /** Lay a library track into a lane, warped onto the grid. */
@@ -136,6 +194,17 @@ export interface ArrangementState {
    * the same audio. Does nothing when nothing is picked.
    */
   duplicateSelected(): void
+  /**
+   * Split the picked clip's track into drums, bass, other and vocals, and lay
+   * each on a lane of its own beside it. The clip itself is left alone.
+   *
+   * Takes four empty lanes. Sets {@link notice} when there are not four.
+   */
+  splitSelectedStems(): Promise<void>
+  /** Draw a lane at a fraction of its height, or back at full height. */
+  toggleCollapsed(lane: string): void
+  /** Put one stem on an empty lane, lined up with the clip it came from. */
+  layStem(lane: string, sourceId: string, title: string, like: ArrangementClip): void
   /** Group everything a drag does into one undo step. */
   beginDrag(): void
   endDrag(): void
@@ -258,6 +327,8 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   waveforms: {},
   channels: {},
   selection: null,
+  splitting: {},
+  collapsed: {},
   preview: null,
   scrub: null,
   notice: null,
@@ -493,6 +564,84 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
 
   heldClipId() {
     return held ? held.clipId : null
+  },
+
+  toggleCollapsed(lane) {
+    set({ collapsed: { ...get().collapsed, [lane]: !get().collapsed[lane] } })
+  },
+
+  async splitSelectedStems() {
+    const picked = get().selection
+    if (!picked) {
+      set({ notice: 'Pick a clip to split first' })
+      return
+    }
+    const lane = laneById(get().lanes, picked.lane)
+    const clip = (lane?.clips as ArrangementClip[] | undefined)?.find(
+      (c) => c.id === picked.clipId
+    )
+    if (!clip) return
+    const track = useLibrary.getState().trackById(clip.sourceId)
+    if (!track?.path) {
+      set({ notice: 'That clip has no file behind it' })
+      return
+    }
+    const free = get().lanes.filter((l) => l.clips.length === 0)
+    if (free.length < STEM_NAMES.length) {
+      set({ notice: `Splitting needs ${STEM_NAMES.length} empty tracks` })
+      return
+    }
+
+    set({ notice: null, splitting: { ...get().splitting, [track.audioKey]: 0 } })
+    try {
+      const ctx = AudioEngine.shared().ctx
+      const files =
+        (await window.api.cachedStems(track.audioKey)) ??
+        (await splitAndKeep(track, ctx, (ratio) =>
+          set({ splitting: { ...get().splitting, [track.audioKey]: ratio } })
+        ))
+      for (let i = 0; i < STEM_NAMES.length; i++) {
+        const name = STEM_NAMES[i]
+        const sourceId = stemSourceId(clip.sourceId, name)
+        if (!sources.has(sourceId)) {
+          const decoded = await decodeTrack(ctx, files[name])
+          sources.set(sourceId, decoded)
+          const peaks = await resolveWaveform(
+            { ...track, id: sourceId, audioKey: `${track.audioKey}-${name}`, path: files[name] },
+            decoded
+          )
+          if (peaks) set({ waveforms: { ...get().waveforms, [sourceId]: peaks } })
+        }
+        get().layStem(free[i].id, sourceId, `${track.title} ${name}`, clip)
+      }
+    } catch (err) {
+      console.error('[arrangement] could not split', track.path, err)
+      set({ notice: whySplitFailed(err) })
+    } finally {
+      const rest = { ...get().splitting }
+      delete rest[track.audioKey]
+      set({ splitting: rest })
+    }
+  },
+
+  layStem(laneId, sourceId, title, like) {
+    if (!engine) return
+    const lane = laneById(engine.getState().tracks, laneId)
+    if (!lane) return
+    const clip: ArrangementClip = {
+      ...(createClip({
+        startSample: like.startSample,
+        durationSamples: like.durationSamples,
+        offsetSamples: like.offsetSamples,
+        sampleRate: get().sampleRate,
+        sourceDurationSamples: like.sourceDurationSamples,
+        name: title
+      }) as ArrangementClip),
+      sourceId,
+      rate: like.rate
+    }
+    engine.updateTrack(laneId, { ...lane, clips: [clip] })
+    set({ titles: { ...get().titles, [laneId]: title } })
   },
 
   duplicateSelected() {

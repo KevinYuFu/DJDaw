@@ -28,6 +28,10 @@ const api: DJDawApi = {
   readAudioFile: (path) => ipcRenderer.invoke('audio:readFile', path),
   transcodeToWav: (path, untrimmed) =>
     ipcRenderer.invoke('audio:transcodeToWav', path, untrimmed),
+  readStemModel: () => ipcRenderer.invoke('stems:model'),
+  writeStems: (audioKey, stems) => ipcRenderer.invoke('stems:write', audioKey, stems),
+  cachedStems: (audioKey) => ipcRenderer.invoke('stems:cached', audioKey),
+
   loadLibrary: () => ipcRenderer.invoke('library:load'),
   saveLibrary: (lib) => ipcRenderer.invoke('library:save', lib),
   readWaveformCache: (audioKey) => ipcRenderer.invoke('waveform:read', audioKey),

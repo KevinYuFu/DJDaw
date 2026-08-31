@@ -31,6 +31,7 @@ const MODULES = [
   'src/shared/deckList.ts',
   'src/shared/fader.ts',
   'src/shared/ffmpegArgs.ts',
+  'src/shared/stems.ts',
   'src/renderer/src/audio/decode.ts',
   'src/renderer/src/components/waveform/waveformRender.ts',
   'src/renderer/src/components/waveform/clipSlide.ts',

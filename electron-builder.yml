@@ -10,6 +10,10 @@ files:
   - '!docs/*'
 asarUnpack:
   - resources/**
+extraResources:
+  # The stem model, fetched by scripts/fetch-model.mjs rather than committed.
+  - from: resources/htdemucs_embedded.onnx
+    to: htdemucs_embedded.onnx
 mac:
   category: public.app-category.music
   target:

@@ -6,3 +6,6 @@ dist/
 .vite/
 test/.build/
 *.tsbuildinfo
+resources/*.onnx
+resources/*.onnx.part
+src/renderer/public/ort/
