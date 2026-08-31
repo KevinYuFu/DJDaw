@@ -11,6 +11,9 @@ import { layOver, trimWithin, type Placed } from '@renderer/arrangement/laneEdit
 import { nameLane } from '@renderer/arrangement/laneTitle'
 import { STEM_NAMES, type StemName } from '@shared/stems'
 import { splitIntoStems } from '@renderer/analysis/stemSplit'
+import { heardWords } from '@renderer/analysis/transcribe'
+import { cutsFor, prepareList, type Cut } from '@shared/censor'
+import { BAD_WORDS } from '@shared/badWords'
 
 /**
  * What to put in front of someone whose split did not work.
@@ -158,6 +161,10 @@ export interface ArrangementState {
   splitting: Record<string, number>
   /** Lanes drawn at a fraction of their height, by lane id. */
   collapsed: Record<string, boolean>
+  /** Whether a split also takes the swearing out of the vocal it lands. */
+  censorVocals: boolean
+  /** What the last censor took out, so it can be read and put back. */
+  censored: Cut[]
 
   init(): Promise<void>
   /** Lay a library track into a lane, warped onto the grid. */
@@ -203,8 +210,23 @@ export interface ArrangementState {
   splitSelectedStems(): Promise<void>
   /** Draw a lane at a fraction of its height, or back at full height. */
   toggleCollapsed(lane: string): void
-  /** Put one stem on an empty lane, lined up with the clip it came from. */
-  layStem(lane: string, sourceId: string, title: string, like: ArrangementClip): void
+  /** Whether the next split takes the swearing out of the vocal. */
+  setCensorVocals(on: boolean): void
+  /**
+   * Put one stem on an empty lane, lined up with the clip it came from.
+   *
+   * `cuts` are stretches of the stem to leave out, in stem seconds. A stem
+   * laid with cuts arrives as several clips with gaps between them.
+   */
+  layStem(
+    lane: string,
+    sourceId: string,
+    title: string,
+    like: ArrangementClip,
+    cuts?: readonly Cut[]
+  ): void
+  /** Listen to a stem and work out which stretches of it to leave out. */
+  findWordsToCut(sourceId: string): Promise<Cut[]>
   /** Group everything a drag does into one undo step. */
   beginDrag(): void
   endDrag(): void
@@ -329,6 +351,8 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
   selection: null,
   splitting: {},
   collapsed: {},
+  censorVocals: false,
+  censored: [],
   preview: null,
   scrub: null,
   notice: null,
@@ -566,6 +590,10 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     return held ? held.clipId : null
   },
 
+  setCensorVocals(on) {
+    set({ censorVocals: on })
+  },
+
   toggleCollapsed(lane) {
     set({ collapsed: { ...get().collapsed, [lane]: !get().collapsed[lane] } })
   },
@@ -612,7 +640,11 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
           )
           if (peaks) set({ waveforms: { ...get().waveforms, [sourceId]: peaks } })
         }
-        get().layStem(free[i].id, sourceId, `${track.title} ${name}`, clip)
+        const cuts =
+          name === 'vocals' && get().censorVocals
+            ? await get().findWordsToCut(sourceId)
+            : []
+        get().layStem(free[i].id, sourceId, `${track.title} ${name}`, clip, cuts)
       }
     } catch (err) {
       console.error('[arrangement] could not split', track.path, err)
@@ -624,23 +656,64 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     }
   },
 
-  layStem(laneId, sourceId, title, like) {
+  async findWordsToCut(sourceId) {
+    const audio = sources.get(sourceId)
+    if (!audio) return []
+    const left = audio.getChannelData(0)
+    const right = audio.numberOfChannels > 1 ? audio.getChannelData(1) : left
+    const heard = await heardWords(left, right, audio.sampleRate)
+    const cuts = cutsFor(heard, prepareList(BAD_WORDS))
+    set({ censored: cuts })
+    return cuts
+  },
+
+  layStem(laneId, sourceId, title, like, cuts = []) {
     if (!engine) return
     const lane = laneById(engine.getState().tracks, laneId)
     if (!lane) return
-    const clip: ArrangementClip = {
-      ...(createClip({
-        startSample: like.startSample,
-        durationSamples: like.durationSamples,
-        offsetSamples: like.offsetSamples,
-        sampleRate: get().sampleRate,
-        sourceDurationSamples: like.sourceDurationSamples,
-        name: title
-      }) as ArrangementClip),
-      sourceId,
-      rate: like.rate
+    const sr = get().sampleRate
+    const make = (startSample: number, durationSamples: number, offsetSamples: number, at: number) =>
+      ({
+        ...(createClip({
+          startSample,
+          durationSamples,
+          offsetSamples,
+          sampleRate: sr,
+          sourceDurationSamples: like.sourceDurationSamples,
+          name: at === 0 ? title : `${title} ${at + 1}`
+        }) as ArrangementClip),
+        sourceId,
+        rate: like.rate
+      }) as ArrangementClip
+
+    // A cut is a hole in the stem, so the lane gets the pieces either side of
+    // it rather than one clip. Times are stem seconds; the clip counts in
+    // arrangement frames from where it was laid.
+    const clips: ArrangementClip[] = []
+    let at = 0
+    for (const cut of cuts) {
+      const from = Math.round(cut.from * sr)
+      const to = Math.round(cut.to * sr)
+      if (to <= at || from >= like.durationSamples) continue
+      const piece = Math.min(from, like.durationSamples) - at
+      if (piece > 0) {
+        clips.push(
+          make(like.startSample + at, piece, like.offsetSamples + at, clips.length)
+        )
+      }
+      at = Math.max(at, to)
     }
-    engine.updateTrack(laneId, { ...lane, clips: [clip] })
+    if (at < like.durationSamples) {
+      clips.push(
+        make(
+          like.startSample + at,
+          like.durationSamples - at,
+          like.offsetSamples + at,
+          clips.length
+        )
+      )
+    }
+    engine.updateTrack(laneId, { ...lane, clips })
     set({ titles: { ...get().titles, [laneId]: title } })
   },
 

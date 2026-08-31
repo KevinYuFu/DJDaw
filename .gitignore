@@ -9,3 +9,5 @@ test/.build/
 resources/*.onnx
 resources/*.onnx.part
 src/renderer/public/ort/
+src/renderer/public/models/
+src/renderer/public/ort-transformers/
