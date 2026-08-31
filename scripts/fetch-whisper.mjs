@@ -16,9 +16,17 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const NAME = 'whisper-base_timestamped'
+/**
+ * Whisper base, from the export that states its terms.
+ *
+ * Several exports of these weights are published; most say nothing about their
+ * licence. This one says Apache-2.0, matching the weights OpenAI released, so
+ * the chain from their release to this app is written down at every step.
+ */
+const NAME = 'whisper-base'
+const OWNER = 'Xenova'
 const INTO = join(HERE, '..', 'src', 'renderer', 'public', 'models', NAME)
-const FROM = `https://huggingface.co/onnx-community/${NAME}/resolve/main`
+const FROM = `https://huggingface.co/${OWNER}/${NAME}/resolve/main`
 
 const FILES = [
   'config.json',

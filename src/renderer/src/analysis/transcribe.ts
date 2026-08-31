@@ -19,7 +19,7 @@ const MODEL_RATE = 16000
 const CHUNK_SEC = 30
 const STRIDE_SEC = 5
 
-const MODEL = 'whisper-base_timestamped'
+const MODEL = 'whisper-base'
 
 let ready: Promise<AutomaticSpeechRecognitionPipeline> | null = null
 
