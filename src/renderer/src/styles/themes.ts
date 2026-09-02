@@ -144,7 +144,7 @@ export const THEMES: readonly Theme[] = [
     'bg-raised-hover': '#3b3f48',
     'bg-pressed': '#12161d',
     'bg-sunken': '#070a11',
-    lane: '#070a11',
+    lane: '#12151a',
     'bg-waveform': '#03050a',
     border: '#4d535d',
     'border-soft': '#2e323a',
