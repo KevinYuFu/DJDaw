@@ -4,7 +4,7 @@
  * The whole point is that what is under the pointer stays under it, so that is
  * what these check: the bar at the pointer before a zoom, and after.
  */
-import { zoomAbout } from './.build/zoom.mjs'
+import { WHEEL_STEP, zoomAbout } from './.build/zoom.mjs'
 
 const { eq, ok } = globalThis.__t
 
@@ -49,6 +49,26 @@ for (const at of [0, 0.25, 0.5, 0.75, 1]) {
   const view = { fromBar: 2, barsInView: 32 }
   const after = zoom(view, 1, 2)
   eq('a zoom out near the start lands on the first bar', after.fromBar, 0)
+}
+
+// A notch of the wheel is a third of a step, so three of them come to where
+// one used to. Anything else and the zoom runs away from the pointer.
+{
+  const view = { fromBar: 100, barsInView: 32 }
+  let after = view
+  for (let i = 0; i < 3; i++) after = zoom(after, 0.5, WHEEL_STEP)
+  ok('three notches out come to one old step', close(after.barsInView, 32 * 1.15, 1e-9))
+  let back = after
+  for (let i = 0; i < 3; i++) back = zoom(back, 0.5, 1 / WHEEL_STEP)
+  ok('and three back come home', close(back.barsInView, 32, 1e-9))
+}
+
+{
+  const view = { fromBar: 100, barsInView: 32 }
+  const notch = zoom(view, 0.5, 1 / WHEEL_STEP)
+  const old = zoom(view, 0.5, 1 / 1.15)
+  ok('one notch moves less than the old step did', notch.barsInView > old.barsInView)
+  ok('but it does move', notch.barsInView < 32)
 }
 
 // Zooming in shows fewer bars, out shows more.

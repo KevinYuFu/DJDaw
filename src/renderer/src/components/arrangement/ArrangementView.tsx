@@ -13,7 +13,7 @@ import { useSettings } from '@renderer/state/useSettings'
 import { canvasChrome, themeById } from '@renderer/styles/themes'
 import { useArrangement } from '@renderer/state/useArrangement'
 import { ArrangementLane } from '@renderer/components/arrangement/ArrangementLane'
-import { zoomAbout } from '@renderer/arrangement/zoom'
+import { WHEEL_STEP, zoomAbout } from '@renderer/arrangement/zoom'
 import './arrangement.css'
 
 /** Height of one lane's clip strip, in CSS pixels. */
@@ -121,7 +121,7 @@ export function ArrangementView(): ReactElement {
       const box = lanesRef.current?.querySelector('.arr-lane__strip')?.getBoundingClientRect()
       if (!box || box.width <= 0) return
       const at = (e.clientX - box.left) / box.width
-      const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15
+      const factor = e.deltaY > 0 ? WHEEL_STEP : 1 / WHEEL_STEP
       setView((v) => zoomAbout(v, at, factor, MIN_BARS_IN_VIEW, MAX_BARS_IN_VIEW))
       return
     }

@@ -5,6 +5,14 @@
  * and it does not slide away while the bars grow around it.
  */
 
+/**
+ * How much one notch of the wheel changes the zoom.
+ *
+ * A third of a step, so a gesture lands where it was aimed rather than
+ * overshooting. Three notches come to the same place one used to.
+ */
+export const WHEEL_STEP = 1.15 ** (1 / 3)
+
 /** What the view is showing: where it starts, and how much of it fits. */
 export interface View {
   /** Bar at the left edge. Fractional. */
