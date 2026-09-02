@@ -103,8 +103,8 @@ export interface ArrangementClipsProps {
  * findable. Phrase lines fall every {@link BARS_PER_PHRASE} bars and match the
  * numbered divisions on the ruler.
  */
-/** Bars in a phrase. */
-const BARS_PER_PHRASE = 4
+/** Bars in a phrase. The ruler counts them the same way. */
+export const BARS_PER_PHRASE = 4
 
 /** A division is drawn only once it is this many pixels from its neighbour. */
 const MIN_BAR_PX = 6
