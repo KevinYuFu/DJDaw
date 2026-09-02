@@ -6,12 +6,13 @@
  */
 
 /**
- * How much one notch of the wheel changes the zoom.
+ * How much one notch of the wheel changes the zoom: nine parts in a thousand.
  *
- * A third of a step, so a gesture lands where it was aimed rather than
- * overshooting. Three notches come to the same place one used to.
+ * A trackpad sends dozens of these for one gesture, so the per-notch figure
+ * has to be small or a flick crosses the whole timeline. Turn it up if a zoom
+ * feels sluggish; this is the only number that decides it.
  */
-export const WHEEL_STEP = 1.15 ** (1 / 3)
+export const WHEEL_STEP = 1.009
 
 /** What the view is showing: where it starts, and how much of it fits. */
 export interface View {
