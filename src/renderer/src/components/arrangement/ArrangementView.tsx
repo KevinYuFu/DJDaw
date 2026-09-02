@@ -8,12 +8,12 @@ import {
   type ReactElement,
   type WheelEvent as ReactWheelEvent
 } from 'react'
-import { clamp } from '@renderer/core/format'
 import { useRaf } from '@renderer/hooks/useRaf'
 import { useSettings } from '@renderer/state/useSettings'
 import { canvasChrome, themeById } from '@renderer/styles/themes'
 import { useArrangement } from '@renderer/state/useArrangement'
 import { ArrangementLane } from '@renderer/components/arrangement/ArrangementLane'
+import { zoomAbout } from '@renderer/arrangement/zoom'
 import './arrangement.css'
 
 /** Height of one lane's clip strip, in CSS pixels. */
@@ -57,8 +57,16 @@ export function ArrangementView(): ReactElement {
   // At most one split runs at a time, so the first is the one to show.
   const busy = Object.values(splitting)[0] ?? null
   const [width, setWidth] = useState(900)
-  const [barsInView, setBarsInView] = useState(DEFAULT_BARS_IN_VIEW)
-  const [fromBar, setFromBar] = useState(0)
+  /**
+   * Where the timeline is looking, held as one thing.
+   *
+   * A wheel sends a run of events faster than React re-renders, so each has to
+   * work from the view the one before it left. Two pieces of state cannot do
+   * that: the second event would read the first's stale value and zoom from
+   * the wrong place.
+   */
+  const [view, setView] = useState({ fromBar: 0, barsInView: DEFAULT_BARS_IN_VIEW })
+  const { fromBar, barsInView } = view
   const lanesRef = useRef<HTMLDivElement>(null)
   const laneBoxes = useRef(new Map<string, HTMLElement>())
   const registerLane = useCallback((id: string, el: HTMLElement | null): void => {
@@ -80,13 +88,23 @@ export function ArrangementView(): ReactElement {
   }, [notice])
 
   // A bar is the same width whatever the window size is.
+  //
+  // Measured off a lane's own strip, not the overlay above it. The lanes
+  // scroll and so reserve room for a scrollbar; the overlay does not, and is
+  // that much wider. Measuring the wider one drew every bar slightly narrow
+  // and put a zoom a few pixels off the pointer.
   useLayoutEffect(() => {
     const el = stripsRef.current
     if (!el) return
-    const measure = (): void => setWidth(Math.max(120, el.clientWidth))
+    const measure = (): void => {
+      const strip = lanesRef.current?.querySelector('.arr-lane__strip')
+      const across = strip ? strip.clientWidth : el.clientWidth
+      setWidth(Math.max(120, across))
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
+    if (lanesRef.current) observer.observe(lanesRef.current)
     return () => observer.disconnect()
   }, [ready])
 
@@ -97,19 +115,21 @@ export function ArrangementView(): ReactElement {
   /** Wheel scrolls the lanes; with a modifier it zooms about the pointer. */
   const onWheel = (e: ReactWheelEvent<HTMLDivElement>): void => {
     if (e.ctrlKey || e.metaKey) {
-      const box = e.currentTarget.getBoundingClientRect()
-      const atBar = fromBar + ((e.clientX - box.left) / width) * barsInView
-      const next = clamp(
-        barsInView * (e.deltaY > 0 ? 1.15 : 1 / 1.15),
-        MIN_BARS_IN_VIEW,
-        MAX_BARS_IN_VIEW
-      )
-      setBarsInView(next)
-      setFromBar(Math.max(0, atBar - ((e.clientX - box.left) / width) * next))
+      // Measured against the timeline itself, not the row it sits in: the row
+      // also holds a track's name on the left and its channel on the right,
+      // and counting those in puts the zoom a few bars off the pointer.
+      const box = lanesRef.current?.querySelector('.arr-lane__strip')?.getBoundingClientRect()
+      if (!box || box.width <= 0) return
+      const at = (e.clientX - box.left) / box.width
+      const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15
+      setView((v) => zoomAbout(v, at, factor, MIN_BARS_IN_VIEW, MAX_BARS_IN_VIEW))
       return
     }
     const travel = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-    setFromBar((bar) => Math.max(0, bar + (travel * secPerPx) / barSec))
+    setView((v) => ({
+      ...v,
+      fromBar: Math.max(0, v.fromBar + (travel * ((barSec * v.barsInView) / width)) / barSec)
+    }))
   }
 
   // The bar ruler, redrawn when the grid or the panel changes.
@@ -216,7 +236,9 @@ export function ArrangementView(): ReactElement {
             type="button"
             className="arr-btn"
             title="Show fewer bars"
-            onClick={() => setBarsInView((n) => Math.max(MIN_BARS_IN_VIEW, n / 1.5))}
+            onClick={() =>
+              setView((v) => zoomAbout(v, 0.5, 1 / 1.5, MIN_BARS_IN_VIEW, MAX_BARS_IN_VIEW))
+            }
           >
             <span>+</span>
           </button>
@@ -224,7 +246,9 @@ export function ArrangementView(): ReactElement {
             type="button"
             className="arr-btn"
             title="Show more bars"
-            onClick={() => setBarsInView((n) => Math.min(MAX_BARS_IN_VIEW, n * 1.5))}
+            onClick={() =>
+              setView((v) => zoomAbout(v, 0.5, 1.5, MIN_BARS_IN_VIEW, MAX_BARS_IN_VIEW))
+            }
           >
             <span>−</span>
           </button>
