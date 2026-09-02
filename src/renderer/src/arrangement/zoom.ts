@@ -6,13 +6,15 @@
  */
 
 /**
- * How much one notch of the wheel changes the zoom: nine parts in a thousand.
+ * How much one notch of the wheel changes the zoom, as a percentage.
  *
- * A trackpad sends dozens of these for one gesture, so the per-notch figure
- * has to be small or a flick crosses the whole timeline. Turn it up if a zoom
- * feels sluggish; this is the only number that decides it.
+ * A trackpad sends dozens of notches for one gesture, so this is per notch and
+ * not per gesture. It is the only number that decides how a zoom feels.
  */
-export const WHEEL_STEP = 1.009
+export const WHEEL_PERCENT = 2
+
+/** That percentage as the multiplier {@link zoomAbout} takes. */
+export const WHEEL_STEP = 1 + WHEEL_PERCENT / 100
 
 /** What the view is showing: where it starts, and how much of it fits. */
 export interface View {

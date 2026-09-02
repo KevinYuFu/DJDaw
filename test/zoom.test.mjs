@@ -4,7 +4,7 @@
  * The whole point is that what is under the pointer stays under it, so that is
  * what these check: the bar at the pointer before a zoom, and after.
  */
-import { WHEEL_STEP, zoomAbout } from './.build/zoom.mjs'
+import { WHEEL_PERCENT, WHEEL_STEP, zoomAbout } from './.build/zoom.mjs'
 
 const { eq, ok } = globalThis.__t
 
@@ -51,18 +51,21 @@ for (const at of [0, 0.25, 0.5, 0.75, 1]) {
   eq('a zoom out near the start lands on the first bar', after.fromBar, 0)
 }
 
+// The step is stated as a percentage, and the multiplier has to agree with it.
+eq('a notch is the stated percentage', WHEEL_STEP, 1 + WHEEL_PERCENT / 100)
+
 // A notch is small on purpose: a trackpad sends many of them per gesture.
 {
   const view = { fromBar: 100, barsInView: 32 }
   const notch = zoom(view, 0.5, 1 / WHEEL_STEP)
   ok('one notch does move the zoom', notch.barsInView < 32)
-  ok('but only a little', notch.barsInView > 32 * 0.98)
+  ok('but only a little', notch.barsInView > 32 * 0.9)
 
   // A gesture is many notches, and has to add up to something useful.
   let gesture = view
   for (let i = 0; i < 30; i++) gesture = zoom(gesture, 0.5, 1 / WHEEL_STEP)
-  ok('a gesture of thirty notches zooms in noticeably', gesture.barsInView < 32 * 0.8)
-  ok('without flying past everything', gesture.barsInView > 32 * 0.6)
+  ok('a gesture of thirty notches zooms in noticeably', gesture.barsInView < 32 * 0.7)
+  ok('without flying past everything', gesture.barsInView > 32 * 0.3)
 
   // And it still holds the point, however many notches it takes.
   ok('the point is held across a whole gesture',
