@@ -12,6 +12,7 @@ import { useSettings } from '@renderer/state/useSettings'
 import { canvasChrome, themeById } from '@renderer/styles/themes'
 import { useArrangement } from '@renderer/state/useArrangement'
 import { ArrangementLane } from '@renderer/components/arrangement/ArrangementLane'
+import { BARS_PER_PHRASE } from '@renderer/components/arrangement/ArrangementClips'
 import { WHEEL_STEP, zoomAbout } from '@renderer/arrangement/zoom'
 import './arrangement.css'
 
@@ -165,9 +166,14 @@ export function ArrangementView(): ReactElement {
     ctx.clearRect(0, 0, width, h)
     ctx.font = '9px ui-monospace, monospace'
     ctx.textBaseline = 'top'
-    for (let bar = 0; bar <= barsInView; bar++) {
-      const x = Math.round(((bar + Math.round(fromBar)) * barSec - fromSec) / secPerPx) + 0.5
-      const major = (bar + Math.round(fromBar)) % 4 === 0
+    // Counted off the timeline itself, exactly as the lanes count their own
+    // lines, so the two cannot drift apart.
+    const firstBar = Math.floor(fromSec / barSec)
+    const lastBar = Math.ceil((fromSec + width * secPerPx) / barSec)
+    for (let bar = firstBar; bar <= lastBar; bar++) {
+      const x = Math.round((bar * barSec - fromSec) / secPerPx) + 0.5
+      if (x < 0 || x > width) continue
+      const major = bar % BARS_PER_PHRASE === 0
       ctx.strokeStyle = major ? chrome.gridPhrase : chrome.gridBar
       ctx.beginPath()
       ctx.moveTo(x, major ? 2 : 10)
@@ -175,7 +181,7 @@ export function ArrangementView(): ReactElement {
       ctx.stroke()
       if (major) {
         ctx.fillStyle = rulerText
-        ctx.fillText(String(bar + Math.round(fromBar) + 1), x + 3, 2)
+        ctx.fillText(String(bar + 1), x + 3, 2)
       }
     }
   }, [width, barSec, secPerPx, fromSec, fromBar, barsInView, chrome, rulerText])
@@ -279,7 +285,10 @@ export function ArrangementView(): ReactElement {
 
       <div className="arr-view__ruler">
         <div className="arr-view__gutter" />
-        <canvas className="arr-view__ruler-canvas" ref={rulerRef} />
+        {/* Held to the strip's width, not stretched across its own box: the
+            lanes below reserve room for a scrollbar and the ruler does not, so
+            filling both would draw the same bar at two different places. */}
+        <canvas className="arr-view__ruler-canvas" ref={rulerRef} style={{ width }} />
         <div className="arr-view__tail" />
       </div>
 
