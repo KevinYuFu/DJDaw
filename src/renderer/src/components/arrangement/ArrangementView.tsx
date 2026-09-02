@@ -5,8 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactElement,
-  type WheelEvent as ReactWheelEvent
+  type ReactElement
 } from 'react'
 import { useRaf } from '@renderer/hooks/useRaf'
 import { useSettings } from '@renderer/state/useSettings'
@@ -112,25 +111,45 @@ export function ArrangementView(): ReactElement {
   const secPerPx = (barSec * barsInView) / width
   const fromSec = fromBar * barSec
 
-  /** Wheel scrolls the lanes; with a modifier it zooms about the pointer. */
-  const onWheel = (e: ReactWheelEvent<HTMLDivElement>): void => {
-    if (e.ctrlKey || e.metaKey) {
-      // Measured against the timeline itself, not the row it sits in: the row
-      // also holds a track's name on the left and its channel on the right,
-      // and counting those in puts the zoom a few bars off the pointer.
-      const box = lanesRef.current?.querySelector('.arr-lane__strip')?.getBoundingClientRect()
-      if (!box || box.width <= 0) return
-      const at = (e.clientX - box.left) / box.width
-      const factor = e.deltaY > 0 ? WHEEL_STEP : 1 / WHEEL_STEP
-      setView((v) => zoomAbout(v, at, factor, MIN_BARS_IN_VIEW, MAX_BARS_IN_VIEW))
-      return
+  /**
+   * What a wheel does, and only one thing at a time.
+   *
+   * - held Cmd or Ctrl: zoom, about whatever is under the pointer
+   * - sideways, or Shift held: move along the timeline
+   * - plain: leave it to the tracks, which scroll themselves
+   *
+   * Listened for directly rather than through React, because React attaches
+   * wheel passively and a passive listener cannot stop the browser also acting
+   * on the same gesture. Without that the tracks scrolled underneath a zoom.
+   */
+  useEffect(() => {
+    const el = lanesRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent): void => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        // Measured against the timeline itself, not the row it sits in: the
+        // row also holds a track's name on the left and its channel on the
+        // right, and counting those in puts the zoom off the pointer.
+        const box = el.querySelector('.arr-lane__strip')?.getBoundingClientRect()
+        if (!box || box.width <= 0) return
+        const at = (e.clientX - box.left) / box.width
+        const factor = e.deltaY > 0 ? WHEEL_STEP : 1 / WHEEL_STEP
+        setView((v) => zoomAbout(v, at, factor, MIN_BARS_IN_VIEW, MAX_BARS_IN_VIEW))
+        return
+      }
+      // Shift turns a wheel sideways, which is what it does everywhere else.
+      const sideways = e.shiftKey ? e.deltaY : e.deltaX
+      if (sideways === 0) return
+      e.preventDefault()
+      setView((v) => ({
+        ...v,
+        fromBar: Math.max(0, v.fromBar + (sideways * v.barsInView) / width)
+      }))
     }
-    const travel = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-    setView((v) => ({
-      ...v,
-      fromBar: Math.max(0, v.fromBar + (travel * ((barSec * v.barsInView) / width)) / barSec)
-    }))
-  }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [width])
 
   // The bar ruler, redrawn when the grid or the panel changes.
   useEffect(() => {
@@ -265,7 +284,7 @@ export function ArrangementView(): ReactElement {
       </div>
 
       <div className="arr-view__stage">
-        <div className="arr-view__lanes" ref={lanesRef} onWheel={onWheel}>
+        <div className="arr-view__lanes" ref={lanesRef}>
           {lanes.map((lane, index) => (
             <ArrangementLane
               key={lane.id}
