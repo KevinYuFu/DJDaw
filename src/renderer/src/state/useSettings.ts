@@ -5,6 +5,9 @@ import { DECK_IDS, type DeckId } from '@shared/types'
 import type { EqMode } from '@shared/eq'
 import { AudioEngine } from '@renderer/audio/AudioEngine'
 import { clamp } from '@renderer/core/format'
+import { renameView, type ViewName } from '@renderer/state/viewNames'
+
+export type { ViewName }
 
 /**
  * Waveform colouring.
@@ -15,11 +18,6 @@ import { clamp } from '@renderer/core/format'
  */
 export type WaveformColorMode = '3band' | 'rgb' | 'mono'
 
-/**
- * Which view is on screen. `performance` is the two-deck rekordbox layout;
- * `edit` and `editv2` each stack four tracks for building an edit.
- */
-export type ViewName = 'performance' | 'edit' | 'editv2' | 'v3'
 
 /**
  * The decks a view shows. Focus and `Tab` stay inside this set, so the
@@ -27,7 +25,7 @@ export type ViewName = 'performance' | 'edit' | 'editv2' | 'v3'
  * could not see they were controlling.
  */
 function decksInView(view: ViewName): readonly DeckId[] {
-  return view === 'edit' || view === 'editv2' ? DECK_IDS : DECK_IDS.slice(0, 2)
+  return view === 'legacy' ? DECK_IDS : DECK_IDS.slice(0, 2)
 }
 
 /** App-wide preferences, persisted to localStorage. */
@@ -148,7 +146,16 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: 'djdaw.settings',
-      version: 1,
+      version: 2,
+      // A stored view from before the rename still has to open something.
+      migrate: (persisted, version) => {
+        const state = persisted as Partial<SettingsState> | undefined
+        if (!state || version >= 2) return state as SettingsState
+        return {
+          ...state,
+          view: renameView(state.view)
+        } as SettingsState
+      },
       // The stored theme has to reach the document, not just the store.
       onRehydrateStorage: () => (state) => applyTheme(state?.themeId ?? DEFAULT_THEME_ID),
       // Actions are not serialisable and would only bloat the stored blob.

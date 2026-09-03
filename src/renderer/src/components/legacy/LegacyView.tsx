@@ -11,8 +11,8 @@ import { useDecks } from '@renderer/state/useDecks'
 import type { DeckState } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useSettings } from '@renderer/state/useSettings'
-import { EditTrack } from '@renderer/components/edit/EditTrack'
-import './edit.css'
+import { LegacyTrack } from '@renderer/components/legacy/LegacyTrack'
+import './legacy.css'
 
 /**
  * The row the one transport drives, for now. An arrangement has a single
@@ -401,7 +401,7 @@ function ExportPanel({ loaded, onClose }: ExportPanelProps): ReactElement {
  * `Shift+Tab` walk the four; clicking a row focuses it. The ring lives in
  * `useSettings`; the export panel is the only state held here.
  */
-export function EditView(): ReactElement {
+export function LegacyView(): ReactElement {
   const [exportOpen, setExportOpen] = useState(false)
   const loaded = useExportableDecks()
   const focused = useSettings((s) => s.focusedDeck)
@@ -472,7 +472,7 @@ export function EditView(): ReactElement {
       </header>
 
       {DECK_IDS.map((id) => (
-        <EditTrack key={id} deckId={id} />
+        <LegacyTrack key={id} deckId={id} />
       ))}
 
       {exportOpen ? (
@@ -482,4 +482,4 @@ export function EditView(): ReactElement {
   )
 }
 
-export default EditView
+export default LegacyView
