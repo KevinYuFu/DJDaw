@@ -9,6 +9,7 @@ import { decodeTrack } from '@renderer/audio/decode'
 import { playbackRate } from '@renderer/analysis/playbackRate'
 import { layOver, trimWithin, type Placed } from '@renderer/arrangement/laneEdit'
 import { nameLane } from '@renderer/arrangement/laneTitle'
+import { beatJumpTo } from '@renderer/arrangement/beatJump'
 import { DEFAULT_MASTER_BPM, freshLanes } from '@renderer/arrangement/session'
 import { STEM_NAMES, type StemName } from '@shared/stems'
 import { splitIntoStems } from '@renderer/analysis/stemSplit'
@@ -245,6 +246,8 @@ export interface ArrangementState {
   pause(): void
   toggle(): void
   seek(seconds: number): void
+  /** Move the playhead `beats` grid beats, back when negative. */
+  beatJump(beats: number): void
   positionSeconds(): number
   setLaneEq(lane: string, eq: ChannelEq): void
   setLaneVolume(lane: string, volume: number): void
@@ -912,6 +915,10 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
 
   seek(seconds) {
     engine?.seek(Math.max(0, seconds))
+  },
+
+  beatJump(beats) {
+    get().seek(beatJumpTo(get().positionSeconds(), beats, get().masterBpm))
   },
 
   positionSeconds() {
