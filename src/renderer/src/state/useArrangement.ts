@@ -9,6 +9,7 @@ import { decodeTrack } from '@renderer/audio/decode'
 import { playbackRate } from '@renderer/analysis/playbackRate'
 import { layOver, trimWithin, type Placed } from '@renderer/arrangement/laneEdit'
 import { nameLane } from '@renderer/arrangement/laneTitle'
+import { DEFAULT_MASTER_BPM, freshLanes } from '@renderer/arrangement/session'
 import { STEM_NAMES, type StemName } from '@shared/stems'
 import { splitIntoStems } from '@renderer/analysis/stemSplit'
 
@@ -81,19 +82,6 @@ export function clampMasterBpm(bpm: number): number {
   return Math.min(MASTER_BPM_MAX, Math.max(MASTER_BPM_MIN, bpm))
 }
 
-/**
- * Lanes the arrangement opens with.
- *
- * Eight, so a track and the four stems split out of it fit together with room
- * left over. Colours run out after four and start again, which is why a lane
- * says its name rather than relying on its colour alone.
- */
-const LANE_NAMES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
-
-function laneId(index: number): string {
-  return `lane-${index + 1}`
-}
-
 /** The clip the next edit acts on. */
 export interface ClipSelection {
   lane: string
@@ -160,6 +148,8 @@ export interface ArrangementState {
   collapsed: Record<string, boolean>
 
   init(): Promise<void>
+  /** Empty every lane and put the grid back as it opens. */
+  newSession(): void
   /** Lay a library track into a lane, warped onto the grid. */
   dropTrack(lane: string, trackId: string, atSeconds: number): Promise<void>
   /** Lay the browser's pick into the first lane with nothing on it. */
@@ -317,7 +307,7 @@ function laneClips(lanes: ClipTrack[], id: string): ArrangementClip[] {
 export const useArrangement = create<ArrangementState>()((set, get) => ({
   ready: false,
   sampleRate: 48000,
-  masterBpm: 120,
+  masterBpm: DEFAULT_MASTER_BPM,
   lanes: [],
   titles: {},
   version: 0,
@@ -350,15 +340,7 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     })
     await engine.init()
 
-    const lanes: ClipTrack[] = LANE_NAMES.map((name, i) => ({
-      id: laneId(i),
-      name,
-      clips: [],
-      muted: false,
-      soloed: false,
-      volume: 1,
-      pan: 0
-    }))
+    const lanes: ClipTrack[] = freshLanes()
     const channels: Record<string, LaneChannel> = {}
     for (const lane of lanes) channels[lane.id] = { eq: flatChannel(), mode: 'eq' }
 
@@ -373,6 +355,45 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
       })
     })
     set({ ready: true, lanes, channels })
+  },
+
+  /**
+   * Start again with nothing on the timeline.
+   *
+   * Every lane is emptied and handed back its number, the grid returns to its
+   * opening tempo and the playhead to the start. The imported collection is
+   * left alone: that is the library, not the session.
+   */
+  newSession() {
+    if (!engine) return
+    get().pause()
+    get().seek(0)
+    engine.setTempo(DEFAULT_MASTER_BPM)
+
+    const lanes: ClipTrack[] = freshLanes()
+    const channels: Record<string, LaneChannel> = {}
+    for (const lane of lanes) {
+      channels[lane.id] = { eq: flatChannel(), mode: 'eq' }
+      playout?.applyEq(lane.id, channels[lane.id])
+    }
+    engine.setTracks(lanes)
+
+    set({
+      masterBpm: DEFAULT_MASTER_BPM,
+      lanes,
+      channels,
+      titles: {},
+      waveforms: {},
+      loading: [],
+      selection: null,
+      preview: null,
+      scrub: null,
+      notice: null,
+      splitting: {},
+      collapsed: {},
+      playing: false,
+      duration: 0
+    })
   },
 
   async dropTrack(lane, trackId, atSeconds) {
