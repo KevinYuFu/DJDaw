@@ -137,3 +137,8 @@ go through one grid module that converts between seconds and a fractional beat
 index, so a beat jump walks the grid and stays phase-locked. The same worklet
 runs inside an `OfflineAudioContext`, which is how the future export will render
 a mashup with exactly the DSP you heard.
+
+## Third-party components
+
+What the app ships that someone else wrote, and under what terms, is recorded
+in [THIRD-PARTY.md](THIRD-PARTY.md).
