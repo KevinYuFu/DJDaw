@@ -54,6 +54,8 @@ export function ArrangementView(): ReactElement {
   const selected = useArrangement((s) => s.selection)
   const collapsed = useArrangement((s) => s.collapsed)
   const splitting = useArrangement((s) => s.splitting)
+  const censorVocals = useArrangement((s) => s.censorVocals)
+  const censored = useArrangement((s) => s.censored)
   // At most one split runs at a time, so the first is the one to show.
   const busy = Object.values(splitting)[0] ?? null
   const [width, setWidth] = useState(900)
@@ -253,6 +255,27 @@ export function ArrangementView(): ReactElement {
               <span className="arr-btn__meter" style={{ transform: `scaleX(${busy})` }} />
             )}
           </button>
+          <label
+            className={`arr-toggle${censorVocals ? ' is-on' : ''}`}
+            title="Take the swearing out of the vocal as it is split"
+          >
+            <input
+              type="checkbox"
+              checked={censorVocals}
+              onChange={(e) => useArrangement.getState().setCensorVocals(e.target.checked)}
+            />
+            <span className="arr-toggle__box" aria-hidden="true">
+              <svg viewBox="0 0 12 12">
+                <path d="M2.5 6.2 L4.8 8.5 L9.5 3.6" />
+              </svg>
+            </span>
+            <span>CENSOR</span>
+          </label>
+          {censored.length === 0 ? null : (
+            <span className="arr-view__censored" title={censored.map((c) => c.words.join(' ')).join(', ')}>
+              {censored.length} cut{censored.length === 1 ? '' : 's'}
+            </span>
+          )}
           {notice ? <span className="arr-view__note is-warn">{notice}</span> : null}
           {loading.length > 0 ? <span className="arr-view__note">Loading a track…</span> : null}
         </div>

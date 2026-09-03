@@ -17,11 +17,13 @@
     "build:mac": "npm run build && electron-builder --mac",
     "postinstall": "electron-builder install-app-deps && node scripts/prepare-ort.mjs",
     "test": "node test/run.mjs",
-    "fetch:model": "node scripts/fetch-model.mjs",
-    "prepare:ort": "node scripts/prepare-ort.mjs"
+    "fetch:model": "node scripts/fetch-model.mjs && node scripts/fetch-whisper.mjs",
+    "prepare:ort": "node scripts/prepare-ort.mjs",
+    "fetch:whisper": "node scripts/fetch-whisper.mjs"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
+    "@huggingface/transformers": "^3.8.1",
     "@waveform-playlist/core": "^12.6.1",
     "@waveform-playlist/engine": "^13.6.0",
     "demucs-web": "^1.0.2",

@@ -10,22 +10,40 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const FROM = join(HERE, '..', 'node_modules', 'onnxruntime-web', 'dist')
-const INTO = join(HERE, '..', 'src', 'renderer', 'public', 'ort')
+const PUBLIC = join(HERE, '..', 'src', 'renderer', 'public')
 
 /**
- * The build the runtime actually reaches for on the WebGPU backend, which is
- * the one the app asks for. It resolves these by name at run time, so they
- * have to be served rather than bundled. The package carries three other
- * builds worth 55 MB between them that are never fetched.
+ * Two runtimes, kept apart on purpose.
+ *
+ * Stem separation drives ONNX Runtime directly; transcription goes through
+ * transformers.js, which carries its own copy at a different version. Pointing
+ * both at one folder means whichever loads second gets the wrong build, so
+ * each is served the files it shipped with.
  */
-const WANTED = /^ort-wasm-simd-threaded\.asyncify\.(wasm|mjs)$/
+const SOURCES = [
+  {
+    from: join(HERE, '..', 'node_modules', 'onnxruntime-web', 'dist'),
+    into: join(PUBLIC, 'ort'),
+    // What the WebGPU backend reaches for. The package carries three other
+    // builds worth 55 MB between them that are never fetched.
+    wanted: /^ort-wasm-simd-threaded\.asyncify\.(wasm|mjs)$/,
+    label: 'stem separation'
+  },
+  {
+    from: join(HERE, '..', 'node_modules', '@huggingface', 'transformers', 'dist'),
+    into: join(PUBLIC, 'ort-transformers'),
+    wanted: /^ort-wasm-simd-threaded\.jsep\.(wasm|mjs)$/,
+    label: 'transcription'
+  }
+]
 
-const files = (await readdir(FROM)).filter((f) => WANTED.test(f))
-if (files.length === 0) {
-  console.error(`no ONNX Runtime wasm found in ${FROM}`)
-  process.exit(1)
+for (const { from, into, wanted, label } of SOURCES) {
+  const files = (await readdir(from)).filter((f) => wanted.test(f))
+  if (files.length === 0) {
+    console.error(`no ONNX Runtime wasm for ${label} in ${from}`)
+    process.exit(1)
+  }
+  await mkdir(into, { recursive: true })
+  for (const file of files) await copyFile(join(from, file), join(into, file))
+  console.log(`${label}: ${files.length} runtime files ready`)
 }
-await mkdir(INTO, { recursive: true })
-for (const file of files) await copyFile(join(FROM, file), join(INTO, file))
-console.log(`ONNX Runtime wasm ready (${files.join(', ')})`)
