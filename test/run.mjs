@@ -40,6 +40,7 @@ const MODULES = [
   'src/renderer/src/analysis/playbackRate.ts',
   'src/renderer/src/arrangement/placement.ts',
   'src/renderer/src/arrangement/laneEdit.ts',
+  'src/renderer/src/arrangement/zoom.ts',
   'src/renderer/src/arrangement/laneTitle.ts',
   'src/renderer/src/styles/themes.ts'
 ]

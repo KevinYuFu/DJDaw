@@ -143,6 +143,18 @@ He is working on the same machine. Tests run around him, not over him.
   `Page.setWebLifecycleState('active')` first; only ask him to bring the app
   forward if that fails, and say why.
 
+## One scale per number, and say which
+
+When a number can be written more than one way — a multiplier or a percentage,
+seconds or frames, bars or beats — pick one, say which it is, and keep it.
+
+Switching scales part way through makes his numbers ambiguous and that is my
+fault, not his.
+
+If a number he gives me could mean two things, **ask**. Noticing that it is
+ambiguous and then guessing is worse than not noticing: I knew and chose
+anyway.
+
 ## Save every rule YuFu gives me
 
 When YuFu gives me an instruction about how to work, I add it to this file
