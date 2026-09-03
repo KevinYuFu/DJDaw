@@ -43,6 +43,7 @@ const MODULES = [
   'src/renderer/src/arrangement/zoom.ts',
   'src/renderer/src/arrangement/laneTitle.ts',
   'src/renderer/src/arrangement/beatJump.ts',
+  'src/renderer/src/arrangement/session.ts',
   'src/renderer/src/styles/themes.ts'
 ]
 

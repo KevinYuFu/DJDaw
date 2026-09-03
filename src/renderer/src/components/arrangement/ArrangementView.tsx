@@ -11,9 +11,11 @@ import { useRaf } from '@renderer/hooks/useRaf'
 import { useSettings } from '@renderer/state/useSettings'
 import { canvasChrome, themeById } from '@renderer/styles/themes'
 import { useArrangement } from '@renderer/state/useArrangement'
+import { Modal } from '@renderer/components/Modal'
 import { ArrangementLane } from '@renderer/components/arrangement/ArrangementLane'
 import { BARS_PER_PHRASE } from '@renderer/components/arrangement/ArrangementClips'
 import { WHEEL_STEP, zoomAbout } from '@renderer/arrangement/zoom'
+import { DEFAULT_MASTER_BPM } from '@renderer/arrangement/session'
 import './arrangement.css'
 
 /** Height of one lane's clip strip, in CSS pixels. */
@@ -59,6 +61,7 @@ export function ArrangementView(): ReactElement {
   // At most one split runs at a time, so the first is the one to show.
   const busy = Object.values(splitting)[0] ?? null
   const [width, setWidth] = useState(900)
+  const [confirming, setConfirming] = useState(false)
   /**
    * Where the timeline is looking, held as one thing.
    *
@@ -216,6 +219,29 @@ export function ArrangementView(): ReactElement {
 
   return (
     <div className="arr-view">
+      {confirming ? (
+        <Modal title="New Session" onClose={() => setConfirming(false)}>
+          <p className="modal__note">
+            This empties every lane and puts the grid back to {DEFAULT_MASTER_BPM} BPM. Your
+            imported tracks stay in the browser.
+          </p>
+          <div className="modal__actions">
+            <button type="button" onClick={() => setConfirming(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="is-danger"
+              onClick={() => {
+                useArrangement.getState().newSession()
+                setConfirming(false)
+              }}
+            >
+              Clear it
+            </button>
+          </div>
+        </Modal>
+      ) : null}
       <div className="arr-view__bar">
         <div className="arr-view__left">
           <button
@@ -276,6 +302,14 @@ export function ArrangementView(): ReactElement {
               {censored.length} cut{censored.length === 1 ? '' : 's'}
             </span>
           )}
+          <button
+            type="button"
+            className="arr-btn"
+            onClick={() => setConfirming(true)}
+            title="Clear the timeline and start a new session"
+          >
+            <span>NEW</span>
+          </button>
           {notice ? <span className="arr-view__note is-warn">{notice}</span> : null}
           {loading.length > 0 ? <span className="arr-view__note">Loading a track…</span> : null}
         </div>
