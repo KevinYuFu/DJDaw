@@ -18,8 +18,7 @@ import { Browser } from '@renderer/components/browser/Browser'
 import { analyzeTrackOffDeck } from '@renderer/components/browser/TrackTable'
 import { Deck } from '@renderer/components/deck/Deck'
 import { Busy } from '@renderer/components/Busy'
-import { EditView } from '@renderer/components/edit/EditView'
-import { EditV2View } from '@renderer/components/editv2/EditV2View'
+import { LegacyView } from '@renderer/components/legacy/LegacyView'
 import { ArrangementView } from '@renderer/components/arrangement/ArrangementView'
 import { Mixer } from '@renderer/components/Mixer'
 import { Toolbar } from '@renderer/components/Toolbar'
@@ -67,19 +66,15 @@ const ARRANGEMENT_LANE_H = 85
  */
 const VIEW_HEIGHTS: Record<ViewName, { min: number; preferred: number }> = {
   performance: { min: 360, preferred: DECK_CHROME_H + DEFAULT_WAVE_H },
-  edit: {
-    min: EDIT_CHROME_H + 4 * EDIT_ROW_MIN_H,
-    preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
-  },
-  editv2: {
-    min: EDIT_CHROME_H + 4 * EDIT_ROW_MIN_H,
-    preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
-  },
   // The arrangement's chrome is a transport bar and a bar ruler, over lanes
   // shorter than an editing row.
-  v3: {
+  edit: {
     min: ARRANGEMENT_CHROME_H + 4 * ARRANGEMENT_LANE_H,
     preferred: ARRANGEMENT_CHROME_H + 4 * ARRANGEMENT_LANE_H
+  },
+  legacy: {
+    min: EDIT_CHROME_H + 4 * EDIT_ROW_MIN_H,
+    preferred: EDIT_CHROME_H + 4 * EDIT_ROW_H
   }
 }
 
@@ -300,17 +295,13 @@ export function App(): ReactElement {
       <Toolbar />
       <Busy />
 
-      {view === 'v3' ? (
+      {view === 'edit' ? (
         <main className="edit-area">
           <ArrangementView />
         </main>
-      ) : view === 'editv2' ? (
+      ) : view === 'legacy' ? (
         <main className="edit-area">
-          <EditV2View />
-        </main>
-      ) : view === 'edit' ? (
-        <main className="edit-area">
-          <EditView />
+          <LegacyView />
         </main>
       ) : (
         <main className="deck-area">

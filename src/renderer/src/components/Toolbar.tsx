@@ -6,13 +6,12 @@ import { KEYBOARD_SHORTCUTS } from '@renderer/hooks/useKeyboard'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { THEMES, type Theme } from '@renderer/styles/themes'
-import { useArrangement } from '@renderer/state/useArrangement'
 import {
   clampMasterBpm,
   MASTER_BPM_MAX,
   MASTER_BPM_MIN,
-  useEditV2
-} from '@renderer/state/useEditV2'
+  useArrangement
+} from '@renderer/state/useArrangement'
 import { useSettings } from '@renderer/state/useSettings'
 import type { WaveformColorMode } from '@renderer/state/useSettings'
 
@@ -353,7 +352,6 @@ export function Toolbar(): ReactElement {
   const view = useSettings((s) => s.view)
   const setView = useSettings((s) => s.setView)
   const bpm = useMasterBpm()
-  const masterBpm = useEditV2((s) => s.masterBpm)
   const arrangementBpm = useArrangement((s) => s.masterBpm)
   const [helpOpen, setHelpOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
@@ -380,7 +378,7 @@ export function Toolbar(): ReactElement {
           role="tab"
           aria-selected={view === 'edit'}
           className={view === 'edit' ? 'active' : undefined}
-          title="Four tracks stacked, for building an edit"
+          title="Lanes of clips on one grid, the way an arrangement works"
           onClick={() => setView('edit')}
         >
           EDIT
@@ -388,22 +386,12 @@ export function Toolbar(): ReactElement {
         <button
           type="button"
           role="tab"
-          aria-selected={view === 'editv2'}
-          className={view === 'editv2' ? 'active' : undefined}
+          aria-selected={view === 'legacy'}
+          className={view === 'legacy' ? 'active' : undefined}
           title="Four tracks stacked, for building an edit"
-          onClick={() => setView('editv2')}
+          onClick={() => setView('legacy')}
         >
-          EDIT V2
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === 'v3'}
-          className={view === 'v3' ? 'active' : undefined}
-          title="Lanes of clips on one grid, the way an arrangement works"
-          onClick={() => setView('v3')}
-        >
-          V3
+          EDIT LEGACY
         </button>
       </div>
 
@@ -411,15 +399,10 @@ export function Toolbar(): ReactElement {
 
       <div className="toolbar__readout">
         <span className="label">Master BPM</span>
-        {view === 'v3' ? (
+        {view === 'edit' ? (
           <MasterBpmField
             value={arrangementBpm}
             onCommit={(bpm) => useArrangement.getState().setMasterBpm(bpm)}
-          />
-        ) : view === 'editv2' ? (
-          <MasterBpmField
-            value={masterBpm}
-            onCommit={(bpm) => useEditV2.getState().setMasterBpm(bpm)}
           />
         ) : (
           <span

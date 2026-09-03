@@ -19,7 +19,7 @@ import { useSettings } from '@renderer/state/useSettings'
 import { DetailWaveform } from '@renderer/components/waveform/DetailWaveform'
 import { OverviewWaveform } from '@renderer/components/waveform/OverviewWaveform'
 
-export interface EditTrackProps {
+export interface LegacyTrackProps {
   deckId: DeckId
 }
 
@@ -319,7 +319,7 @@ function ChannelEqStrip({ deckId, disabled }: ChannelEqProps): ReactElement {
  * The clocks and the live BPM are written straight into their DOM nodes from a
  * rAF loop, as the deck header's are.
  */
-export function EditTrack({ deckId }: EditTrackProps): ReactElement {
+export function LegacyTrack({ deckId }: LegacyTrackProps): ReactElement {
   const status = useDecks((s) => s.decks[deckId].status)
   const trackId = useDecks((s) => s.decks[deckId].trackId)
   const track = useLibrary((s) => (trackId ? s.trackById(trackId) : undefined))
@@ -543,4 +543,4 @@ export function EditTrack({ deckId }: EditTrackProps): ReactElement {
   )
 }
 
-export default EditTrack
+export default LegacyTrack

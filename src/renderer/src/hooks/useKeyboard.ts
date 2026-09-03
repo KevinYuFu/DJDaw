@@ -7,7 +7,6 @@ import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
 import { useArrangement } from '@renderer/state/useArrangement'
-import { useEditV2 } from '@renderer/state/useEditV2'
 import { useSettings } from '@renderer/state/useSettings'
 
 /**
@@ -38,8 +37,8 @@ export interface ShortcutHelp {
 
 /** The key map as shown to the user, in the order docs/ARCHITECTURE.md lists it. */
 export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
-  { keys: 'Space', action: 'Play / pause the focused deck — every row in Edit V2' },
-  { keys: 'Q / W', action: 'Beat jump back / forward \u2014 16 beats, and always 16 in V3' },
+  { keys: 'Space', action: 'Play / pause the focused deck — every lane in Edit' },
+  { keys: 'Q / W', action: 'Beat jump back / forward \u2014 16 beats, and always 16 in Edit' },
   { keys: 'Shift + Q / W', action: 'Halve / double the beat-jump size \u2014 decks only' },
   { keys: '1 – 8', action: 'Hot cue A–H: set if empty, jump if set, hold to preview' },
   { keys: 'Shift + 1 – 8', action: 'Delete hot cue A–H' },
@@ -55,12 +54,12 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Y', action: 'Toggle quantize' },
   { keys: '- / =', action: 'Waveform zoom out / in' },
   { keys: '← / →', action: 'Nudge the playhead by one beat' },
-  { keys: 'A', action: 'Load the picked track into the focused deck, or V3\u2019s first free lane' },
+  { keys: 'A', action: 'Load the picked track into the focused deck, or Edit\u2019s first free lane' },
   { keys: 'Tab', action: 'Move the focus to the next deck' },
   { keys: 'Shift + Tab', action: 'Move the focus back one deck' },
   { keys: 'Cmd / Ctrl + E', action: 'Cut the picked clip at the playhead' },
-  { keys: 'Delete', action: 'Edit and V3: delete the picked clip' },
-  { keys: 'Shift + Delete', action: 'Edit view: delete it and close the gap' }
+  { keys: 'Delete', action: 'Edit and Edit Legacy: delete the picked clip' },
+  { keys: 'Shift + Delete', action: 'Edit Legacy: delete it and close the gap' }
 ] as const
 
 /**
@@ -127,20 +126,14 @@ function focusedDeck(): DeckId {
   return useSettings.getState().focusedDeck
 }
 
-/** Whether the view that plays every row at once is on screen. */
-function inEditV2(): boolean {
-  return useSettings.getState().view === 'editv2'
-}
-
 /** Whether the arrangement is on screen, where there are lanes and no decks. */
 function inArrangement(): boolean {
-  return useSettings.getState().view === 'v3'
+  return useSettings.getState().view === 'edit'
 }
 
-/** Whether an editing view is on screen, which is the only place clips exist. */
-function inEditView(): boolean {
-  const view = useSettings.getState().view
-  return view === 'edit' || view === 'editv2'
+/** Whether the stacked view is on screen, which is where its clips live. */
+function inLegacyView(): boolean {
+  return useSettings.getState().view === 'legacy'
 }
 
 /**
@@ -253,7 +246,7 @@ function isRepeatable(event: KeyboardEvent): boolean {
 function isBound(code: string): boolean {
   if (hotCueIndex(code) !== null) return true
   // Outside the editing views these are not ours, and must reach the browser.
-  if (code === 'Delete' || code === 'Backspace') return inEditView() || inArrangement()
+  if (code === 'Delete' || code === 'Backspace') return inLegacyView() || inArrangement()
   return (
     REPEATABLE.has(code) ||
     code === 'Space' ||
@@ -314,7 +307,7 @@ export function useKeyboard(): void {
           if (!event.repeat) useArrangement.getState().cutSelected()
           return
         }
-        if (!inEditView()) return
+        if (!inLegacyView()) return
         event.preventDefault()
         if (!event.repeat) cutAtPlayhead(focusedDeck())
         return
@@ -336,10 +329,9 @@ export function useKeyboard(): void {
 
       switch (event.code) {
         case 'Space':
-          // Neither the arrangement nor EDIT V2 has such a thing as playing one
-          // row: in both, space starts and stops everything together.
+          // The arrangement has no such thing as playing one row: space starts
+          // and stops every lane together.
           if (inArrangement()) useArrangement.getState().toggle()
-          else if (inEditV2()) useEditV2.getState().toggleAll()
           else decks.togglePlay(deck)
           break
 
@@ -442,7 +434,7 @@ export function useKeyboard(): void {
           // Shift closes the gap the deleted clip leaves; on its own the gap
           // stays and plays as silence.
           if (inArrangement()) useArrangement.getState().removeSelected()
-          else if (inEditView()) decks.deleteSelectedClip(deck)
+          else if (inLegacyView()) decks.deleteSelectedClip(deck)
           else handled = false
           break
 

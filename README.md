@@ -44,7 +44,7 @@ Chromium refuses to decode (some AIFF and WMA files).
 | Locators | Drop a marker while listening, named or not, then jump between markers |
 | Beat jump | Grid-walking, quantised, `Q` back 16 and `W` forward 16 |
 | Waveforms | Full-track overview and a centre-locked scrolling detail view |
-| Editing | Four stacked tracks, cut at the playhead, per-channel EQ and filter |
+| Editing | Lanes of clips on one grid, with a second stacked-track view kept as Edit Legacy |
 
 ## Importing your rekordbox collection
 

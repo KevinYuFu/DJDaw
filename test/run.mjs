@@ -44,7 +44,8 @@ const MODULES = [
   'src/renderer/src/arrangement/laneTitle.ts',
   'src/renderer/src/arrangement/beatJump.ts',
   'src/renderer/src/arrangement/session.ts',
-  'src/renderer/src/styles/themes.ts'
+  'src/renderer/src/styles/themes.ts',
+  'src/renderer/src/state/viewNames.ts'
 ]
 
 /** The renderer's path aliases, which Vite supplies in the app. */

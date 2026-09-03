@@ -341,7 +341,7 @@ Deck A unshifted, deck B with the right-hand cluster. `Shift` modifies.
 | `←` / `→` | Nudge the playhead by one beat |
 | `Tab` | Switch the focused deck |
 
-In V3 there are lanes rather than decks, so `Q` and `W` move the arrangement
+In Edit there are lanes rather than decks, so `Q` and `W` move the arrangement
 playhead instead: a fixed 16 beats of the master grid, with `Shift` doing
 nothing.
 
