@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { DECK_IDS } from '@shared/types'
 import type { DeckId } from '@shared/types'
 import { BEAT_JUMP_SIZES, HOT_CUE_COUNT, LOOP_SIZES } from '@renderer/core/constants'
+import { BEAT_JUMP_BEATS } from '@renderer/arrangement/beatJump'
 import { clamp } from '@renderer/core/format'
 import { useDecks } from '@renderer/state/useDecks'
 import { useLibrary } from '@renderer/state/useLibrary'
@@ -38,8 +39,8 @@ export interface ShortcutHelp {
 /** The key map as shown to the user, in the order docs/ARCHITECTURE.md lists it. */
 export const KEYBOARD_SHORTCUTS: readonly ShortcutHelp[] = [
   { keys: 'Space', action: 'Play / pause the focused deck — every row in Edit V2' },
-  { keys: 'Q / W', action: 'Beat jump back / forward (16 beats by default)' },
-  { keys: 'Shift + Q / W', action: 'Halve / double the beat-jump size' },
+  { keys: 'Q / W', action: 'Beat jump back / forward \u2014 16 beats, and always 16 in V3' },
+  { keys: 'Shift + Q / W', action: 'Halve / double the beat-jump size \u2014 decks only' },
   { keys: '1 – 8', action: 'Hot cue A–H: set if empty, jump if set, hold to preview' },
   { keys: 'Shift + 1 – 8', action: 'Delete hot cue A–H' },
   { keys: 'Z', action: 'CUE — back to cue, or hold to preview from it' },
@@ -185,6 +186,17 @@ function stepZoom(deck: DeckId, delta: number): void {
 function beatJump(deck: DeckId, direction: -1 | 1): void {
   const { decks, beatJump: jump } = useDecks.getState()
   jump(deck, direction * decks[deck].beatJumpBeats)
+}
+
+/**
+ * `Q` and `W` on the arrangement: one phrase back or on, along the master grid.
+ *
+ * There is one grid and one jump size here, so Shift has nothing to resize and
+ * the press does nothing.
+ */
+function arrangementJump(direction: -1 | 1, shift: boolean): void {
+  if (shift) return
+  useArrangement.getState().beatJump(direction * BEAT_JUMP_BEATS)
 }
 
 /**
@@ -345,12 +357,14 @@ export function useKeyboard(): void {
           break
 
         case 'KeyQ':
-          if (shift) stepBeatJumpSize(deck, 0.5)
+          if (inArrangement()) arrangementJump(-1, shift)
+          else if (shift) stepBeatJumpSize(deck, 0.5)
           else beatJump(deck, -1)
           break
 
         case 'KeyW':
-          if (shift) stepBeatJumpSize(deck, 2)
+          if (inArrangement()) arrangementJump(1, shift)
+          else if (shift) stepBeatJumpSize(deck, 2)
           else beatJump(deck, 1)
           break
 

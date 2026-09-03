@@ -100,7 +100,7 @@ silence; isolator-style full kill needs a crossover and is not built.
 | --- | --- |
 | `Space` | Play / pause |
 | `Q` / `W` | Beat jump back / forward 16 beats |
-| `Shift+Q` / `Shift+W` | Halve / double the beat-jump size |
+| `Shift+Q` / `Shift+W` | Halve / double the beat-jump size (decks only) |
 | `1`–`8` | Hot cue A–H (set if empty, jump if set) |
 | `Shift+1`–`8` | Delete hot cue |
 | `A` | Load the selected library track |

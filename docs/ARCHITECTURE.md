@@ -324,7 +324,7 @@ Deck A unshifted, deck B with the right-hand cluster. `Shift` modifies.
 | `Space` | Play / pause (focused deck) |
 | `Q` | Beat jump back 16 |
 | `W` | Beat jump forward 16 |
-| `Shift+Q` / `Shift+W` | Halve / double the beat-jump size |
+| `Shift+Q` / `Shift+W` | Halve / double the beat-jump size (decks only) |
 | `1`–`8` | Hot cue A–H (set if empty, trigger if set) |
 | `Shift+1`–`8` | Delete hot cue A–H |
 | `Z` | CUE |
@@ -340,6 +340,10 @@ Deck A unshifted, deck B with the right-hand cluster. `Shift` modifies.
 | `-` / `=` | Waveform zoom out / in |
 | `←` / `→` | Nudge the playhead by one beat |
 | `Tab` | Switch the focused deck |
+
+In V3 there are lanes rather than decks, so `Q` and `W` move the arrangement
+playhead instead: a fixed 16 beats of the master grid, with `Shift` doing
+nothing.
 
 Text inputs must swallow these — check `event.target` before handling.
 
