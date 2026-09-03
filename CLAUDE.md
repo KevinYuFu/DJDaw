@@ -13,6 +13,15 @@ YuFu is the decision maker. Always.
 
 This applies even when my alternative is technically better. YuFu decides.
 
+## Get the facts right before asking
+
+Before I put a question to YuFu, I read the code so that every option in it is
+true of what is actually there. Checking is my job, not his.
+
+A question built on a wrong premise is worse than no question. It makes him
+correct me before he can answer, and it buries the real choice under one I
+invented.
+
 ## Branches and PRs
 
 **Always `git checkout main && git pull` before starting anything.** YuFu
