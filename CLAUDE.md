@@ -188,6 +188,10 @@ YuFu should never have to scroll up to find where the answer starts.
 If there is a lot of detail, give the short answer and offer the detail.
 Do not dump it all at once.
 
+**End with a conclusion.** Whatever came before it, the last block says what it
+means and what happens next. YuFu should be able to read only that and be
+caught up, without following the steps I took to get there.
+
 ## Project
 
 DJDaw. A rekordbox-style DJ app for building edits and mashups.
