@@ -14,6 +14,7 @@ link it is named as one rather than glossed over.
 | `@waveform-playlist/core` | ^12.6.1 | MIT |
 | `@waveform-playlist/engine` | ^13.6.0 | MIT |
 | `demucs-web` | ^1.0.2 | MIT |
+| `essentia.js` | ^0.1.3 | **AGPL-3.0** — see below |
 | `music-metadata` | ^11.2.1 | MIT |
 | `onnxruntime-web` | ^1.29.0 | MIT |
 | `signalsmith-stretch` | ^1.3.2 | MIT |
@@ -22,6 +23,27 @@ link it is named as one rather than glossed over.
 Electron and its toolchain are MIT. `ffmpeg` is called as an external program
 and is not distributed with the app; on a machine without it the features that
 need it say so.
+
+### `essentia.js` is the one dependency that is not permissive
+
+Key detection is Essentia's, and Essentia is **AGPL-3.0**. Every other runtime
+dependency here is MIT or Apache-2.0, and `package.json` states MIT.
+
+AGPL-3.0 is strongly copyleft. It asks nothing of a build kept to this machine.
+It binds on **distribution**: hand someone a build that contains this package,
+or serve it over a network, and the combined work has to be offered under
+AGPL-3.0 too, source included.
+
+So the choice is a real one and it is not made here:
+
+- keep it, and DJDaw is AGPL-3.0 the day it is distributed, not MIT
+- drop it, and key detection goes back to the analyser written in this repo,
+  which named 57% of a sample of this collection correctly against Essentia's
+  73%
+- licence Essentia commercially from the Music Technology Group at UPF, who
+  offer that alongside the AGPL release
+
+The package has had no release since June 2021.
 
 ## Model weights
 

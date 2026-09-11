@@ -39,7 +39,6 @@ const MODULES = [
   'src/renderer/src/components/waveform/waveformRender.ts',
   'src/renderer/src/components/waveform/clipSlide.ts',
   'src/renderer/src/analysis/playbackRate.ts',
-  'src/renderer/src/analysis/chroma.ts',
   'src/renderer/src/arrangement/placement.ts',
   'src/renderer/src/arrangement/laneEdit.ts',
   'src/renderer/src/arrangement/zoom.ts',

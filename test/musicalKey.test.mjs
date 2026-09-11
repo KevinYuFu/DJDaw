@@ -1,17 +1,11 @@
 /**
- * Naming a key, and picking one from a chromagram.
+ * Naming a key.
  *
- * The wheel is checked against its published layout, and the picker is fed the
- * exact profile of each of the twenty-four keys: whatever else it does with
- * real audio, it has to name a key correctly when handed that key's own shape.
+ * The wheel is checked against its published layout, and every spelling the
+ * analyser can answer with has to land on the right pitch class — a note it
+ * cannot read would silently lose the key.
  */
-import {
-  MAJOR_PROFILE,
-  MINOR_PROFILE,
-  camelotFor,
-  classicFor,
-  keyFromChroma
-} from './.build/musicalKey.mjs'
+import { camelotFor, classicFor, pitchClassOfName } from './.build/musicalKey.mjs'
 
 const { eq, ok } = globalThis.__t
 
@@ -50,35 +44,27 @@ eq('C major is C', classicFor(0, 'major'), 'C')
 eq('A minor is Am', classicFor(9, 'minor'), 'Am')
 eq('F# minor spells as Gbm', classicFor(6, 'minor'), 'Gbm')
 
-// -------------------------------------------------- picking a key from chroma
+// ------------------------------------------------------------- note names
 
-/** `profile` written from `tonic` rather than from C. */
-const rotate = (profile, tonic) =>
-  Array.from({ length: 12 }, (_, i) => profile[(i - tonic + 12) % 12])
-
-// Handed a key's own profile, the picker has to name that key.
-for (let tonic = 0; tonic < 12; tonic++) {
-  const major = keyFromChroma(rotate(MAJOR_PROFILE, tonic))
-  eq(`the major profile at ${tonic} names itself`, major.camelot, camelotFor(tonic, 'major'))
-  eq(`and its mode is major`, major.mode, 'major')
-
-  const minor = keyFromChroma(rotate(MINOR_PROFILE, tonic))
-  eq(`the minor profile at ${tonic} names itself`, minor.camelot, camelotFor(tonic, 'minor'))
-  eq(`and its mode is minor`, minor.mode, 'minor')
+const NAMES = {
+  C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6,
+  G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11
+}
+for (const [name, pc] of Object.entries(NAMES)) {
+  eq(`${name} is pitch class ${pc}`, pitchClassOfName(name), pc)
 }
 
-// An exact profile is as certain as it gets, and never a relative near-tie.
-const exact = keyFromChroma(rotate(MAJOR_PROFILE, 0))
-ok('an exact match is confident', exact.confidence > 0.1)
-eq('and it is 8B', exact.camelot, '8B')
+// Sharps and flats name the same note, because the analyser spells a key
+// whichever way that key is normally written.
+eq('C# and Db are one note', pitchClassOfName('C#'), pitchClassOfName('Db'))
+eq('F# and Gb are one note', pitchClassOfName('F#'), pitchClassOfName('Gb'))
+eq('surrounding space is ignored', pitchClassOfName(' A '), 9)
+eq('a name that is no note is nothing', pitchClassOfName('H'), -1)
+eq('and neither is an empty one', pitchClassOfName(''), -1)
 
-// ------------------------------------------------------------ nothing to go on
-
-eq('silence names no key', keyFromChroma(new Array(12).fill(0)), null)
-eq('the wrong length names no key', keyFromChroma([1, 2, 3]), null)
-eq('a negative bin names no key', keyFromChroma([1, -1, ...new Array(10).fill(1)]), null)
-eq('NaN names no key', keyFromChroma([NaN, ...new Array(11).fill(1)]), null)
-
-// A flat chromagram has no shape to match, so it cannot pick a key.
-const flat = keyFromChroma(new Array(12).fill(1))
-ok('a flat chromagram is not confident', flat === null || flat.confidence < 0.05)
+// Every note the analyser can answer with has to reach the wheel.
+for (const name of Object.keys(NAMES)) {
+  const pc = pitchClassOfName(name)
+  ok(`${name} minor lands on the wheel`, /^([1-9]|1[0-2])A$/.test(camelotFor(pc, 'minor')))
+  ok(`${name} major lands on the wheel`, /^([1-9]|1[0-2])B$/.test(camelotFor(pc, 'major')))
+}
