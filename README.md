@@ -39,6 +39,7 @@ Chromium refuses to decode (some AIFF and WMA files).
 | rekordbox | Import a whole collection from a rekordbox XML export, with beat grids, hot cues and locators |
 | Analysis | Three-band waveform + tempo and downbeat detection, cached to disk |
 | Beat grid | Editable: nudge, set downbeat, set BPM, tap tempo, ×2 / ÷2 |
+| Key | Camelot, taken from rekordbox where it has one and detected on load where it does not |
 | Transport | Play/pause, CDJ cue semantics, tempo fader, scrub by waveform or jog wheel |
 | Hot cues | 8 pads A–H, set / jump / hold-to-preview / delete, saved with the track |
 | Locators | Drop a marker while listening, named or not, then jump between markers |

@@ -99,3 +99,30 @@ export function resolveWrite(
   const fork = forkToLocal(mirrored)
   return { id: fork.id, fork }
 }
+
+/**
+ * Keys the mirror can fill in, as a patch per local track id.
+ *
+ * The same file can sit in both collections, and rekordbox may have analysed a
+ * key DJDaw has no way to know. A local record with no key takes the mirrored
+ * key for the same audio; one that already has a key is left alone, so nothing
+ * detected or set by hand is overwritten.
+ */
+export function keysFromMirror(
+  tracks: Readonly<Record<string, Track>>,
+  mirror: Readonly<Record<string, Track>>
+): Record<string, string> {
+  const fills: Record<string, string> = {}
+  const keyOfAudio = new Map<string, string>()
+  for (const track of Object.values(mirror)) {
+    if (track.key) keyOfAudio.set(track.audioKey, track.key)
+  }
+  if (keyOfAudio.size === 0) return fills
+
+  for (const track of Object.values(tracks)) {
+    if (track.key) continue
+    const key = keyOfAudio.get(track.audioKey)
+    if (key) fills[track.id] = key
+  }
+  return fills
+}

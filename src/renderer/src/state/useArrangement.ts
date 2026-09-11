@@ -14,6 +14,7 @@ import { DEFAULT_MASTER_BPM, freshLanes } from '@renderer/arrangement/session'
 import { STEM_NAMES, type StemName } from '@shared/stems'
 import { splitIntoStems } from '@renderer/analysis/stemSplit'
 import { heardWords } from '@renderer/analysis/transcribe'
+import { detectKey } from '@renderer/analysis/key'
 import { cutsFor, prepareList, type Cut } from '@shared/censor'
 import { BAD_WORDS } from '@shared/badWords'
 
@@ -56,6 +57,27 @@ async function splitAndKeep(
     interleaved[name] = out
   }
   return window.api.writeStems(track.audioKey, interleaved)
+}
+
+/**
+ * Detect a track's key, where nothing already states one.
+ *
+ * rekordbox's key and anything set by hand win over detection, so this only
+ * ever fills a blank. A failure leaves it blank: a wrong key is worse than
+ * none when it decides what to mix next.
+ */
+async function fillKey(track: Track, buffer: AudioBuffer): Promise<void> {
+  if (track.key) return
+  try {
+    const detected = await detectKey(buffer)
+    if (!detected) return
+    // Detection takes seconds, and the record may have gained a key meanwhile.
+    const current = useLibrary.getState().trackById(track.id)
+    if (!current || current.key) return
+    useLibrary.getState().updateTrack(current.id, { key: detected.camelot })
+  } catch (err) {
+    console.error('[arrangement] key detection failed', err)
+  }
 }
 
 /** The id a stem's audio is held under: the track it came from, and which part. */
@@ -447,6 +469,10 @@ export const useArrangement = create<ArrangementState>()((set, get) => ({
     }
     const buffer = sources.get(trackId)
     if (!buffer) return
+
+    // Name the key if nothing already has. Not awaited: the clip goes down now
+    // and the browser fills its Key column when the answer arrives.
+    void fillKey(track, buffer)
 
     // The first track into an empty arrangement sets the tempo. Every track
     // after it is warped onto that.

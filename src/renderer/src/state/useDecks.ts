@@ -19,6 +19,7 @@ import { AudioEngine } from '@renderer/audio/AudioEngine'
 import type { Deck } from '@renderer/audio/Deck'
 import { decodeTrack } from '@renderer/audio/decode'
 import { resolveWaveform } from '@renderer/analysis/waveformCache'
+import { detectKey } from '@renderer/analysis/key'
 import { detectTempo } from '@renderer/analysis/bpm'
 import {
   beatAtTime,
@@ -581,6 +582,29 @@ async function resolveGrid(id: DeckId, track: Track, buffer: AudioBuffer): Promi
   }
 }
 
+/**
+ * The track's key, detected when nothing already states one.
+ *
+ * rekordbox's key, a file's own tag and anything set by hand all win over
+ * detection, so this only ever fills a blank. A failure leaves it blank: a
+ * wrong key is worse than none when it decides what to mix next.
+ */
+async function resolveKey(id: DeckId, track: Track, buffer: AudioBuffer): Promise<string | null> {
+  if (track.key) return track.key
+  try {
+    const detected = await detectKey(buffer)
+    if (!detected) return null
+    // Detection takes seconds, and the record may have gained a key meanwhile.
+    const current = useLibrary.getState().trackById(track.id)
+    if (!current || current.key) return current?.key ?? null
+    writeTrack(id, current.id, { key: detected.camelot })
+    return detected.camelot
+  } catch (err) {
+    console.error('[deck] key detection failed', err)
+    return null
+  }
+}
+
 export const useDecks = create<DecksState>()(() => ({
   decks: perDeck(emptyDeck),
   crossfade: 0.5,
@@ -645,7 +669,13 @@ export const useDecks = create<DecksState>()(() => ({
       patchDeck(id, { buffer, clips, selectedClipId: null })
       deck.setRegions(toRegions(clips))
 
-      const [waveform, grid] = await Promise.all([resolveWaveform(track, buffer), resolveGrid(id, track, buffer)])
+      const [waveform, grid] = await Promise.all([
+        resolveWaveform(track, buffer),
+        resolveGrid(id, track, buffer),
+        // Nothing waits on the key: it names the track in the browser rather
+        // than placing anything, so the deck is ready without it.
+        resolveKey(id, track, buffer)
+      ])
       if (runtime[id].loadToken !== token) return
 
       patchDeck(id, { waveform, status: 'ready' })
