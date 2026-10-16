@@ -32,6 +32,7 @@ const MODULES = [
   'src/shared/fader.ts',
   'src/shared/ffmpegArgs.ts',
   'src/shared/stems.ts',
+  'src/shared/musicalKey.ts',
   'src/shared/censor.ts',
   'src/shared/badWords.ts',
   'src/renderer/src/audio/decode.ts',

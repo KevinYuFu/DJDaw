@@ -9,7 +9,9 @@ import type {
 import type { PlaylistNode } from '@shared/playlistTree'
 import { buildPlaylistTree, findPlaylistNode } from '@shared/playlistTree'
 import { mergeImported } from '@shared/rekordboxImport'
-import { isRekordboxId, resolveWrite } from '@shared/collection'
+import { isRekordboxId, resolveWrite,
+  keysFromMirror
+} from '@shared/collection'
 import { LIBRARY_VERSION } from '@renderer/core/constants'
 
 /**
@@ -459,9 +461,29 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
     // itself; keeping a dead path would show an empty list and no reason why.
     const openPath = get().playlistPath
     const playlistPath = openPath && findPlaylistNode(playlistTree, openPath) ? openPath : null
+    // A local record with no key takes rekordbox's, where rekordbox holds one
+    // for the same audio. That is an analysis DJDaw would otherwise have to
+    // run, and rekordbox's answer for its own collection is the better one.
+    const fills = keysFromMirror(get().tracks, mirror)
+    const filled = Object.keys(fills).length
+      ? Object.fromEntries(
+          Object.entries(get().tracks).map(([id, track]) =>
+            fills[id] ? [id, { ...track, key: fills[id] }] : [id, track]
+          )
+        )
+      : null
+
     // Wholesale replacement is the point: a track deleted in rekordbox has to
     // disappear here too, which merging could never achieve.
-    set({ mirror, mirrorOrder, playlists, playlistTree, playlistPath, mirrorMeta: meta })
+    set({
+      mirror,
+      mirrorOrder,
+      playlists,
+      playlistTree,
+      playlistPath,
+      mirrorMeta: meta,
+      ...(filled ? { tracks: filled } : {})
+    })
   },
 
   addTracks(incoming) {
