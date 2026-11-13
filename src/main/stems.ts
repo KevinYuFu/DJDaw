@@ -10,9 +10,9 @@ import { spawn } from 'node:child_process'
 import { mkdir, readFile, rename, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { app } from 'electron'
+import { ffmpegBin } from './ffmpeg'
 import { STEM_NAMES, STEM_SAMPLE_RATE, type StemName } from '@shared/stems'
 
-const FFMPEG_BIN = 'ffmpeg'
 const CHANNELS = 2
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/
 
@@ -54,7 +54,7 @@ export async function cachedStems(audioKey: string): Promise<Record<StemName, st
 function encodeFlac(interleaved: Float32Array, to: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(
-      FFMPEG_BIN,
+      ffmpegBin(),
       ['-v', 'error', '-f', 'f32le', '-ar', String(STEM_SAMPLE_RATE), '-ac', String(CHANNELS),
         '-i', 'pipe:0', '-c:a', 'flac', '-compression_level', '5', '-y', to],
       { stdio: ['pipe', 'ignore', 'pipe'] }

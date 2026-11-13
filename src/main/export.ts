@@ -14,16 +14,11 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { app } from 'electron'
+import { FFMPEG_INSTALL_HINT, ffmpegBin } from './ffmpeg'
 import type { ExportFormat, ExportRequest, ExportResult } from '@shared/types'
 
 /** The one folder every export goes into, inside the user's Music directory. */
 const EXPORT_FOLDER = 'DJDaw'
-
-/**
- * The same binary the decode fallback in `ipc.ts` uses, taken from PATH. WAV
- * export never needs it.
- */
-const FFMPEG_BIN = 'ffmpeg'
 
 /** ffmpeg can be chatty; only the tail is worth putting in an error message. */
 const MAX_FFMPEG_STDERR = 4096
@@ -149,7 +144,7 @@ function encodeMp3(wav: Buffer): Promise<Buffer> {
       'mp3',
       'pipe:1'
     ]
-    const child = spawn(FFMPEG_BIN, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(ffmpegBin(), args, { stdio: ['pipe', 'pipe', 'pipe'] })
 
     const chunks: Buffer[] = []
     let stderr = ''
@@ -164,7 +159,7 @@ function encodeMp3(wav: Buffer): Promise<Buffer> {
         err.code === 'ENOENT'
           ? new Error(
               'ffmpeg was not found on PATH, so MP3 export is not available. ' +
-                'Install it (for example `brew install ffmpeg`) and restart DJDaw. ' +
+                `Install it (for example ${FFMPEG_INSTALL_HINT}) and restart DJDaw. ` +
                 'WAV export works without it.'
             )
           : err
