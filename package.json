@@ -15,6 +15,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "build:mac": "npm run build && electron-builder --mac",
+    "build:win": "npm run build && electron-builder --win",
     "postinstall": "electron-builder install-app-deps && node scripts/prepare-ort.mjs",
     "test": "node test/run.mjs",
     "fetch:model": "node scripts/fetch-model.mjs && node scripts/fetch-whisper.mjs",

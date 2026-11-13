@@ -6,7 +6,7 @@
  *
  *   node test/run.mjs
  */
-import { execFileSync } from 'node:child_process'
+import { esbuild } from './esbuild.mjs'
 import { mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -31,6 +31,7 @@ const MODULES = [
   'src/shared/deckList.ts',
   'src/shared/fader.ts',
   'src/shared/ffmpegArgs.ts',
+  'src/shared/ffmpegPath.ts',
   'src/shared/stems.ts',
   'src/shared/censor.ts',
   'src/shared/badWords.ts',
@@ -57,16 +58,11 @@ const ALIASES = [
 rmSync(outDir, { recursive: true, force: true })
 mkdirSync(outDir, { recursive: true })
 
-const esbuild = join(root, 'node_modules/.bin/esbuild')
 for (const mod of MODULES) {
   const name = mod.split('/').pop().replace(/\.ts$/, '.mjs')
   // Bundled, not just transpiled: these modules import each other at runtime
   // and Node's ESM resolver needs real extensions on the specifiers.
-  execFileSync(
-    esbuild,
-    [join(root, mod), '--bundle', '--format=esm', ...ALIASES, `--outfile=${join(outDir, name)}`],
-    { stdio: ['ignore', 'ignore', 'inherit'] }
-  )
+  esbuild([join(root, mod), '--bundle', '--format=esm', ...ALIASES, `--outfile=${join(outDir, name)}`])
 }
 
 let pass = 0

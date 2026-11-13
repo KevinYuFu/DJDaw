@@ -43,13 +43,11 @@ import {
 } from './rekordboxSync'
 import { transcodeArgs } from '@shared/ffmpegArgs'
 import { cachedStems, readStemModel, writeStems } from './stems'
+import { FFMPEG_INSTALL_HINT, ffmpegBin } from './ffmpeg'
 import type { StemName } from '@shared/stems'
 
 /** Extensions offered by the import dialog. */
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'aiff', 'aif', 'ogg', 'opus', 'wma']
-
-/** Formats Chromium cannot decode go through this, so it must exist on PATH. */
-const FFMPEG_BIN = 'ffmpeg'
 
 /** ffmpeg can be chatty; only the tail is worth putting in an error message. */
 const MAX_FFMPEG_STDERR = 4096
@@ -122,7 +120,7 @@ function repairWavSizes(buf: Buffer): Buffer {
 function transcodeToWav(path: string, untrimmed = false): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const args = transcodeArgs(path, untrimmed)
-    const child = spawn(FFMPEG_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(ffmpegBin(), args, { stdio: ['ignore', 'pipe', 'pipe'] })
 
     const chunks: Buffer[] = []
     let stderr = ''
@@ -137,7 +135,7 @@ function transcodeToWav(path: string, untrimmed = false): Promise<ArrayBuffer> {
         err.code === 'ENOENT'
           ? new Error(
               `ffmpeg was not found on PATH, so "${path}" cannot be transcoded. ` +
-                'Install it (for example `brew install ffmpeg`) and restart DJDaw.'
+                `Install it (for example ${FFMPEG_INSTALL_HINT}) and restart DJDaw.`
             )
           : err
       )

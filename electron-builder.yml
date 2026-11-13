@@ -26,4 +26,11 @@ mac:
     NSDownloadsFolderUsageDescription: DJDaw reads the audio files you import.
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  artifactName: ${name}-${version}-setup-${arch}.${ext}
 npmRebuild: false

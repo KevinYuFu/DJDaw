@@ -11,7 +11,7 @@
  * stubbed. No DOM is involved — the store reads `window.api` and adds one
  * `beforeunload` listener.
  */
-import { execFileSync } from 'node:child_process'
+import { esbuild } from './esbuild.mjs'
 import { mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -23,19 +23,15 @@ const root = resolve(here, '..')
 const outFile = join(here, '.build', 'useLibrary.mjs')
 
 mkdirSync(join(here, '.build'), { recursive: true })
-execFileSync(
-  join(root, 'node_modules/.bin/esbuild'),
-  [
-    join(root, 'src/renderer/src/state/useLibrary.ts'),
-    '--bundle',
-    '--format=esm',
-    '--platform=neutral',
-    `--alias:@shared=${join(root, 'src/shared')}`,
-    `--alias:@renderer=${join(root, 'src/renderer/src')}`,
-    `--outfile=${outFile}`
-  ],
-  { stdio: ['ignore', 'ignore', 'inherit'] }
-)
+esbuild([
+  join(root, 'src/renderer/src/state/useLibrary.ts'),
+  '--bundle',
+  '--format=esm',
+  '--platform=neutral',
+  `--alias:@shared=${join(root, 'src/shared')}`,
+  `--alias:@renderer=${join(root, 'src/renderer/src')}`,
+  `--outfile=${outFile}`
+])
 
 /** Everything the store touches outside itself, recorded so it can be asserted on. */
 const saved = []
