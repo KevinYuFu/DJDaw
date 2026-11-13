@@ -45,5 +45,16 @@ eq('win: winget link tried first', cands[0], winget)
 ok('win: scoop shim tried', cands.includes('C:\\Users\\k\\scoop\\shims\\ffmpeg.exe'))
 ok('win: no doubled separators', cands.every((c) => !c.includes('\\\\')))
 
+// winget's per-package folder, newest build first, found without PATH.
+const pkgRoot = 'C:\\Users\\k\\AppData\\Local\\Microsoft\\WinGet\\Packages'
+const tree = {
+  [pkgRoot]: ['Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe', 'Other.Thing'],
+  [pkgRoot + '\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe']: ['ffmpeg-8.0-full_build', 'ffmpeg-9.0.2-full_build']
+}
+const list = (d) => tree[d] ?? []
+const pkgExe = pkgRoot + '\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.2-full_build\\bin\\ffmpeg.exe'
+eq('win: winget package folder', resolveFfmpeg('win32', winEnv, (p) => p.startsWith(pkgRoot), list), pkgExe)
+eq('win: no lister, no package scan', windowsFfmpegCandidates(winEnv).some((c) => c.startsWith(pkgRoot)), false)
+
 ok('hint: brew on mac', ffmpegInstallHint('darwin').includes('brew'))
 ok('hint: winget on windows', ffmpegInstallHint('win32').includes('winget'))

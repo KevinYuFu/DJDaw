@@ -32,8 +32,28 @@ function winJoin(...parts: string[]): string {
     .join('\\')
 }
 
+/** Lists the entries of a folder; empty when it does not exist. */
+export type ListDir = (path: string) => string[]
+
+/**
+ * winget's Gyan.FFmpeg packages unzip to
+ * %LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_<source>\ffmpeg-<version>\bin
+ * and put that folder on the user PATH, which an app started before the
+ * install does not see yet.
+ */
+function wingetPackageCandidates(localAppData: string, list: ListDir): string[] {
+  const packages = winJoin(localAppData, 'Microsoft', 'WinGet', 'Packages')
+  const out: string[] = []
+  for (const pkg of list(packages).filter((d) => /^Gyan\.FFmpeg/i.test(d)).sort()) {
+    for (const build of list(winJoin(packages, pkg)).filter((d) => /^ffmpeg/i.test(d)).sort().reverse()) {
+      out.push(winJoin(packages, pkg, build, 'bin', 'ffmpeg.exe'))
+    }
+  }
+  return out
+}
+
 /** Folders ffmpeg usually lands in on Windows, most likely first. */
-export function windowsFfmpegCandidates(env: Env): string[] {
+export function windowsFfmpegCandidates(env: Env, list: ListDir = () => []): string[] {
   const out: string[] = []
   const localAppData = envGet(env, 'LOCALAPPDATA')
   const userProfile = envGet(env, 'USERPROFILE')
@@ -41,6 +61,7 @@ export function windowsFfmpegCandidates(env: Env): string[] {
   const programData = envGet(env, 'ProgramData') ?? 'C:\\ProgramData'
   // winget (Gyan.FFmpeg and friends) links its binaries here.
   if (localAppData) out.push(winJoin(localAppData, 'Microsoft', 'WinGet', 'Links', 'ffmpeg.exe'))
+  if (localAppData) out.push(...wingetPackageCandidates(localAppData, list))
   if (userProfile) out.push(winJoin(userProfile, 'scoop', 'shims', 'ffmpeg.exe'))
   out.push(winJoin(programData, 'chocolatey', 'bin', 'ffmpeg.exe'))
   out.push(winJoin(programFiles, 'ffmpeg', 'bin', 'ffmpeg.exe'))
@@ -69,13 +90,14 @@ function windowsPathCandidates(env: Env): string[] {
 export function resolveFfmpeg(
   platform: string,
   env: Env,
-  exists: (path: string) => boolean
+  exists: (path: string) => boolean,
+  list: ListDir = () => []
 ): string {
   const override = envGet(env, FFMPEG_ENV)?.trim()
   if (override) return override
   if (platform !== 'win32') return FFMPEG_DEFAULT
   if (windowsPathCandidates(env).some(exists)) return FFMPEG_DEFAULT
-  return windowsFfmpegCandidates(env).find(exists) ?? FFMPEG_DEFAULT
+  return windowsFfmpegCandidates(env, list).find(exists) ?? FFMPEG_DEFAULT
 }
 
 /** How to install ffmpeg, said the way each platform's users would. */
