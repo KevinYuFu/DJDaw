@@ -6,7 +6,7 @@
  *
  *   node test/run.mjs
  */
-import { execFileSync } from 'node:child_process'
+import { esbuild } from './esbuild.mjs'
 import { mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -58,21 +58,11 @@ const ALIASES = [
 rmSync(outDir, { recursive: true, force: true })
 mkdirSync(outDir, { recursive: true })
 
-// node_modules/.bin/esbuild is a shell script on Windows, which execFileSync
-// cannot run; there the package's own launcher is run through Node instead.
-const esbuild =
-  process.platform === 'win32'
-    ? [process.execPath, join(root, 'node_modules/esbuild/bin/esbuild')]
-    : [join(root, 'node_modules/.bin/esbuild')]
 for (const mod of MODULES) {
   const name = mod.split('/').pop().replace(/\.ts$/, '.mjs')
   // Bundled, not just transpiled: these modules import each other at runtime
   // and Node's ESM resolver needs real extensions on the specifiers.
-  execFileSync(
-    esbuild[0],
-    [...esbuild.slice(1), join(root, mod), '--bundle', '--format=esm', ...ALIASES, `--outfile=${join(outDir, name)}`],
-    { stdio: ['ignore', 'ignore', 'inherit'] }
-  )
+  esbuild([join(root, mod), '--bundle', '--format=esm', ...ALIASES, `--outfile=${join(outDir, name)}`])
 }
 
 let pass = 0
