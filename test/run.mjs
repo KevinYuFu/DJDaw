@@ -20,6 +20,7 @@ const MODULES = [
   'src/renderer/src/core/beatgrid.ts',
   'src/renderer/src/core/format.ts',
   'src/renderer/src/analysis/bpm.worker.ts',
+  'src/renderer/src/analysis/stemBackend.ts',
   'src/shared/rekordboxXml.ts',
   'src/shared/rekordboxImport.ts',
   'src/shared/collection.ts',
